@@ -1,0 +1,47 @@
+{
+  "_comment": "Branch-protection ruleset for nanitics/nanitics main branch. Applied at cutover (Stage 2 Phase 1.8.4) via `jq 'del(._comment)' branch-protection-ruleset.json | gh api -X POST /repos/nanitics/nanitics/rulesets --input -`. Targets the default branch. Requires six status-check contexts: the two Python CI matrix legs we gate on (3.11 + 3.13), both CodeQL analyses, the docs build, and DCO. Admin role (RepositoryRole id 5) is the sole bypass actor — exercised by Phase 1.8.7 Case 3 of the smoke test. Enforcement is active. Required-PR rule blocks direct pushes to main; review approvals are not required (sole-maintainer setup).",
+  "name": "main-protection",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [
+    {
+      "actor_id": 5,
+      "actor_type": "RepositoryRole",
+      "bypass_mode": "always"
+    }
+  ],
+  "conditions": {
+    "ref_name": {
+      "include": ["~DEFAULT_BRANCH"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {"type": "deletion"},
+    {"type": "non_fast_forward"},
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": false,
+        "required_status_checks": [
+          {"context": "Python (3.11)"},
+          {"context": "Python (3.13)"},
+          {"context": "Analyze (python)"},
+          {"context": "Analyze (javascript-typescript)"},
+          {"context": "Build docs"},
+          {"context": "DCO"}
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,325 @@
+{
+  "trace_id": "validation/smoke/smoke.py::test_smoke_react_agent",
+  "exported_at": "2026-04-16T10:09:23.780058Z",
+  "script": "validation/smoke/smoke.py::test_smoke_react_agent",
+  "summary": {
+    "duration_ms": 1501.32,
+    "error_events": 0,
+    "event_count": 16,
+    "iterations": 2,
+    "model": "claude-haiku-4-5-20251001",
+    "provider": "anthropic",
+    "tool_calls": 1,
+    "tool_results": 1,
+    "total_input_tokens": 1319,
+    "total_output_tokens": 67
+  },
+  "events": [
+    {
+      "event_id": "1e5e7be4-6900-4c80-bfb1-4c8415740ff8",
+      "trace_id": "validation/smoke/smoke.py::test_smoke_react_agent",
+      "span_id": "6f49f9cd-cbbe-410d-89bd-d42b3ac328d3",
+      "parent_span_id": "226c3745-9aa0-4a61-bd89-9d57ca11a19c",
+      "timestamp": "2026-04-16T10:09:21.274146Z",
+      "event_type": "span.start",
+      "name": "smoke-agent"
+    },
+    {
+      "event_id": "96c58c2f-d86b-4633-8771-f119abdc2b02",
+      "trace_id": "validation/smoke/smoke.py::test_smoke_react_agent",
+      "span_id": "6f49f9cd-cbbe-410d-89bd-d42b3ac328d3",
+      "parent_span_id": "226c3745-9aa0-4a61-bd89-9d57ca11a19c",
+      "timestamp": "2026-04-16T10:09:21.274221Z",
+      "event_type": "agent.start",
+      "agent_name": "smoke-agent",
+      "task_input": "Use the echo tool to repeat the word 'smoke'.",
+      "model_name": "claude-haiku-4-5-20251001",
+      "tools_available": [
+        "echo"
+      ],
+      "tool_schemas": [
+        {
+          "name": "echo",
+          "description": "Return the input message verbatim.",
+          "requires_approval": false
+        }
+      ],
+      "agent_type": "react",
+      "capabilities": [
+        "error_handling",
+        "tool_use"
+      ]
+    },
+    {
+      "event_id": "51d93c1e-2506-4088-9aff-660b7f202a72",
+      "trace_id": "validation/smoke/smoke.py::test_smoke_react_agent",
+      "span_id": "56e975f9-4bd5-4d73-b16e-cfef64fb0a04",
+      "parent_span_id": "6f49f9cd-cbbe-410d-89bd-d42b3ac328d3",
+      "timestamp": "2026-04-16T10:09:21.274261Z",
+      "event_type": "span.start",
+      "name": "step-1"
+    },
+    {
+      "event_id": "36e61947-777b-4566-a123-2798a512f102",
+      "trace_id": "validation/smoke/smoke.py::test_smoke_react_agent",
+      "span_id": "56e975f9-4bd5-4d73-b16e-cfef64fb0a04",
+      "parent_span_id": "6f49f9cd-cbbe-410d-89bd-d42b3ac328d3",
+      "timestamp": "2026-04-16T10:09:21.274318Z",
+      "event_type": "llm.request",
+      "model_name": "claude-haiku-4-5-20251001",
+      "system_prompt": "You are a helpful assistant. Use the echo tool when asked to echo something.\n\nYour text responses are not visible to any user. You operate autonomously — make reasonable assumptions when information is incomplete and state them explicitly.",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Use the echo tool to repeat the word 'smoke'.",
+          "tool_calls": null,
+          "tool_call_id": null,
+          "name": null,
+          "metadata": null
+        }
+      ],
+      "tools": [
+        {
+          "name": "echo",
+          "description": "Return the input message verbatim.",
+          "parameters": {
+            "properties": {
+              "message": {
+                "title": "Message",
+                "type": "string"
+              }
+            },
+            "required": [
+              "message"
+            ],
+            "title": "echo_params",
+            "type": "object"
+          },
+          "requires_approval": false,
+          "timeout_seconds": null
+        }
+      ],
+      "output_schema": null,
+      "label": null
+    },
+    {
+      "event_id": "6803d82c-18fc-4dca-a7f4-5005b5d68659",
+      "trace_id": "validation/smoke/smoke.py::test_smoke_react_agent",
+      "span_id": "56e975f9-4bd5-4d73-b16e-cfef64fb0a04",
+      "parent_span_id": "6f49f9cd-cbbe-410d-89bd-d42b3ac328d3",
+      "timestamp": "2026-04-16T10:09:22.183681Z",
+      "event_type": "llm.response",
+      "model_name": "claude-haiku-4-5-20251001",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "toolu_01Pg6mPNKWxRJwQNzZPtwEk5",
+          "name": "echo",
+          "arguments": {
+            "message": "smoke"
+          }
+        }
+      ],
+      "usage": {
+        "input_tokens": 627,
+        "output_tokens": 52,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "total_tokens": 679
+      },
+      "duration_ms": 909.2538339318708,
+      "label": null
+    },
+    {
+      "event_id": "04d75c81-6377-481c-82bc-af06f227043c",
+      "trace_id": "validation/smoke/smoke.py::test_smoke_react_agent",
+      "span_id": "56e975f9-4bd5-4d73-b16e-cfef64fb0a04",
+      "parent_span_id": "6f49f9cd-cbbe-410d-89bd-d42b3ac328d3",
+      "timestamp": "2026-04-16T10:09:22.183828Z",
+      "event_type": "tool.invoke",
+      "tool_call_id": "toolu_01Pg6mPNKWxRJwQNzZPtwEk5",
+      "tool_name": "echo",
+      "parameters": {
+        "message": "smoke"
+      }
+    },
+    {
+      "event_id": "971953cd-4427-42ff-af3b-ac12d27acace",
+      "trace_id": "validation/smoke/smoke.py::test_smoke_react_agent",
+      "span_id": "56e975f9-4bd5-4d73-b16e-cfef64fb0a04",
+      "parent_span_id": "6f49f9cd-cbbe-410d-89bd-d42b3ac328d3",
+      "timestamp": "2026-04-16T10:09:22.183855Z",
+      "event_type": "tool.result",
+      "tool_call_id": "toolu_01Pg6mPNKWxRJwQNzZPtwEk5",
+      "tool_name": "echo",
+      "result": "smoke",
+      "error": null,
+      "success": true,
+      "duration_ms": 0.05670799873769283
+    },
+    {
+      "event_id": "301216a1-d338-4ce9-bbc6-4275e04a6c6f",
+      "trace_id": "validation/smoke/smoke.py::test_smoke_react_agent",
+      "span_id": "56e975f9-4bd5-4d73-b16e-cfef64fb0a04",
+      "parent_span_id": "6f49f9cd-cbbe-410d-89bd-d42b3ac328d3",
+      "timestamp": "2026-04-16T10:09:22.183908Z",
+      "event_type": "agent.step",
+      "agent_name": "smoke-agent",
+      "step_number": 1,
+      "thought": null,
+      "action": "echo",
+      "observation": "echo: smoke"
+    },
+    {
+      "event_id": "2531136c-f37f-40af-8340-0dcc33494269",
+      "trace_id": "validation/smoke/smoke.py::test_smoke_react_agent",
+      "span_id": "56e975f9-4bd5-4d73-b16e-cfef64fb0a04",
+      "parent_span_id": "6f49f9cd-cbbe-410d-89bd-d42b3ac328d3",
+      "timestamp": "2026-04-16T10:09:22.183917Z",
+      "event_type": "span.end",
+      "name": "step-1",
+      "duration_ms": 909.6560000000001
+    },
+    {
+      "event_id": "c5f641e1-9e90-482e-94cc-72558a1d5eb5",
+      "trace_id": "validation/smoke/smoke.py::test_smoke_react_agent",
+      "span_id": "68b901ee-6590-481f-9243-c8440a6098c1",
+      "parent_span_id": "6f49f9cd-cbbe-410d-89bd-d42b3ac328d3",
+      "timestamp": "2026-04-16T10:09:22.183970Z",
+      "event_type": "span.start",
+      "name": "step-2"
+    },
+    {
+      "event_id": "5447b5f5-ed08-4bd6-bbdd-35a51a323549",
+      "trace_id": "validation/smoke/smoke.py::test_smoke_react_agent",
+      "span_id": "68b901ee-6590-481f-9243-c8440a6098c1",
+      "parent_span_id": "6f49f9cd-cbbe-410d-89bd-d42b3ac328d3",
+      "timestamp": "2026-04-16T10:09:22.184048Z",
+      "event_type": "llm.request",
+      "model_name": "claude-haiku-4-5-20251001",
+      "system_prompt": "You are a helpful assistant. Use the echo tool when asked to echo something.\n\nYour text responses are not visible to any user. You operate autonomously — make reasonable assumptions when information is incomplete and state them explicitly.",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Use the echo tool to repeat the word 'smoke'.",
+          "tool_calls": null,
+          "tool_call_id": null,
+          "name": null,
+          "metadata": null
+        },
+        {
+          "role": "assistant",
+          "content": null,
+          "tool_calls": [
+            {
+              "id": "toolu_01Pg6mPNKWxRJwQNzZPtwEk5",
+              "name": "echo",
+              "arguments": {
+                "message": "smoke"
+              }
+            }
+          ],
+          "tool_call_id": null,
+          "name": null,
+          "metadata": null
+        },
+        {
+          "role": "tool_result",
+          "content": "smoke",
+          "tool_calls": null,
+          "tool_call_id": "toolu_01Pg6mPNKWxRJwQNzZPtwEk5",
+          "name": null,
+          "metadata": null
+        }
+      ],
+      "tools": [
+        {
+          "name": "echo",
+          "description": "Return the input message verbatim.",
+          "parameters": {
+            "properties": {
+              "message": {
+                "title": "Message",
+                "type": "string"
+              }
+            },
+            "required": [
+              "message"
+            ],
+            "title": "echo_params",
+            "type": "object"
+          },
+          "requires_approval": false,
+          "timeout_seconds": null
+        }
+      ],
+      "output_schema": null,
+      "label": null
+    },
+    {
+      "event_id": "f62bc032-c2d8-475e-b435-88d3e5fc8db1",
+      "trace_id": "validation/smoke/smoke.py::test_smoke_react_agent",
+      "span_id": "68b901ee-6590-481f-9243-c8440a6098c1",
+      "parent_span_id": "6f49f9cd-cbbe-410d-89bd-d42b3ac328d3",
+      "timestamp": "2026-04-16T10:09:22.775077Z",
+      "event_type": "llm.response",
+      "model_name": "claude-haiku-4-5-20251001",
+      "content": "The word 'smoke' has been echoed back.",
+      "tool_calls": null,
+      "usage": {
+        "input_tokens": 692,
+        "output_tokens": 15,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "total_tokens": 707
+      },
+      "duration_ms": 590.8952499739826,
+      "label": null
+    },
+    {
+      "event_id": "1af79914-0171-44f9-86f0-ac640755175c",
+      "trace_id": "validation/smoke/smoke.py::test_smoke_react_agent",
+      "span_id": "68b901ee-6590-481f-9243-c8440a6098c1",
+      "parent_span_id": "6f49f9cd-cbbe-410d-89bd-d42b3ac328d3",
+      "timestamp": "2026-04-16T10:09:22.775208Z",
+      "event_type": "agent.step",
+      "agent_name": "smoke-agent",
+      "step_number": 2,
+      "thought": "The word 'smoke' has been echoed back.",
+      "action": null,
+      "observation": null
+    },
+    {
+      "event_id": "eb8368c6-45f0-432d-ae34-08d40e6e9b71",
+      "trace_id": "validation/smoke/smoke.py::test_smoke_react_agent",
+      "span_id": "68b901ee-6590-481f-9243-c8440a6098c1",
+      "parent_span_id": "6f49f9cd-cbbe-410d-89bd-d42b3ac328d3",
+      "timestamp": "2026-04-16T10:09:22.775231Z",
+      "event_type": "span.end",
+      "name": "step-2",
+      "duration_ms": 591.2610000000001
+    },
+    {
+      "event_id": "1965f2d3-d1eb-480b-9037-15927cbad3ce",
+      "trace_id": "validation/smoke/smoke.py::test_smoke_react_agent",
+      "span_id": "6f49f9cd-cbbe-410d-89bd-d42b3ac328d3",
+      "parent_span_id": "226c3745-9aa0-4a61-bd89-9d57ca11a19c",
+      "timestamp": "2026-04-16T10:09:22.775447Z",
+      "event_type": "agent.complete",
+      "agent_name": "smoke-agent",
+      "output": "The word 'smoke' has been echoed back.",
+      "total_steps": 2,
+      "termination_reason": "complete"
+    },
+    {
+      "event_id": "e6088018-0f15-46a0-aaad-1450804edb2d",
+      "trace_id": "validation/smoke/smoke.py::test_smoke_react_agent",
+      "span_id": "6f49f9cd-cbbe-410d-89bd-d42b3ac328d3",
+      "parent_span_id": "226c3745-9aa0-4a61-bd89-9d57ca11a19c",
+      "timestamp": "2026-04-16T10:09:22.775466Z",
+      "event_type": "span.end",
+      "name": "smoke-agent",
+      "duration_ms": 1501.32
+    }
+  ]
+}

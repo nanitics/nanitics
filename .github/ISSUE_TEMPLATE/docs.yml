@@ -1,0 +1,25 @@
+name: "Documentation issue"
+description: "Report a typo, unclear guide, missing coverage, or broken link."
+title: "[docs]: "
+labels: ["type/docs"]
+body:
+  - type: input
+    id: page-file
+    attributes:
+      label: "Page / file"
+      placeholder: "`docs/guides/memory.md`"
+    validations:
+      required: true
+  - type: textarea
+    id: whats-wrong
+    attributes:
+      label: "What's wrong?"
+      placeholder: "Typo, broken link, unclear explanation, missing coverage…"
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-fix
+    attributes:
+      label: "Proposed fix"
+    validations:
+      required: false

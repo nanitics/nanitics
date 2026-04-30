@@ -1,0 +1,11 @@
+Nanitics
+Copyright 2026 The Nanitics Contributors
+
+The Nanitics name and mark are trademarks of Living The Dream Holding B.V.
+See TRADEMARK.md for the trademark policy.
+
+--------------------------------------------------------------------------------
+
+Nanitics is a pure-Python package; dependencies are installed alongside it by
+pip and each ships its own LICENSE and NOTICE files. Inspect an installed
+dependency's metadata with `pip show <package>` or `pip show -f <package>`.

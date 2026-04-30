@@ -1,0 +1,20 @@
+# Local-dev Observatory compose.
+#
+# For a full-stack deployment example (Nanitics + Postgres + Observatory
+# backed by durable storage), see docker/full-stack/. This compose is
+# deliberately narrow — the minimum needed for an adopter following the
+# integration guide to see a working embedded Observatory on their laptop.
+
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: docker/observatory-dev/Dockerfile
+    image: nanitics-observatory-dev:local
+    ports:
+      - "8001:8001"
+    environment:
+      # Optional. If set, the app uses AnthropicLLMClient; otherwise it
+      # defaults to MockLLMClient so the first-run experience is key-free.
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+    command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8001"]

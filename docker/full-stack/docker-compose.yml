@@ -1,0 +1,56 @@
+# Full-stack Nanitics compose.
+#
+# Brings up the Nanitics FastAPI shell + Postgres. The Observatory UI and
+# API are mounted inside the `app` service — this compose does not run a
+# separate observatory container.
+#
+# For the key-free, single-service first-run compose, see
+# `docker/observatory-dev/`.
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-nanitics}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-nanitics-local}"
+      POSTGRES_DB: "${POSTGRES_DB:-nanitics}"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-nanitics} -d $${POSTGRES_DB:-nanitics}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  app:
+    build:
+      context: ../..
+      dockerfile: docker/full-stack/Dockerfile
+    image: nanitics-full-stack:local
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    environment:
+      NANITICS_LLM_PROVIDER: "${NANITICS_LLM_PROVIDER:-anthropic}"
+      NANITICS_LLM_MODEL: "${NANITICS_LLM_MODEL:-claude-haiku-4-5-20251001}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      POSTGRES_USER: "${POSTGRES_USER:-nanitics}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-nanitics-local}"
+      POSTGRES_DB: "${POSTGRES_DB:-nanitics}"
+      POSTGRES_DSN: "postgresql://${POSTGRES_USER:-nanitics}:${POSTGRES_PASSWORD:-nanitics-local}@postgres:5432/${POSTGRES_DB:-nanitics}"
+      NANITICS_SQL_ANALYST_SANDBOX_USER: "${NANITICS_SQL_ANALYST_SANDBOX_USER:-sql_analyst_sandbox}"
+      NANITICS_SQL_ANALYST_SANDBOX_PASSWORD: "${NANITICS_SQL_ANALYST_SANDBOX_PASSWORD:-sandbox-local}"
+    healthcheck:
+      # python is on $PATH in the python:3.11-slim base — curl is not.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/readyz').status==200 else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

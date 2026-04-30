@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nanitics Observatory</title>
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('observatory-theme');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (stored === 'dark' || (stored !== 'light' && prefersDark)) {
+            document.documentElement.classList.add('dark');
+          }
+        } catch (_) { /* no-op on storage errors */ }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

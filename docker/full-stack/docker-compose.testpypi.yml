@@ -1,0 +1,19 @@
+# TestPyPI override: build the `app` service from Dockerfile.testpypi instead
+# of the default Dockerfile. Overrides the image tag so the TestPyPI variant
+# does not collide with local-source builds.
+#
+# Usage:
+#   NANITICS_VERSION=0.1.0rc2 \
+#     docker compose \
+#       -f docker/full-stack/docker-compose.yml \
+#       -f docker/full-stack/docker-compose.testpypi.yml \
+#       up --build
+
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: docker/full-stack/Dockerfile.testpypi
+      args:
+        NANITICS_VERSION: "${NANITICS_VERSION}"
+    image: "nanitics-full-stack:testpypi-${NANITICS_VERSION}"

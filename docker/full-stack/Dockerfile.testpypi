@@ -1,0 +1,36 @@
+# TestPyPI variant of docker/full-stack/Dockerfile: install nanitics from
+# a TestPyPI-sourced wheel instead of the working-tree source.
+#
+# The wheel cache at docker/full-stack/testpypi-dist/ must be populated
+# before `docker compose build` — fetch the RC wheel + its dependencies
+# from TestPyPI into that directory. Using `--find-links` +
+# `--index-url https://pypi.org/simple/` avoids TestPyPI's
+# dependency-confusion hazard (dependencies resolve from real PyPI; only
+# nanitics itself comes from the local find-links cache).
+#
+# Companion compose file: docker/full-stack/docker-compose.testpypi.yml.
+
+FROM python:3.11-slim
+
+ARG NANITICS_VERSION
+
+WORKDIR /srv
+
+COPY docker/full-stack/testpypi-dist /srv/testpypi-dist
+RUN pip install --no-cache-dir \
+      --find-links /srv/testpypi-dist \
+      --index-url https://pypi.org/simple/ \
+      "nanitics[api,anthropic,openai,postgres]==${NANITICS_VERSION}" \
+      uvicorn \
+ && rm -rf /srv/testpypi-dist
+
+COPY observatory/dist-embed /srv/observatory-ui
+COPY docker/full-stack/app.py /srv/app.py
+COPY docker/full-stack/llm_provider.py /srv/llm_provider.py
+COPY docker/full-stack/runners.py /srv/runners.py
+COPY docker/full-stack/auction_routing /srv/auction_routing
+COPY docker/full-stack/sql_analyst /srv/sql_analyst
+COPY docker/full-stack/self_improver /srv/self_improver
+
+EXPOSE 8000
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

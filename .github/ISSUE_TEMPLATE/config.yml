@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "Security vulnerabilities — DO NOT FILE A PUBLIC ISSUE"
+    url: "https://github.com/nanitics/nanitics/security/advisories/new"
+    about: "Report vulnerabilities privately via GitHub Security Advisories. See SECURITY.md for the full process."
+  - name: "Questions and help"
+    url: "https://github.com/nanitics/nanitics/discussions/categories/q-a"
+    about: "Ask questions in Discussions — Q&A category. See docs/getting-help.md."
+  - name: "Ideas and proposals"
+    url: "https://github.com/nanitics/nanitics/discussions/categories/ideas"
+    about: "Discuss ideas before they're concrete feature requests."
+  - name: "Show and tell"
+    url: "https://github.com/nanitics/nanitics/discussions/categories/show-and-tell"
+    about: "Share what you're building with Nanitics."

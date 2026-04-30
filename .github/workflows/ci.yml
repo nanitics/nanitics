@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Install Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Sync dependencies (all extras)
+        run: uv sync --all-extras
+
+      - name: Install just
+        uses: extractions/setup-just@v4
+
+      - name: Run quality gate
+        run: uv run just check
+
+      - name: Upload check output on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: check-output-${{ matrix.python-version }}
+          path: .check-output
+          if-no-files-found: ignore
+
+  observatory:
+    name: Observatory
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: observatory/package-lock.json
+
+      - name: Install dependencies
+        working-directory: observatory
+        run: npm ci
+
+      - name: Lint
+        working-directory: observatory
+        run: npm run lint
+
+      - name: Typecheck
+        working-directory: observatory
+        run: npm run typecheck
+
+      - name: Test
+        working-directory: observatory
+        run: npm run test
+
+  # Advisory-only public-API drift check. The drift script always exits 0, so this
+  # job is green whether or not drift is present — the signal lives in the
+  # `::warning::` annotations that the script emits to the PR checks page. Do not
+  # add this job to any required-checks configuration.
+  api-surface:
+    name: API Surface
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Install Python 3.13
+        run: uv python install 3.13
+
+      - name: Sync dependencies (all extras)
+        run: uv sync --all-extras
+
+      - name: Install just
+        uses: extractions/setup-just@v4
+
+      - name: Run surface drift check
+        run: uv run just check-api-surface

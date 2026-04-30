@@ -1,0 +1,79 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Deploys are atomic — cancelling mid-deploy can leave the Pages site in an
+# incomplete state. Keep concurrency scoped per-ref but never cancel in flight.
+# PR builds use a distinct group so concurrent PR + main runs don't block each other.
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Install Python 3.13
+        run: uv python install 3.13
+
+      - name: Sync dependencies (all extras)
+        run: uv sync --all-extras
+
+      - name: Install just
+        uses: extractions/setup-just@v4
+
+      - name: Build docs
+        run: uv run just docs
+
+      # Pages-specific steps only run on push/dispatch — on a PR there is no
+      # Pages site to configure and no artifact to upload (the deploy job
+      # doesn't run either, per the same event guard below). Without this
+      # gate, actions/configure-pages@v6 404s when Pages is not enabled.
+      - name: Configure Pages
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: actions/configure-pages@v6
+
+      - name: Upload Pages artifact
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: build/docs
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    # Only push-to-main (and manual dispatch) should publish to Pages.
+    # PR runs build docs as a gate but must not deploy — Pages has a single
+    # live site, and PRs without this guard would either spam deploys or
+    # fail for lack of environment access.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

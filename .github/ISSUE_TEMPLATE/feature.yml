@@ -1,0 +1,34 @@
+name: "Feature request"
+description: "Propose a new capability or change to the public API."
+title: "[feature]: "
+labels: ["type/feature"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: "Problem"
+      placeholder: "What are you trying to do that Nanitics doesn't support?"
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-shape
+    attributes:
+      label: "Proposed shape"
+      placeholder: "How might the SDK surface this? Sketches, API proposals, or 'I don't know' are all fine."
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "Alternatives considered"
+    validations:
+      required: false
+  - type: checkboxes
+    id: pre-submission
+    attributes:
+      label: "Pre-submission"
+      options:
+        - label: "I searched existing issues and Discussions."
+          required: true
+        - label: "I understand this is a pre-1.0 SDK and feature work is driven by signal."
+          required: true
