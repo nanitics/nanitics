@@ -75,7 +75,7 @@ dev = [
     "fastapi>=0.136.1",
     "respx >=0.21",
     "types-PyYAML >=6.0",
-    "testcontainers[postgres] >=4.0",
+    "testcontainers[postgres]>=4.14.2",
     "asyncpg >=0.29",
     "pdoc >=15.0",
 ]
