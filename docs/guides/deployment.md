@@ -4,7 +4,7 @@
 
 > Looking for the embedded Observatory alone? See [Observatory Integration](observatory-integration.md). Looking for per-decision pre-launch guidance? See [Production](production.md).
 
-This guide walks an adopter from a fresh clone of the Nanitics repo to a running full-stack deployment — the Nanitics FastAPI app, a durable Postgres-backed trace store, the embedded Observatory UI, and three showcase runners — in one bring-up. It then names the adopter-side decisions that sit between "this compose works on my laptop" and "this pattern runs in my own infrastructure."
+This guide walks an adopter from a fresh clone of the Nanitics repo to a running full-stack deployment — the Nanitics FastAPI app, a durable Postgres-backed trace store, the embedded Observatory UI, and four showcase runners — in one bring-up. It then names the adopter-side decisions that sit between "this compose works on my laptop" and "this pattern runs in my own infrastructure."
 
 ## What this guide covers
 
@@ -66,7 +66,7 @@ curl -s http://localhost:8000/readyz
 # → {"ready":true,"store":"ok"}
 
 curl -s http://localhost:8000/runners
-# → [{"slug":"sql-analyst",...},{"slug":"auction-routing",...},{"slug":"self-improver",...}]
+# → [{"slug":"sql-analyst",...},{"slug":"auction-routing",...},{"slug":"judge-routing",...},{"slug":"self-improver",...}]
 ```
 
 The Observatory UI lives at <http://localhost:8000/api/observatory/>. It is empty until a runner emits the first trace — the run list page renders a "No runs yet" placeholder. Fire off the simplest runner invocation to populate it:
@@ -79,7 +79,7 @@ curl -s -X POST http://localhost:8000/runners/sql-analyst/ask \
 
 The response includes a `run_id`. Refresh the Observatory UI and that run appears at the top of the list — click it to see the span tree, the LLM calls, and the `SupervisionEvent` / `ToolInvokeEvent` pairs the SQL-analyst runner emits.
 
-For curl-by-curl walk-throughs of all three runners — the HITL flow for auction routing, the trace-of-trace pattern for self-improver, the trace signatures to look for in the Observatory — see the runner-specific READMEs under `docker/full-stack/`.
+For curl-by-curl walk-throughs of all four runners — the calibrated-bid auction for auction-routing, the comparative-judgment routing for judge-routing, the trace-of-trace pattern for self-improver, the trace signatures to look for in the Observatory — see the runner-specific READMEs under `docker/full-stack/`.
 
 Shut down cleanly when you're done:
 
@@ -102,7 +102,7 @@ The `app` container exposes three kinds of endpoints in one process:
 
 - **Application surface** — `GET /healthz` and `GET /readyz` for container orchestration, `GET /runners` for the runner registry.
 - **Observatory surface** — `GET /api/observatory/` (UI root) and `GET /api/observatory/runs/...` (JSON API) and `GET /api/observatory/runs/{id}/stream` (SSE live-update).
-- **Runner surface** — every route a `RunnerRegistration` installs under `/runners/<slug>/*`. The three showcase runners (`sql-analyst`, `auction-routing`, `self-improver`) each own their slug and their routes.
+- **Runner surface** — every route a `RunnerRegistration` installs under `/runners/<slug>/*`. The four showcase runners (`sql-analyst`, `auction-routing`, `judge-routing`, `self-improver`) each own their slug and their routes.
 
 The Observatory is **not** a separate service — the router and the pre-built React bundle live inside `app`, matching the integration pattern adopters use in their own FastAPI applications (see [Observatory Integration](observatory-integration.md) for the in-process wiring). The compose's `app.py` is short on purpose: it reads the Postgres DSN, builds the `PostgresTraceStore` in `lifespan` setup, constructs a `TracedExecutor`, mounts `create_observatory_router` at `/api/observatory/`, and delegates every runner's endpoint installation to its `RunnerRegistration.register(app, ctx)` callable. Adopters replicating the pattern do the same five things in their own FastAPI shells.
 
