@@ -16,12 +16,11 @@
 name: CodeQL
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  schedule:
-    - cron: "0 4 * * 1"
+  # Triggers temporarily disabled — repo is private on a free-tier org, so
+  # the SARIF upload to code scanning is rejected ("Advanced Security must
+  # be enabled"). Re-enable once the repo is public at the trademark-gated
+  # cutover.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
