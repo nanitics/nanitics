@@ -1585,7 +1585,7 @@ dev = [
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "respx", specifier = ">=0.21" },
     { name = "ruff", specifier = ">=0.15.12" },
-    { name = "testcontainers", extras = ["postgres"], specifier = ">=4.0" },
+    { name = "testcontainers", extras = ["postgres"], specifier = ">=4.14.2" },
     { name = "types-pyyaml", specifier = ">=6.0" },
 ]
 
