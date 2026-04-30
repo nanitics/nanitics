@@ -1477,7 +1477,7 @@ wheels = [
 
 [[package]]
 name = "nanitics"
-version = "0.1.0rc3"
+version = "0.1.0rc4"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
