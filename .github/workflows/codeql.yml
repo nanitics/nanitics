@@ -1,0 +1,59 @@
+# CodeQL static-analysis workflow — Phase 4 Step 2.
+#
+# Two language targets: python (the SDK package) and javascript-typescript
+# (the observatory/ frontend; the single target covers both JS and TS).
+# Default query suite — CWE Top 25 + OWASP Top 10, tuned for signal at
+# this project's size. See design-rationale.md §2 for the suite choice.
+#
+# Triggers: push to main, PR to main, and a weekly scheduled full-scan
+# (catches findings from newly-released CodeQL rules against existing
+# code). Monday 04:00 UTC, offset from Dependabot's 06:00 Europe/Amsterdam
+# to avoid runner contention.
+#
+# Permissions: minimum — security-events: write is the only write scope.
+# Findings surface in the repository's Security tab.
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 4 * * 1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4
+        with:
+          languages: ${{ matrix.language }}
+          # Default query suite. To escalate later (without a Phase
+          # re-entry) set queries: "security-extended" or
+          # "security-and-quality" — see design-rationale.md §2.
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4
+        with:
+          category: "/language:${{ matrix.language }}"

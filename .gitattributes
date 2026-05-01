@@ -1,0 +1,24 @@
+# Default: auto-detect text vs binary, normalize EOL to LF on commit.
+# Keeps line endings consistent across macOS / Linux / Windows contributors.
+* text=auto eol=lf
+
+# Shell scripts must always be LF, even on Windows checkouts.
+*.sh text eol=lf
+
+# Common binary types — never treat as text, never normalize.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.pdf  binary
+*.zip  binary
+*.gz   binary
+*.woff binary
+*.woff2 binary
+
+# Generated / vendored — exclude from language stats and PR diff folding.
+uv.lock                            linguist-generated=true
+observatory/package-lock.json      linguist-generated=true
+observatory/dist-embed/**          linguist-generated=true linguist-vendored=true

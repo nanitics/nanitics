@@ -1,0 +1,42 @@
+{
+  "_comment": "GitHub repository ruleset for main-branch protection. Apply via `jq 'del(._comment)' .github/branch-protection-ruleset.json | gh api -X POST /repos/<owner>/<repo>/rulesets --input -`. The `_comment` key is stripped before apply because the GitHub Rulesets API rejects unknown top-level fields. The two `Analyze` contexts below require CodeQL to be enabled for the repo (GitHub Advanced Security is free on public repos; CodeQL on private free-tier is disabled, so expect those contexts to appear only after public flip at Phase 1.8.2).",
+
+  "name": "main branch protection",
+  "target": "branch",
+  "enforcement": "active",
+
+  "bypass_actors": [
+    {
+      "actor_id": 5,
+      "actor_type": "RepositoryRole",
+      "bypass_mode": "always"
+    }
+  ],
+
+  "conditions": {
+    "ref_name": {
+      "include": ["~DEFAULT_BRANCH"],
+      "exclude": []
+    }
+  },
+
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": true,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          { "context": "Python (3.11)" },
+          { "context": "Python (3.13)" },
+          { "context": "Analyze (python)" },
+          { "context": "Analyze (javascript-typescript)" },
+          { "context": "Build docs" },
+          { "context": "DCO" }
+        ]
+      }
+    }
+  ]
+}

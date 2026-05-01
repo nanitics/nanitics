@@ -1,0 +1,80 @@
+# Environment variables (secrets)
+.env
+.env.local
+.env.*.local
+.env.production
+!.env.example
+!.env.template
+!.vscode/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Node.js / Frontend
+node_modules/
+.next/
+out/
+.turbo/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+coverage/
+.check-output
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.bak
+*.swn
+.tmp/
+
+# File storage
+data/files/
+
+# Validation trace outputs
+validation/traces/
+!validation/traces/.gitkeep
+
+# Claude Code / internal agentic workbench — never ship
+.claude/
+CLAUDE.md
+temp/
+
+**/.env
+
+# TestPyPI-pinned compose build cache — populated before a TestPyPI-variant
+# compose build (see docker/full-stack/Dockerfile.testpypi) and removed after.
+docker/full-stack/testpypi-dist/

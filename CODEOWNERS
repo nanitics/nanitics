@@ -1,0 +1,8 @@
+# CODEOWNERS — single source of truth for PR-review routing.
+#
+# The authoritative maintainer roster lives in MAINTAINERS.md. This file routes
+# every path to the roster listed there. When the roster grows beyond a single
+# maintainer, per-area routing is added alongside MAINTAINERS.md expansion in
+# the same change.
+
+*  @seven-peaks-agents

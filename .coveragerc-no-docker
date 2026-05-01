@@ -1,0 +1,21 @@
+# Coverage config for `just check` (default, Docker tests excluded).
+# Lines only exercised by Docker integration tests are excluded here
+# to maintain 100% coverage without requiring a Docker daemon.
+# Use `just check docker=true` (or `just ci`) for full coverage.
+
+[run]
+omit =
+    nanitics/safety/sandbox/docker.py
+
+[report]
+exclude_lines =
+    # Standard pragma
+    pragma: no cover
+    # CodeActAgent lines only reachable via real DockerSandbox
+    pragma: no cover (docker)
+    # Protocol/ABC method stubs (ellipsis body) — structural, never executed
+    ^\s*\.\.\.\s*$
+    # TYPE_CHECKING imports — only seen by type checkers, never at runtime
+    if TYPE_CHECKING:
+    # Abstract method decorator (next line is the def, body is stub)
+    @(abc\.)?abstractmethod

@@ -1,0 +1,72 @@
+# Authoritative label set — source of truth for repo labels.
+#
+# Applied manually: edit this file via PR, then sync to GitHub with
+# `gh label create/edit` (or a one-shot script that iterates this file).
+# There is no sync workflow today; drift is prevented by the PR review
+# on this file, not by automation.
+#
+# Rationale + original decisions recorded in
+# temp/launch/phases/contributor-community-governance-phase-1-contributor-intake-surface/technical-spec.md §4.
+
+# Meta
+- name: good-first-issue
+  description: "Scoped work suitable for first-time external contributors."
+  color: 7057ff
+- name: help-wanted
+  description: "Maintainer signal that outside contribution would be welcome here."
+  color: 008672
+
+# Type
+- name: type/bug
+  description: "Reproducible defect in SDK or Observatory behavior."
+  color: d73a4a
+- name: type/feature
+  description: "New capability or change to the public API."
+  color: a2eeef
+- name: type/docs
+  description: "Documentation defect or improvement."
+  color: 0075ca
+- name: type/chore
+  description: "Maintenance, refactor, or build-system work with no user-facing change."
+  color: fef2c0
+- name: type/security
+  description: "Security-relevant work. Use GHPVR for vulnerabilities, not public issues."
+  color: b60205
+
+# Area — one per nanitics/ top-level package plus non-code areas
+- name: area/core
+  description: "nanitics/core: agent loop, prompts, tool protocol."
+  color: 1d76db
+- name: area/capabilities
+  description: "nanitics/capabilities: memory, context, errors, evaluation, planning."
+  color: 1d76db
+- name: area/collaboration
+  description: "nanitics/collaboration: HITL, approval gates, revision gates."
+  color: 1d76db
+- name: area/composition
+  description: "nanitics/composition: orchestration, multi-agent coordination, durability."
+  color: 1d76db
+- name: area/infrastructure
+  description: "nanitics/infrastructure: LLM clients, embeddings, MCP, observability."
+  color: 1d76db
+- name: area/observatory
+  description: "nanitics/observatory: trace viewer backend router and models."
+  color: 1d76db
+- name: area/safety
+  description: "nanitics/safety: cancellation, iteration limits, sandbox."
+  color: 1d76db
+- name: area/tools
+  description: "nanitics/tools: built-in tools (HTTP, code execution, file, web search)."
+  color: 1d76db
+- name: area/docs
+  description: "Guides, policies, README, CONTRIBUTING — non-code doc surface."
+  color: 5319e7
+- name: area/build
+  description: "Build system, packaging, release tooling."
+  color: 5319e7
+- name: area/ci
+  description: "GitHub Actions workflows, pinned action SHAs, CI pipeline config."
+  color: 5319e7
+- name: area/dependencies
+  description: "Dependency updates — Dependabot PRs, lockfile bumps, security updates."
+  color: 5319e7

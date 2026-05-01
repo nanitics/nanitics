@@ -1,0 +1,83 @@
+# Dependabot configuration — Phase 4 Step 1.
+#
+# Three ecosystems: uv (Python package), npm (observatory/ frontend),
+# and github-actions (workflow action references — keeps pinned action
+# SHAs updated safely).
+#
+# Cadence: weekly on Mondays, Europe/Amsterdam time. Minor+patch bumps
+# are grouped per ecosystem to reduce PR count on a solo-maintainer
+# workflow. Major bumps land as single-dependency PRs because they are
+# review-heavy. Security updates are always delivered immediately as
+# single-dependency PRs regardless of the grouping config (Dependabot
+# default behaviour — no explicit opt-in required).
+#
+# Rationale: see design-rationale.md §1.
+
+version: 2
+
+updates:
+  # Python package — pyproject.toml + uv.lock
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Amsterdam"
+    target-branch: "main"
+    open-pull-requests-limit: 10
+    labels:
+      - "type/chore"
+      - "area/dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      python-minor-and-patch:
+        applies-to: "version-updates"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Observatory frontend — package.json + package-lock.json
+  - package-ecosystem: "npm"
+    directory: "/observatory"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Amsterdam"
+    target-branch: "main"
+    open-pull-requests-limit: 5
+    labels:
+      - "type/chore"
+      - "area/observatory"
+      - "area/dependencies"
+    commit-message:
+      prefix: "chore(observatory-deps)"
+      include: "scope"
+    groups:
+      frontend-minor-and-patch:
+        applies-to: "version-updates"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions — keeps pinned action SHAs patched. Ungrouped: each
+  # action update lands as its own PR for per-action supply-chain review.
+  - package-ecosystem: "github-actions"
+    directory: "/.github/workflows"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Amsterdam"
+    target-branch: "main"
+    open-pull-requests-limit: 5
+    labels:
+      - "type/chore"
+      - "area/ci"
+      - "area/dependencies"
+    commit-message:
+      prefix: "chore(actions)"
+      include: "scope"

@@ -1,0 +1,138 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "validation/**",
+]
+
+[project]
+name = "nanitics"
+version = "0.1.1"
+description = "Python SDK for building single-agent and multi-agent AI systems"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+authors = [
+    {name = "The Nanitics Contributors", email = "maintainers@nanitics.dev"},
+]
+maintainers = [
+    {name = "Chris Zevenbergen", email = "chris.zevenbergen@sevenpeaks.dev"},
+]
+keywords = ["agents", "multi-agent", "llm", "ai", "observability", "orchestration", "tools", "memory"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
+dependencies = [
+    "anthropic>=0.97.0",
+    "openai>=2.33.0",
+    "pydantic>=2.13.3",
+    "pyyaml >=6.0",
+    "typing_extensions >=4.12",
+]
+
+[project.urls]
+Homepage = "https://github.com/nanitics/nanitics"
+Repository = "https://github.com/nanitics/nanitics"
+Documentation = "https://docs.nanitics.dev/"
+Guides = "https://github.com/nanitics/nanitics/tree/main/docs/guides"
+Issues = "https://github.com/nanitics/nanitics/issues"
+Changelog = "https://github.com/nanitics/nanitics/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+litellm = ["litellm >=1.50"]
+mcp = ["mcp >=1.2"]
+mistral = ["httpx"]
+openai-tokenizer = ["tiktoken >=0.7"]
+voyage = ["httpx"]
+code_execution = ["docker >=7.0"]
+postgres = ["asyncpg >=0.29"]
+api = ["fastapi>=0.136.1"]
+http-tools = ["httpx >=0.28"]
+search-tools = ["httpx >=0.28"]
+tools = ["httpx >=0.28", "docker >=7.0"]
+
+[dependency-groups]
+dev = [
+    "pytest >=8.0",
+    "pytest-asyncio >=0.24",
+    "pytest-cov >=6.0",
+    "pytest-xdist >=3.6",
+    "ruff>=0.15.12",
+    "mypy>=1.20.2",
+    "litellm >=1.50",
+    "mcp >=1.2",
+    "python-dotenv >=1.0",
+    "docker >=7.0",
+    "fastapi>=0.136.1",
+    "respx >=0.21",
+    "types-PyYAML >=6.0",
+    "testcontainers[postgres]>=4.14.2",
+    "asyncpg >=0.29",
+    "pdoc >=15.0",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+exclude = ["**/temp/"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "PERF", "RET", "PIE", "C4", "RUF", "PT"]
+ignore = ["SIM108", "SIM102", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["E402", "PT011", "PT012", "PT018"]
+"**/examples/**" = ["B011", "PT015", "PT017", "PT018"]
+"**/blackboard.py" = ["B023"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+exclude = ["docs/"]
+
+[[tool.mypy.overrides]]
+module = ["asyncpg.*", "docker.*", "mcp.*", "uvicorn.*"]
+ignore_missing_imports = true
+
+# LiteLLM's top-level ``__init__`` re-imports its exception classes without
+# an explicit ``__all__``. Strict mode's ``no_implicit_reexport`` therefore
+# flags every ``litellm.RateLimitError`` / ``litellm.APIError`` access.
+# Re-enable implicit re-export for this package so the adapter client can
+# catch LiteLLM's normalized exceptions cleanly.
+[[tool.mypy.overrides]]
+module = ["litellm", "litellm.*"]
+implicit_reexport = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+strict = false
+disallow_untyped_defs = false
+disallow_any_generics = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_test_loop_scope = "session"
+asyncio_default_fixture_loop_scope = "session"
+testpaths = ["tests"]
+# Collect both standard `test_*.py` files and lowercase-named scripts used by
+# the validation suite (e.g., `validation/smoke/smoke.py`). No files under
+# `tests/` match the lowercase glob today, so this is additive.
+python_files = ["test_*.py", "[a-z]*.py"]
+norecursedirs = ["validation/helpers", "validation/traces"]
+addopts = "--import-mode=importlib -m 'not docker'"
+markers = [
+    "docker: tests requiring a running Docker daemon",
+    "quick: validation scripts in the quick subset",
+    "validation: real-service validation scripts (excluded by default)",
+]
