@@ -207,6 +207,64 @@ This distinction is not about whether an agent "supports tools" — ReWOO, CodeA
 
 **Bottom line:** If your agent needs to participate in Blackboard, MessageBus, or PeerNetwork coordination, use `ReActAgent`.
 
+## Structured Output
+
+`output_schema` is the cross-agent-type mechanism for structured output. Set `output_schema=YourPydanticModel` on `ReasoningAgent`, `ReActAgent`, `ReWOOAgent`, or `CodeActAgent`, and the LLM is constrained to produce JSON that validates against the model. The parsed instance lands on `result.parsed`. `ReasoningAgent` is the canonical extraction case (single LLM call, typed result); `ReActAgent` runs the tool-use loop first and then makes one additional schema-constrained call. The patterns below name two structured-output compositions Clearpath consumers re-derived under their own naming. Both are application-layer compositions on top of `output_schema` — no SDK primitive is required. They are the [dispatch-over-structured-output pre-pattern](multi-agent-foundations.md#pattern-progression) (typed output, then deterministic Python) applied to two specific shapes.
+
+### Closed-Vocabulary `Literal` Typology
+
+When the agent's structured output discriminates between a fixed set of categories, model the discriminator as a `Literal[...]` alias embedded in a Pydantic field with `Field(description=...)` per-entry documentation. The closed vocabulary travels three layers:
+
+- **LLM-side:** the `Literal[...]` becomes a JSON Schema `enum`, giving the LLM explicit guidance on the valid values.
+- **Pydantic validation:** if the LLM returns a value outside the literal set, validation raises an error before `result.parsed` is populated, so application code never sees an invalid enum value.
+- **Application-side:** a `frozenset(get_args(...))` helper provides a membership-check primitive for code that consumes the typology *outside* the agent path (deterministic routing, ad-hoc validation, test fixtures).
+
+This is the agent-output-layer mirror of the same pattern documented at the tool-parameter layer in [Tools — Parameter Design](tools.md#parameter-design); use `Literal` whenever the closed-set property is load-bearing.
+
+```python
+from typing import Literal, get_args
+
+from pydantic import BaseModel, Field
+
+
+RefusalTriggerKind = Literal[
+    "out_of_scope",
+    "missing_prerequisite",
+    "non_canonical",
+    "other",
+]
+
+REFUSAL_TRIGGER_KINDS: frozenset[str] = frozenset(get_args(RefusalTriggerKind))
+
+
+class RefusalRationaleDraft(BaseModel):
+    kind: RefusalTriggerKind = Field(
+        description="The closed-vocabulary refusal trigger; must match the routed kind."
+    )
+    summary: str = Field(description="One-sentence summary of why this record cannot be handled.")
+```
+
+### Refusal-as-Output
+
+When an upstream record should not produce an agent decision (out-of-scope, missing prerequisite data, non-canonical category), model the *refusal* as a typed artifact rather than asking the agent to emit refusal prose. Refusal-as-prose is hard to test and hard to route; refusal-as-typed-artifact composes naturally with deterministic routing and downstream typed pipelines. The composition has three parts:
+
+1. **Deterministic upstream-record routing** onto a closed `RefusalTriggerKind` typology (the [Closed-Vocabulary `Literal` Typology](#closed-vocabulary-literal-typology) shape) — a pure function of the record fields. No LLM call.
+2. **Rationale-generating `ReasoningAgent`** with `output_schema=RefusalRationaleDraft`. The agent provides judgement on *why* the routed kind applies and *what to do instead* — fields the deterministic routing cannot fill in.
+3. **Assembly step** producing the typed `RefusalToDraft` artifact, combining the routed kind, the agent's rationale, and any application-side metadata (record id, audit fields, downstream pipeline hints).
+
+The pattern is application-layer composition on top of `ReasoningAgent`; no SDK primitive is added. Naming the shape lets a reader recognise it on second sight and avoids re-derivation under bespoke naming.
+
+```python
+async def handle_record(record):
+    kind = route_record(record)              # deterministic; no LLM
+    if kind is None:
+        return await downstream_agent.run(record)
+    rationale = await rationale_agent.run(record_for_kind(record, kind))
+    return assemble_refusal(record_id=record.id, kind=kind, rationale=rationale.parsed)
+```
+
+> **See also:** [`examples/agents/refusal_as_output.py`](../../examples/agents/refusal_as_output.py).
+
 ## Pitfalls
 
 - **Defaulting to complex agent types.** Start with `ReActAgent`. Only escalate when simpler agents demonstrably fail. `TreeOfThoughtAgent` and `LATSAgent` are 10–100x more expensive per run.
