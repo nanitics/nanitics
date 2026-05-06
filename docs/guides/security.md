@@ -149,6 +149,76 @@ for API keys.
 
 For the full tool-authoring contract, see [tools.md](tools.md).
 
+## Trust-boundary value objects
+
+When application code needs to express *by construction* that a value has passed a particular validation across an internal trust boundary, model the value as a Pydantic `BaseModel` whose construction is gated by both a type-level discriminator and a module-private factory. ("Trust boundary" here means an application-internal validation boundary, not the SDK-vs-adopter boundary the [Trust boundary summary](#trust-boundary-summary) names.) Pair this with a structural CI assertion that walks the project tree and rejects any call to the factory from outside the module that owns the boundary. The composition is by-construction on top of Pydantic, not a primitive on top of `nanitics`.
+
+The pattern has three layers, each enforcing a different property:
+
+1. A `Literal[True]` discriminator field on the Pydantic model. Pydantic validates the literal at construction time; an instance with `validated=False` cannot exist. No caller can spoof the literal's value.
+2. A module-private factory function that performs the validation logic before instantiating the model. Convention: a leading underscore or module-internal scope. The factory is the only legitimate constructor; any other call site is by definition illegitimate.
+3. A structural CI assertion that walks every `.py` file outside the module owning the boundary and rejects any call site naming the factory function. This is the load-bearing layer — without it, the factory's privacy is convention only, and a misuse would slip past code review.
+
+Together the three layers make the boundary by-construction rather than by-policy. A consumer cannot accidentally bypass it: Pydantic rejects direct `Model(validated=False)` constructions, and the structural test rejects illegitimate call sites at CI time.
+
+The application-side shape:
+
+```python
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict
+
+
+class ReadyToSendEnvelope(BaseModel):
+    """A typed value that only the trust-boundary owner may construct."""
+
+    model_config = ConfigDict(frozen=True)
+
+    payload: str
+    validated: Literal[True] = True
+
+
+def _make_ready_to_send(payload: str) -> ReadyToSendEnvelope:
+    """Module-private factory: the only legitimate constructor of the envelope."""
+    if not payload or len(payload) > 4096:
+        raise ValueError("payload fails the trust-boundary validation")
+    # ... additional domain-specific validation here ...
+    return ReadyToSendEnvelope(payload=payload, validated=True)
+```
+
+The structural CI assertion (place in your test directory, not the SDK's):
+
+```python
+import ast
+from pathlib import Path
+
+FACTORY_NAME = "_make_ready_to_send"
+OWNING_MODULE = "myapp/security/envelope.py"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def test_factory_invoked_only_from_owning_module() -> None:
+    """Reject any call site outside the owning module that names the factory."""
+    illegitimate: list[Path] = []
+    for path in PROJECT_ROOT.rglob("*.py"):
+        if path == PROJECT_ROOT / OWNING_MODULE:
+            continue
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == FACTORY_NAME
+            ):
+                illegitimate.append(path)
+                break
+    assert not illegitimate, f"factory {FACTORY_NAME} called from: {illegitimate}"
+```
+
+The SDK does not provide a higher-level "construction-restricted Pydantic model" primitive. A shipped primitive would have to anticipate every adopter's trust-boundary topology — which factory name, which module owns the boundary, which call sites are legitimate — and ship a default that would fit none of them. The pattern composes on top of Pydantic and `ast`; both are stable inputs. Shape it to your trust topology and place the structural test in your own test directory.
+
+The Clearpath application repository carries a canonical example of this pattern in production form (multiple trust-boundary value objects, a shared structural-test helper, exclusion lists, and per-boundary factory naming). This guide names the pattern; the Clearpath repo owns the worked example.
+
 ## Content redaction for trace events
 
 Trace events carry adopter content (prompts, tool inputs and outputs,
