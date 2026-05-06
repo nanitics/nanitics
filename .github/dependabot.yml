@@ -38,6 +38,12 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # Skip litellm 1.83.x — upstream regression pinning pydantic==2.12.5,
+    # which conflicts with this project's pydantic>=2.13.3. Re-evaluate
+    # once a 1.84+ release loosens the pin.
+    ignore:
+      - dependency-name: "litellm"
+        versions: [">=1.83.1, <1.84"]
 
   # Observatory frontend — package.json + package-lock.json
   - package-ecosystem: "npm"
@@ -62,6 +68,17 @@ updates:
         update-types:
           - "minor"
           - "patch"
+      # vite and @vitejs/plugin-react have a tightly coupled peer-dep
+      # contract — each major release of one only supports a specific
+      # major of the other. Group their major bumps so Dependabot opens
+      # a single combined PR instead of two PRs that block each other.
+      vite-major:
+        applies-to: "version-updates"
+        patterns:
+          - "vite"
+          - "@vitejs/plugin-react"
+        update-types:
+          - "major"
 
   # GitHub Actions — keeps pinned action SHAs patched. Ungrouped: each
   # action update lands as its own PR for per-action supply-chain review.
