@@ -165,7 +165,7 @@ export function RunDetailPage({ runId, onBack, onNavigateToAgent, onNavigateToWo
 					<div className="flex-1 min-w-0">
 						<div className="flex items-center gap-2">
 							<span className="font-medium text-sm truncate">
-								{(data.run.metadata?.description as string) || data.run.id}
+								{(data.run.metadata?.description as string) || "Run"}
 							</span>
 							<StatusBadge status={liveStatus ?? data.run.status} />
 							{/* Live indicator */}

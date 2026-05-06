@@ -13,6 +13,7 @@ from nanitics.infrastructure import (
     BaseEvent,
     SpanEndEvent,
     SpanStartEvent,
+    TraceEvent,
 )
 
 
@@ -334,31 +335,61 @@ class TestCreateChild:
         child = parent.create_child()
         assert child.trace_id == parent.trace_id
 
-    def test_child_root_span_links_to_parent_span(self) -> None:
+    def test_child_first_span_parents_under_creator_current_span(self) -> None:
+        """The child's first opened span links to the parent emitter's
+        current span at create time. Anchoring this contract is what keeps
+        composite-agent (``Agent.bind`` / ``AgentTool`` / ``ReflexionAgent``
+        / workflow child) span trees from orphaning every top-level span
+        when persisted to ``PersistentTraceStore``.
+        """
         parent = InMemoryEmitter(trace_id="trace-1")
         parent_span = parent.span_id
         child = parent.create_child()
-        assert child.parent_span_id == parent_span
+
+        # The child operates inside the parent's current span — same span_id
+        # before either side opens any further spans.
+        assert child.span_id == parent_span
+
+        # When the child opens its first span, that span's parent is the
+        # parent emitter's current-at-create-time span_id.
+        events: list[TraceEvent] = []
+        child.add_listener(events.append)
+        with child.span("inner"):
+            pass
+        span_starts = [e for e in events if isinstance(e, SpanStartEvent)]
+        assert len(span_starts) == 1
+        assert span_starts[0].parent_span_id == parent_span
 
     def test_child_inside_parent_span_links_to_that_span(self) -> None:
         parent = InMemoryEmitter(trace_id="trace-1")
         with parent.span("outer"):
             outer_span = parent.span_id
             child = parent.create_child()
-        assert child.parent_span_id == outer_span
+            events: list[TraceEvent] = []
+            child.add_listener(events.append)
+            with child.span("inner"):
+                pass
+        span_starts = [e for e in events if isinstance(e, SpanStartEvent) and e.name == "inner"]
+        assert len(span_starts) == 1
+        assert span_starts[0].parent_span_id == outer_span
 
     def test_child_has_independent_span_stack(self) -> None:
+        """Mutating the parent's span stack does not affect the child's,
+        and vice versa — each side's spans are scoped to its own context.
+        """
         parent = InMemoryEmitter(trace_id="trace-1")
         child = parent.create_child()
 
-        parent_root = parent.span_id
-        child_root = child.span_id
-        assert parent_root != child_root
-
         with parent.span("p"):
-            assert parent.span_id != parent_root
-            # Child should be unaffected
-            assert child.span_id == child_root
+            parent_inner_span = parent.span_id
+            # Parent's stack moved; child's view of "current span" is unchanged
+            # — the child still sits in the parent's span at create time.
+            assert child.span_id != parent_inner_span
+
+        with child.span("c"):
+            child_inner_span = child.span_id
+            # Child's stack moved; parent's stack is unaffected.
+            assert parent.span_id != child_inner_span
 
     def test_child_copies_listeners(self) -> None:
         parent = InMemoryEmitter(trace_id="trace-1")
@@ -493,9 +524,11 @@ class TestAgentBind:
 
         # Agent's default emitter is unchanged.
         assert agent._default_emitter is parent
-        # Handle holds a child emitter linked to parent.
+        # Handle holds a child emitter linked to parent: same trace, and the
+        # child operates inside the parent's current span so its first opened
+        # span (the bound agent's run span) parents under that span.
         assert handle.emitter.trace_id == parent.trace_id
-        assert handle.emitter.parent_span_id == parent.span_id
+        assert handle.emitter.span_id == parent.span_id
 
     async def test_bound_run_routes_tool_events_to_child_emitter(self) -> None:
         """Tool dispatch inside a bound run emits to the bound child emitter."""

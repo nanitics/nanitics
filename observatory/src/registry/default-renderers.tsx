@@ -1519,7 +1519,7 @@ function SpanRenderer({ event }: EventDetailProps) {
 				{name && <span className="text-sm font-medium">{name}</span>}
 				{event.event_type === "span.end" && duration_ms != null && (
 					<span className="text-xs text-muted-foreground font-mono tabular-nums">
-						{duration_ms < 1000 ? `${duration_ms}ms` : `${(duration_ms / 1000).toFixed(1)}s`}
+						{duration_ms < 1000 ? `${Math.round(duration_ms)}ms` : `${(duration_ms / 1000).toFixed(1)}s`}
 					</span>
 				)}
 			</div>
@@ -1588,7 +1588,9 @@ function CodeExecutionResultRenderer({ event }: EventDetailProps) {
 					</span>
 				)}
 				{duration_ms != null && (
-					<span className="text-xs text-muted-foreground font-mono tabular-nums">{duration_ms}ms</span>
+					<span className="text-xs text-muted-foreground font-mono tabular-nums">
+						{duration_ms < 1000 ? `${Math.round(duration_ms)}ms` : `${(duration_ms / 1000).toFixed(1)}s`}
+					</span>
 				)}
 			</div>
 
@@ -1896,7 +1898,10 @@ function agentCompleteSummary(event: TraceEvent): string {
 function spanSummary(event: TraceEvent): string {
 	const name = event.payload.name as string | undefined;
 	const duration = event.payload.duration_ms as number | undefined;
-	if (name && duration != null) return `${name} (${duration}ms)`;
+	if (name && duration != null) {
+		const formatted = duration < 1000 ? `${Math.round(duration)}ms` : `${(duration / 1000).toFixed(1)}s`;
+		return `${name} (${formatted})`;
+	}
 	if (name) return name;
 	return event.event_type;
 }

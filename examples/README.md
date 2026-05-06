@@ -29,6 +29,15 @@ deterministic):
 uv run pytest tests/test_examples.py -v
 ```
 
+## Composing primitives
+
+The integrated showcase example: three primitives composed end-to-end.
+Read this first when evaluating whether the SDK fits how you build.
+
+| Example | Description | Guide |
+|---|---|---|
+| [homepage.py](homepage.py) | Three-layer composition — `ReActAgent` + `ReflexionAgent` + `AgentTool` — with self-correction over a mocked `search` tool. The website fetches the visible portion of this file at build time. | [Multi-Agent Foundations](../docs/guides/multi-agent-foundations.md) |
+
 ## Tools
 
 Tool construction, composition, and the primitives that surround them —
