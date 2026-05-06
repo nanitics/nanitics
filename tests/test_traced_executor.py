@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 
 import pytest
 
@@ -252,3 +253,56 @@ async def test_factory_receives_same_run_id_as_returned(
     run = await store.get_run(returned_run_id)
     assert run is not None
     assert run.id == returned_run_id
+
+
+async def test_caller_supplied_run_id_is_honored(executor: TracedExecutor, store: InMemoryPersistentTraceStore) -> None:
+    """A caller-supplied ``run_id`` is honored end-to-end.
+
+    The factory sees the supplied id, the return tuple matches, the run
+    record is keyed on it, and at least one persisted event is parented
+    under it. Pinning all four signals together is what makes the
+    HTTP-boundary fire-and-stream pattern (route returns ``202 {run_id}``
+    before scheduling the executor) safe to build on.
+    """
+    captured: dict[str, str] = {}
+
+    async def _factory(emitter: EventEmitter, run_id: str) -> str:
+        captured["run_id"] = run_id
+        with emitter.span("caller-supplied-id-marker"):
+            pass
+        return "ok"
+
+    returned_run_id, result = await executor.execute(_factory, run_id="caller-id")
+
+    assert result == "ok"
+    assert captured["run_id"] == "caller-id"
+    assert returned_run_id == "caller-id"
+
+    run = await store.get_run("caller-id")
+    assert run is not None
+    assert run.id == "caller-id"
+
+    events = await store.query_events("caller-id")
+    assert len(events) > 0
+
+
+async def test_omitted_run_id_falls_back_to_generated(
+    executor: TracedExecutor, store: InMemoryPersistentTraceStore
+) -> None:
+    """Omitting ``run_id`` preserves the existing UUID-generated behavior.
+
+    Pins the absence-of-kwarg path with a direct test so a future
+    regression that, e.g., introduces a non-UUID default is caught here
+    rather than only by indirect signal from the existing tests.
+    """
+
+    async def _factory(emitter: EventEmitter, run_id: str) -> str:
+        del emitter, run_id
+        return "ok"
+
+    returned_run_id, _ = await executor.execute(_factory)
+
+    assert isinstance(returned_run_id, str)
+    # ``uuid.UUID`` raises ``ValueError`` on a non-UUID string; letting it
+    # propagate is the assertion.
+    uuid.UUID(returned_run_id)

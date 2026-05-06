@@ -60,21 +60,40 @@ class TracedExecutor:
         fn: Callable[[EventEmitter, str], Awaitable[T]],
         metadata: dict[str, Any] | None = None,
         *,
+        run_id: str | None = None,
         queue: asyncio.Queue[dict[str, object]] | None = None,
         min_level: TraceLevel = "info",
         redaction_hook: RedactionHook | None = None,
     ) -> tuple[str, T]:
         """Execute *fn* with full run lifecycle and trace persistence.
 
+        Callers that need the ``run_id`` before ``fn`` runs (e.g., HTTP
+        routes that return ``202 {"run_id": "..."}`` before scheduling the
+        executor on a background task, so the client can open an SSE
+        connection keyed on that id before ``fn`` starts) should pass it
+        in via the ``run_id`` kwarg. Callers whose deadline is "before
+        ``execute`` returns" can instead read the ``run_id`` argument
+        passed into ``fn``; both paths surface the same identifier.
+
         Args:
             fn: Async callable receiving an :class:`EventEmitter` and the
-                pre-generated ``run_id`` and returning a result. Free to
-                create agents, workflows, or any async work. The ``run_id``
-                passed in is identical to the first element of the returned
-                tuple, so callers that need to key external durable state on
-                the Observatory ``run_id`` before ``execute`` returns can
-                use the in-factory value.
+                ``run_id`` and returning a result. Free to create agents,
+                workflows, or any async work. The ``run_id`` passed in is
+                identical to the first element of the returned tuple — the
+                caller-supplied value when one is given via the ``run_id``
+                kwarg, otherwise an internally generated UUID.
             metadata: Optional dictionary persisted with the run record.
+            run_id: Optional caller-supplied run identifier. When ``None``
+                (default), ``execute`` generates a UUID internally; when a
+                string is supplied, that string is used as the run id and
+                the caller is responsible for ensuring uniqueness. Empty
+                strings and other falsy non-``None`` values are passed
+                through unchanged — only ``None`` triggers internal
+                generation. Duplicate-id behavior is delegated to the
+                trace store: :class:`PostgresTraceStore` surfaces a
+                unique-violation ``IntegrityError`` from its ``runs.id``
+                ``PRIMARY KEY`` constraint;
+                :class:`InMemoryPersistentTraceStore` overwrites silently.
             queue: Optional async queue for live SSE streaming. The internal
                 :class:`TraceCollector` pushes qualifying events here.
             min_level: Minimum event level pushed to *queue*. Defaults to
@@ -93,8 +112,10 @@ class TracedExecutor:
                 (tenant, user, request).
 
         Returns:
-            A ``(run_id, result)`` tuple where *run_id* is the generated
-            identifier and *result* is whatever *fn* returned.
+            A ``(run_id, result)`` tuple where *run_id* is the
+            caller-supplied value when one was given, otherwise the
+            internally generated UUID, and *result* is whatever *fn*
+            returned.
 
         Raises:
             SuspendExecution: Re-raised after persisting events and marking
@@ -107,7 +128,7 @@ class TracedExecutor:
         # would invert the dependency direction.
         from nanitics.composition.durability.suspension import SuspendExecution
 
-        run_id = str(uuid4())
+        run_id = run_id if run_id is not None else str(uuid4())
         trace_id = str(uuid4())
 
         await self._trace_store.register_run(run_id, trace_id, metadata or {})

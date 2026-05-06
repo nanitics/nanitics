@@ -246,6 +246,8 @@ run_id, result = await executor.execute(
 
 The callback receives an `EventEmitter` and the pre-generated `run_id` and returns any result. The `run_id` passed into the callback is the same identifier the `execute` call returns — making it available inside the factory lets adopters key external durable state (HITL requests, waiter registries, resumable workflows) on the Observatory `run_id` before `execute` returns. `TracedExecutor` manages everything else — the application never touches emitter creation, collector wiring, event persistence, or status updates.
 
+When the id needs to be known *before* the factory runs, pass `run_id="..."` as a keyword argument to `execute`. The canonical case is an HTTP route that returns `202 {"run_id": "..."}` before scheduling the executor on a background task, so the client can open an SSE connection keyed on that id before `fn` starts — no in-factory hook can run early enough for that sequence. When the deadline is "before `execute` returns" rather than "before `fn` starts", the in-factory `run_id` parameter is the simpler choice. Uniqueness is the caller's responsibility: the trace store's `runs.id` `PRIMARY KEY` surfaces collisions verbatim (Postgres raises a unique-violation `IntegrityError`; in-memory overwrites silently) — the SDK does not deduplicate.
+
 ### Why TracedExecutor over manual wiring
 
 - **Events are persisted in real-time** via `TraceCollector`, not batched after completion. Failed and suspended runs retain their trace data.
