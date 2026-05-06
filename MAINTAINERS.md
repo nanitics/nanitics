@@ -18,7 +18,7 @@ This file names the maintainers of Nanitics. It is the authoritative roster —
 
 ## How the roster evolves
 
-Nanitics ships v0.1.1 with a single maintainer — see [GOVERNANCE.md](GOVERNANCE.md) for the decision model that matches.
+Nanitics currently ships with a single maintainer — see [GOVERNANCE.md](GOVERNANCE.md) for the decision model that matches.
 
 **Additional maintainers** are added when (a) a contributor has landed
 sustained, high-quality work across multiple areas over time, (b) the existing

@@ -175,7 +175,7 @@ Every pull request runs two GitHub Actions jobs defined in [`.github/workflows/c
 
 - The `python` job runs `just check`.
 - The `observatory` job runs `npm run lint`, `npm run typecheck`, and `npm run test` inside `observatory/`.
-- Service-dependent tests (marked `docker`) are skipped in CI for v0.1.1. Run them locally with `just check docker=true` (or `just ci`) when Docker is available. Real-service tests live in `validation/` and are run via `just validate`.
+- Service-dependent tests (marked `docker`) are currently skipped in CI. Run them locally with `just check docker=true` (or `just ci`) when Docker is available. Real-service tests live in `validation/` and are run via `just validate`.
 
 Releases are published automatically via [`.github/workflows/release.yml`](.github/workflows/release.yml) when a GitHub release is cut — the workflow uses PyPI trusted publishing (no API tokens) and uploads a PEP 740 provenance attestation alongside each artifact, generated keylessly from the GitHub Actions OIDC identity. See [`SECURITY.md`](SECURITY.md#release-artefact-provenance) for how to verify it.
 

@@ -129,6 +129,6 @@ Under `NANITICS_LLM_PROVIDER=anthropic`, the critic's call is made
 against a reconstructed `AnthropicLLMClient` with `enable_caching=True`
 so the shared trace prefix is written once (first specialist) and
 read twice (parallel fan-out). Under `NANITICS_LLM_PROVIDER=openai`,
-caching is not shipped at v0.1.1 — the critic uses the plain client
+caching is not currently shipped — the critic uses the plain client
 and pays the three-pass input cost. Expect roughly 2× the Haiku
 invocation cost on OpenAI Haiku-equivalent models.

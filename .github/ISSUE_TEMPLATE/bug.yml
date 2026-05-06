@@ -36,7 +36,7 @@ body:
     id: nanitics-version
     attributes:
       label: "Nanitics version"
-      placeholder: "`pip show nanitics | grep Version` output, e.g. `0.1.1`"
+      placeholder: "`pip show nanitics | grep Version` output, e.g. `0.2.0`"
     validations:
       required: true
   - type: input

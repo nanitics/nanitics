@@ -13,7 +13,7 @@ This guide covers exactly one realistic deployment: the full-stack compose under
 The guide deliberately does **not** cover:
 
 - A framework matrix (FastAPI vs Django vs Flask). The SDK is framework-agnostic; the compose uses FastAPI because that is the minimal glue to mount `create_observatory_router` and host runner endpoints. The wiring pattern transfers.
-- A serverless chapter. Long-running agent loops, durable HITL, and streaming traces have awkward shapes on request-per-function runtimes; the SDK does not ship a serverless adapter at v0.1.1.
+- A serverless chapter. Long-running agent loops, durable HITL, and streaming traces have awkward shapes on request-per-function runtimes; the SDK does not currently ship a serverless adapter.
 - Reference Kubernetes manifests or Terraform. Adopter environments differ on image registry, secret source, Postgres provisioning, and reverse-proxy choice — a single reference manifest would be wrong for most readers. The "Take this to your own infrastructure" section below names the decisions in prose.
 
 ## Prerequisites
@@ -141,7 +141,7 @@ The compose's role grants, the sandbox user's `statement_timeout = '2s'` pin, th
 
 ## Reverse-proxy auth
 
-The compose exposes `app` on port 8000 with no authentication in front of it. The Observatory at v0.1.1 has no built-in auth hook on `create_observatory_router` — that seam is deliberate, and filling it is adopter-owned at v0.1.1.
+The compose exposes `app` on port 8000 with no authentication in front of it. The Observatory has no built-in auth hook on `create_observatory_router` — that seam is deliberate, and filling it is adopter-owned.
 
 Any deployment that reaches more than one trusted developer terminates auth at a reverse proxy — nginx, Caddy, a cloud load balancer — that sits in front of the compose. The proxy protects the mount path (`/api/observatory`) and the UI path (`/api/observatory/`) together. Two proxy-side settings are load-bearing:
 
@@ -150,7 +150,7 @@ Any deployment that reaches more than one trusted developer terminates auth at a
 
 Applying auth at the proxy rather than inside the FastAPI app keeps Nanitics' surface unchanged across dev and production. The runner endpoints (`/runners/*`) live under the same proxy policy for most deployments; split them out if your runners are public endpoints served to untrusted users.
 
-> For the full Observatory production posture — the four seams (auth, multi-tenancy, retention, content scrubbing), who owns each, and why no default `ObservatoryAuthProvider` ships at v0.1.1 — see [Observatory Integration](observatory-integration.md#for-production).
+> For the full Observatory production posture — the four seams (auth, multi-tenancy, retention, content scrubbing), who owns each, and why no default `ObservatoryAuthProvider` ships today — see [Observatory Integration](observatory-integration.md#for-production).
 
 ## Resource sizing and scaling
 
@@ -176,7 +176,7 @@ The load-bearing pattern for adopters is the FastAPI lifespan shape: open the Po
 
 The compose is a worked-out local example, not a universal starting point. Taking this pattern to your own infrastructure means making five decisions your environment constrains — the compose makes each one in the simplest local-dev way, and a real deployment makes each one differently. None of them is binary, and none is well served by a reference Kubernetes manifest: every one is shaped by your existing infrastructure, not by the SDK.
 
-**Image build.** Use [`docker/full-stack/Dockerfile`](../../docker/full-stack/Dockerfile) as a template, not as a ship-as-is artifact. The Dockerfile builds from `python:3.11-slim`, installs Nanitics with the `api,anthropic,openai,postgres` extras, and copies the pre-built Observatory embed bundle plus the compose's glue modules. In your environment you probably pin the SDK to a release tag (`pip install nanitics[api,anthropic,postgres]==0.1.1`) rather than installing from the source tree, you push the image to your own registry with your own tagging convention, and your CI builds the Observatory embed bundle as part of the image build rather than copying a committed artifact. The load-bearing pieces of the Dockerfile are the layering (pyproject+source first, bundle+glue last) and the `CMD ["uvicorn", "app:app", ...]` entrypoint — keep those, adjust everything else to your build system.
+**Image build.** Use [`docker/full-stack/Dockerfile`](../../docker/full-stack/Dockerfile) as a template, not as a ship-as-is artifact. The Dockerfile builds from `python:3.11-slim`, installs Nanitics with the `api,anthropic,openai,postgres` extras, and copies the pre-built Observatory embed bundle plus the compose's glue modules. In your environment you probably pin the SDK to a release tag (`pip install nanitics[api,anthropic,postgres]==0.2.0`) rather than installing from the source tree, you push the image to your own registry with your own tagging convention, and your CI builds the Observatory embed bundle as part of the image build rather than copying a committed artifact. The load-bearing pieces of the Dockerfile are the layering (pyproject+source first, bundle+glue last) and the `CMD ["uvicorn", "app:app", ...]` entrypoint — keep those, adjust everything else to your build system.
 
 **Secrets source.** The compose reads provider keys from a `.env` file mounted via `docker compose`'s env-file mechanism. That is the cheapest-possible local-dev posture and it does not belong in production. Any adopter running in production replaces the `.env` with whatever secret store their environment already uses — cloud-provider KMS (AWS SSM/Secrets Manager, GCP Secret Manager, Azure Key Vault), a shared secrets tool (HashiCorp Vault), Kubernetes Secrets projected as env vars, or a CI-injected runtime env. The SDK never cares how the key gets into `os.environ` at the moment the LLM client is constructed; it cares that it is there and that it is never serialised into a trace event. The no-leakage invariant the SDK enforces on its side of the trust boundary (see [Security](security.md#api-key-handling)) is the SDK's half; getting the key into the process without leaving a copy on disk, in a log, or in an image layer is yours.
 

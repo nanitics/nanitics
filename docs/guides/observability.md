@@ -384,7 +384,7 @@ Events are frozen Pydantic models. Implementations return a new copy via `model_
 
 ### Example redaction hook (copy-paste)
 
-The SDK intentionally ships no default redactor. Regex lists and PII shapes drift with provider evolution and your data is yours; a shipped default would be a promise the SDK cannot honour at v0.1.1. The snippet below is an **example, not a shipped class** — adapt it to your threat model:
+The SDK intentionally ships no default redactor. Regex lists and PII shapes drift with provider evolution and your data is yours; a shipped default would be a promise the SDK cannot honour. The snippet below is an **example, not a shipped class** — adapt it to your threat model:
 
 ```python
 import re

@@ -51,11 +51,11 @@ Do not copy the table here; read it there.
 
 The table below maps the [OWASP Top 10 for Agentic Applications
 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/)
-onto the Nanitics v0.1.1 surface. "SDK" rows are addressed by
-mechanisms this guide links to. "Adopter" rows are yours to address;
-the SDK provides the typed boundary where your controls attach.
-"Shared" rows need both. "Out of scope at v0.1.1" means the SDK ships
-no mechanism for this risk and does not pretend to — bring your own.
+onto the Nanitics surface. "SDK" rows are addressed by mechanisms
+this guide links to. "Adopter" rows are yours to address; the SDK
+provides the typed boundary where your controls attach. "Shared" rows
+need both. "Out of scope" means the SDK ships no mechanism for this
+risk and does not pretend to — bring your own.
 
 | ID | OWASP title | Nanitics posture |
 |---|---|---|
@@ -64,11 +64,11 @@ no mechanism for this risk and does not pretend to — bring your own.
 | ASI03 | Agent Identity & Privilege Abuse | Adopter — scope and rotate provider credentials; see [API-key handling](#api-key-handling). |
 | ASI04 | Agentic Supply Chain Compromise | SDK for `nanitics` itself (see [Supply-chain posture](#supply-chain-posture)); adopter owns the supply chain of their own tools and any MCP servers they mount. |
 | ASI05 | Unexpected Code Execution | SDK — `DockerSandbox` with documented limits (see [DockerSandbox honest limits](#dockersandbox-honest-limits)). Stronger isolation is adopter-owned for high-consequence production. |
-| ASI06 | Memory & Context Poisoning | Out of scope at v0.1.1 — see [Known limitations at v0.1.1](#known-limitations-at-v011). |
-| ASI07 | Insecure Inter-Agent Communication | Out of scope by architecture — multi-agent primitives run in-process at v0.1.1; there is no wire protocol the SDK authors or hardens. |
+| ASI06 | Memory & Context Poisoning | Out of scope — see [Known limitations](#known-limitations). |
+| ASI07 | Insecure Inter-Agent Communication | Out of scope by architecture — multi-agent primitives run in-process; there is no wire protocol the SDK authors or hardens. |
 | ASI08 | Cascading Agent Failures | Shared — SDK ships iteration limits, tool-call limits, and cancellation tokens (see [safety.md](safety.md)); adopter owns circuit-breaking at tool boundaries. |
 | ASI09 | Human-Agent Trust Exploitation | Shared — SDK ships `ApprovalGate` and `ApprovalWrapped` HITL primitives; adopter decides what to gate and how to present it (HITL failures raise typed `ApprovalUnavailableError` / `ApprovalTimeoutError`). |
-| ASI10 | Rogue Agents | Out of scope at v0.1.1 — traceable via the observability surface for post-hoc audit, not detected by the SDK; see [Known limitations at v0.1.1](#known-limitations-at-v011). |
+| ASI10 | Rogue Agents | Out of scope — traceable via the observability surface for post-hoc audit, not detected by the SDK; see [Known limitations](#known-limitations). |
 
 ## Prompt injection — honest posture
 
@@ -299,7 +299,7 @@ That is the SDK's half. The adopter's half:
 
 Every PyPI release of `nanitics` carries a PEP 740 provenance attestation, generated keylessly from this repository's GitHub Actions trusted publisher. Verification instructions and the full policy live in [`SECURITY.md § Release artefact provenance`](../../SECURITY.md#release-artefact-provenance) — not duplicated here.
 
-## Known limitations at v0.1.1
+## Known limitations
 
 This section names what the SDK does not do, so you know where to
 bring your own controls. Absence here is deliberate, not a roadmap.
@@ -320,8 +320,8 @@ bring your own controls. Absence here is deliberate, not a roadmap.
   to the model from memory, retrieval, or a prior tool result is not
   inspected by the SDK. Treat all such content as attacker-controllable.
 - **No multi-tenant isolation on the Observatory.** The SDK and the
-  Observatory at v0.1.1 assume a single scope; running a multi-tenant
-  Observatory is adopter-owned, per the
+  Observatory assume a single scope; running a multi-tenant Observatory
+  is adopter-owned, per the
   [Observatory integration guide's production framing](observatory-integration.md#for-production).
 - **No inter-agent wire protocol.** Multi-agent primitives
   (delegation, broadcast, debate, consensus, bidding, blackboard, peer

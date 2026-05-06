@@ -52,8 +52,8 @@ from Solid Software B.V.:
   divert users.
 - Using the Nanitics name to imply endorsement of, or sponsorship by,
   Solid Software B.V. or Living The Dream Holding B.V.
-- Reusing the Nanitics logo (no logo exists as of v0.1.1 — logo design
-  is deferred post-launch; this policy is forward-compatible).
+- Reusing the Nanitics logo (no logo exists today — logo design is
+  deferred post-launch; this policy is forward-compatible).
 
 ## Fair use and nominative use
 
@@ -67,7 +67,7 @@ Maintainer.
 
 ## Logo policy
 
-No Nanitics logo is published at v0.1.1. Logo design is deferred
+No Nanitics logo is published today. Logo design is deferred
 post-launch. Once a logo is published, reuse of the logo will require
 written permission under terms that will be added here at that time.
 This section is intentionally forward-compatible.

@@ -5,8 +5,8 @@
 Wire the Observatory — Nanitics' built-in trace viewer — into your own
 application. This guide takes an adopter from install to a working
 embedded Observatory served alongside a FastAPI app, covers custom view
-and panel registration, and closes with what the v0.1.1 Observatory is
-deliberately not shipping.
+and panel registration, and closes with what the Observatory is
+deliberately not shipping today.
 
 For the event model, trace levels, `TracedExecutor` fundamentals, and the
 `RedactionHook` protocol, see [observability.md](observability.md). This
@@ -23,8 +23,8 @@ panels (LLM calls, tool analytics, memory, planning, HITL, evaluation,
 error recovery, pattern detection). It ships as a FastAPI router
 factory and an embedded React UI served by that router.
 
-It is **not** a production observability platform. At v0.1.1 there is
-no built-in auth, no multi-tenancy, no retention policy, and no default
+It is **not** a production observability platform. There is no
+built-in auth, no multi-tenancy, no retention policy, and no default
 credential scrubber. The "[For production](#for-production)" section
 below names each of those seams and who owns them. Treat the
 Observatory as a dev/demo tool that can be deployed for trusted teams
@@ -228,8 +228,8 @@ default and it requires no frontend toolchain.
 When you want to embed Observatory components into your own React app
 — your internal dashboard, a debugging console, an existing admin UI
 — you consume the `@nanitics/observatory` package from source. It is
-not on npm at v0.1.1 (see
-[What is not shipped at v0.1.1](#what-is-not-shipped-at-v011)).
+not currently on npm (see
+[What is not shipped](#what-is-not-shipped)).
 
 ### From source
 
@@ -383,7 +383,7 @@ URL, not a per-keystroke replay of the search box.
 
 ## For production
 
-The Observatory at v0.1.1 is a dev tool. Running it in production is
+The Observatory is a dev tool today. Running it in production is
 possible; we have not built the machinery a production deployment
 needs. These are the four seams and who owns each. For the adopter-owned
 security posture these seams sit inside — prompt-injection, redaction,
@@ -394,11 +394,11 @@ DockerSandbox limits, API-key handling — see the
 
 Terminate auth at a reverse proxy in front of the app — nginx, Caddy,
 a cloud load balancer. The Observatory endpoints are not
-authentication-aware and the router does not accept an auth hook at
-v0.1.1. Protect the mount path (`/api/observatory`) and the UI path
+authentication-aware and the router does not accept an auth hook.
+Protect the mount path (`/api/observatory`) and the UI path
 (`/api/observatory/`) together. A future
 `ObservatoryAuthProvider` protocol is post-launch and signal-driven
-(see [What is not shipped](#what-is-not-shipped-at-v011)).
+(see [What is not shipped](#what-is-not-shipped)).
 
 ### Multi-tenancy
 
@@ -407,8 +407,8 @@ tenant-scoped wrapper that filters runs and events by a tenant
 identifier drawn from `TracedExecutor(metadata={...})`. Your custom
 store reads the tenant id from request state (via a FastAPI
 dependency) and partitions the query surface accordingly. The SDK does
-not ship a multi-tenant store — the Observatory at v0.1.1 assumes a
-single scope.
+not ship a multi-tenant store — the Observatory assumes a single
+scope.
 
 ### Retention
 
@@ -426,16 +426,16 @@ fields, and the "four categories of adopter content" the hook covers.
 No default scrubber is shipped — domain-appropriate redaction is
 adopter-owned.
 
-The Observatory at v0.1.1 is a dev tool. Running it in production is
+The Observatory is a dev tool today. Running it in production is
 possible; the auth, multi-tenancy, retention, and scrubbing machinery
 a real deployment needs ships when adopter signal shapes it.
 
-## What is not shipped at v0.1.1
+## What is not shipped
 
 Naming each gap so you can plan around it.
 
 - **`ObservatoryAuthProvider` protocol.** A pluggable auth hook on
-  `create_observatory_router`. Not shipped at v0.1.1; a future, signal-
+  `create_observatory_router`. Not currently shipped; a future, signal-
   driven addition.
 - **Production deployment guide.** The adopter-facing "stand up
   Observatory in production with Postgres, Caddy, retention, and

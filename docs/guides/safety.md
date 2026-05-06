@@ -62,7 +62,7 @@ Per-agent iteration and tool-call limits bound a single agent. When agents deleg
 
 **The SDK does not detect delegation cycles.** If Agent A uses Agent B as a tool and Agent B uses Agent A as a tool, per-agent iteration limits are the only backstop. Prefer `PeerNetwork` over circular `AgentTool` graphs.
 
-A total-run budget spanning nested agents is not a v0.1.1 primitive — per-agent limits and `PeerNetwork.max_invocations` are the available tools.
+A total-run budget spanning nested agents is not currently a primitive — per-agent limits and `PeerNetwork.max_invocations` are the available tools.
 
 ## Cancellation Token
 

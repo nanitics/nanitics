@@ -13,7 +13,7 @@ field the hook scrubs is scrubbed on both downstream surfaces.
 The SDK does not ship a default implementation. Regex lists and
 credential shapes drift with provider evolution and adopter content is
 adopter-owned; a shipped default would be a promise the SDK cannot
-honour at v0.1.1. See ``docs/guides/observability.md#trace-surface-hygiene``
+honour. See ``docs/guides/observability.md#trace-surface-hygiene``
 for design framing and a copy-paste example hook.
 
 The SDK-side no-leakage guarantee (provider credentials, auth headers,
