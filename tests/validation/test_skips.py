@@ -20,32 +20,21 @@ def _has_skipif(fn: Any) -> bool:
     return any(m.name == "skipif" and m.args and m.args[0] for m in marks)
 
 
-def test_requires_postgres_skips_when_env_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("POSTGRES_URL", raising=False)
+def test_requires_postgres_applies_postgres_marker() -> None:
+    """`requires_postgres` always applies the `postgres` marker.
+
+    The skip-on-unavailable decision moved to the validation conftest's
+    `pytest_collection_modifyitems` hook, which lazily provisions a
+    pgvector container on demand and skips postgres-marked items when
+    provisioning fails. The decorator itself no longer carries skipif
+    logic — applying the marker is its sole effect.
+    """
 
     @skips.requires_postgres
     def fn() -> None: ...
 
-    assert _has_skipif(fn)
-
-
-def test_requires_postgres_skips_when_driver_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("POSTGRES_URL", "postgres://x")
-    monkeypatch.setattr(skips, "_has_module", lambda name: name != "asyncpg")
-
-    @skips.requires_postgres
-    def fn() -> None: ...
-
-    assert _has_skipif(fn)
-
-
-def test_requires_postgres_passes_when_ready(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("POSTGRES_URL", "postgres://x")
-    monkeypatch.setattr(skips, "_has_module", lambda name: True)
-
-    @skips.requires_postgres
-    def fn() -> None: ...
-
+    marks = getattr(fn, "pytestmark", [])
+    assert any(m.name == "postgres" for m in marks)
     assert not _has_skipif(fn)
 
 
