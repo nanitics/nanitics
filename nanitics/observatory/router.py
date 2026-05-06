@@ -20,7 +20,6 @@ from __future__ import annotations
 # closure-scoped handlers below intentionally omit return annotations. The
 # blanket suppression below lets mypy remain strict for the rest of the file.
 # mypy: disable-error-code="no-untyped-def"
-import os.path
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast, get_args
@@ -321,7 +320,7 @@ def create_observatory_router(
             raise HTTPException(status_code=404, detail="Asset not found")
         assets_dir = _ui_dir / "assets"
         resolved = (assets_dir / path).resolve()
-        if not resolved.is_file() or not str(resolved).startswith(str(assets_dir.resolve()) + os.sep):
+        if not resolved.is_file() or not resolved.is_relative_to(assets_dir.resolve()):
             raise HTTPException(status_code=404, detail="Asset not found")
         suffix = resolved.suffix.lower()
         media_type = _MIME_TYPES.get(suffix, "application/octet-stream")
