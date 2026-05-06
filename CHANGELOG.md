@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-06
+
+### Added
+
+- `TracedExecutor.execute` accepts an optional caller-supplied `run_id` keyword argument; when omitted, a UUID is generated as before. Lets HTTP-boundary callers allocate a `run_id` before scheduling — e.g. `POST` returns `202` with the id and an SSE stream resumes on that id. The persistence layer (`register_run`) remains the authority on uniqueness.
+- `ToolResult.metadata` propagates onto the constructed `tool_result` `Message.metadata`, making application-side metadata available to downstream context-management policies (e.g. `TruncationPolicy.protected`) without a post-processing pass. Wired in `ReActAgent` (success path; persisted across resume) and `LATS` (`ActionNode.metadata`). The LLM-strip guarantee is preserved at every provider serializer. `CodeActAgent` observation messages are intentionally unaffected and pinned by regression test.
+
+### Changed
+
+- Default `ErrorClassifier` classifies any `ToolError` subclass as `CORRECTABLE` via base-class default; previously only `ToolParameterError`, `ToolExecutionError`, and `ToolNotFoundError` were correctable and everything else fell through to `FATAL`. App-defined `ToolError` subclasses now route through the correction loop without per-class registration.
+- `ToolTimeoutError` is now classified as `RETRYABLE` (its docstring promised this; no clause matched it before).
+- `ToolCallLimiter` accepts `max_tool_calls=0` and rejects only negative values. The post-dispatch check already enforced "no tool calls" on the first positive `step()`.
+- `AnthropicLLMClient` raises `ValueError` (not `LLMProviderError`) when constructed without an API key — construction-time misconfiguration is no longer surfaced as a service error. Live-API error paths are unchanged.
+
+### Fixed
+
+- `validation/conftest.py` no longer provisions a `pgvector/pgvector:pg16` testcontainer eagerly when `POSTGRES_URL` is unset. Provisioning is deferred to `pytest_collection_modifyitems` and gated on a new `pytest.mark.postgres` marker (applied by `requires_postgres`). Runs that don't touch Postgres pay no Docker cost; previously, validation meta-tests in CI hit Docker Hub anonymous-pull rate limits unnecessarily.
+- Dependabot litellm ignore now uses a PEP 440 range; the `uv` ecosystem rejects the `1.83.x` shorthand and the broken syntax was flagging every Dependabot PR.
+
+### Security
+
+- Observatory router uses `Path.is_relative_to()` for the assets-directory containment check (the CodeQL-recognized idiom for path-injection taint). Functionally equivalent to the previous string-prefix check.
+- `/readyz` no longer includes the underlying exception text in its JSON response; the fixed `"trace store probe failed"` detail combined with the existing `"store": "error"` field is sufficient operator signal. The exception belongs in container logs, not in a public readiness endpoint. Resolves CodeQL `py/stack-trace-exposure`.
+
+### Documentation
+
+- `docs/guides/tools.md`: dispatch-over-structured-output pre-pattern; multi-tool packages; `ToolResult.metadata` round-trip; structured tool errors as a named pattern.
+- `docs/guides/memory.md`: long-term store-event scope; namespace as tier separator.
+- `docs/guides/observability.md`: Lifespan-Scoped Singleton-Emitter Listener.
+- `docs/guides/security.md`: Trust-Boundary Value Objects.
+- `docs/guides/agent-types.md`: Structured Output (`Literal` typology and refusal-as-output); `ReActAgent(tools=[])` → `ReasoningAgent` pointer.
+- `docs/guides/error-handling.md`: `ToolError` hierarchy diagram now lists `ToolTimeoutError`.
+
 ## [0.1.1] - 2026-05-01
 
 ### Added
