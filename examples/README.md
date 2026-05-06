@@ -38,6 +38,7 @@ and code execution.
 | Example | Description | Guide |
 |---|---|---|
 | [tools/tool_basics.py](tools/tool_basics.py) | `@tool` decorator, `ToolResult`, Pydantic validation, `Tool` protocol, `ToolRegistry`, `ToolContext`, error handling | [Tools](../docs/guides/tools.md) |
+| [tools/multi_tool_package.py](tools/multi_tool_package.py) | Factory returning `((tool_a, tool_b), state_dict)`; sibling tools sharing per-run state through `ToolContext.state`; agent-side `tool_state` plumbing | [Tools](../docs/guides/tools.md#multi-tool-packages-with-shared-state) |
 | [tools/system_prompt_builder.py](tools/system_prompt_builder.py) | `SystemPromptBuilder`, `SystemPromptContributor`, section assembly, agent prompt composition | [Core Concepts](../docs/guides/core-concepts.md) |
 | [tools/event_emitter.py](tools/event_emitter.py) | `InMemoryEmitter`, event type hierarchy, spans, listeners, child emitters, memory capping, event levels | [Observability](../docs/guides/observability.md) |
 | [tools/web_search_tool.py](tools/web_search_tool.py) | `create_web_search_tool` (Tavily/Brave), `respx`-intercepted HTTPS, `ReActAgent` integration, `ToolInvokeEvent`/`ToolResultEvent` | [Tools](../docs/guides/tools.md) |
