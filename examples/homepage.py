@@ -16,6 +16,8 @@ Related guide: docs/guides/multi-agent-foundations.md
 """
 
 import asyncio
+import random
+from typing import Any
 
 from examples.helpers import make_emitter, make_response
 from nanitics import (
@@ -24,6 +26,7 @@ from nanitics import (
     EvaluationCheck,
     InMemoryEmitter,
     InMemoryEpisodeStore,
+    LLMResponse,
     MockEmbeddingClient,
     MockLLMClient,
     ProgrammaticEvaluator,
@@ -39,54 +42,91 @@ from nanitics.infrastructure import (
     ReflectionGeneratedEvent,
 )
 
+# Delay ranges (seconds) injected into the mock LLM and tool calls so the captured
+# trace shows realistic per-span durations rather than every span clocking 0ms.
+# Pure mocks would otherwise make the duration column on the homepage screenshot
+# read as constant zeros.
+_LLM_DELAY_RANGE = (0.4, 0.7)
+_TOOL_DELAY_RANGE = (0.06, 0.15)
+
+
+async def _jittered_sleep(low: float, high: float) -> None:
+    await asyncio.sleep(random.uniform(low, high))
+
+
 # Static mock corpus served by the search tool. Stable IDs R-1, R-2, R-3 let the
 # inner researcher cite hits as [R-1], [R-2], etc. — what the bracket-counting
 # evaluator predicate inspects on the visible homepage snippet.
 _SEARCH_CORPUS: dict[str, list[tuple[str, str]]] = {
-    "retry policy quarter": [
-        ("R-1", "Retry policy: exponential backoff, max 5 attempts (Q3 baseline)."),
+    "current retry policy": [
+        ("R-1", "Q3 baseline: exponential backoff with up to 5 attempts."),
     ],
-    "retry policy changes Q4": [
-        ("R-1", "Retry policy: exponential backoff, max 5 attempts (Q3 baseline)."),
-        ("R-2", "Q4 change: jitter added to backoff; max attempts lowered to 3."),
-        ("R-3", "Q4 change: idempotency-key requirement on retried POSTs."),
+    "retry policy changes in Q4": [
+        ("R-1", "Q3 baseline: exponential backoff with up to 5 attempts."),
+        ("R-2", "Q4 change: backoff is now jittered; max attempts lowered from 5 to 3."),
+        ("R-3", "Q4 change: retried POSTs require an idempotency-key header."),
     ],
 }
 
 
-@tool("search", "Search the codebase for relevant snippets")
+@tool("search", "Search engineering notes for retry-policy records.")
 async def search(query: str) -> str:
+    await _jittered_sleep(*_TOOL_DELAY_RANGE)
     hits = _SEARCH_CORPUS.get(query, [])
     if not hits:
         return "No results."
     return "\n".join(f"[{rid}] {snippet}" for rid, snippet in hits)
 
 
+class _DelayedMockLLMClient:
+    """Wraps a ``MockLLMClient`` and inserts a jittered sleep before each
+    response, so per-span durations in the captured trace look realistic
+    rather than reading as a column of zeros.
+    """
+
+    def __init__(self, inner: MockLLMClient) -> None:
+        self._inner = inner
+
+    @property
+    def model(self) -> str | None:
+        return self._inner.model
+
+    async def generate(self, **kwargs: Any) -> LLMResponse:
+        await _jittered_sleep(*_LLM_DELAY_RANGE)
+        return await self._inner.generate(**kwargs)
+
+
 # Scripted mocks: 4 researcher responses (search → cite [R-1] → refine → cite [R-1] [R-2]),
 # 1 reflection response between attempts, 2 coordinator responses (delegate → final answer).
 _RESEARCHER_RESPONSES = [
     make_response(
-        "Looking up the retry policy.",
-        tool_calls=[ToolCall(id="r-tc-1", name="search", arguments={"query": "retry policy quarter"})],
+        "I'll start by looking up the current retry policy.",
+        tool_calls=[ToolCall(id="r-tc-1", name="search", arguments={"query": "current retry policy"})],
         stop_reason="tool_use",
     ),
-    make_response("Retry uses exponential backoff [R-1]."),
     make_response(
-        "Refining the search.",
-        tool_calls=[ToolCall(id="r-tc-2", name="search", arguments={"query": "retry policy changes Q4"})],
+        "Based on the search, the current policy is the Q3 baseline: exponential backoff with up to 5 attempts [R-1]."
+    ),
+    make_response(
+        "Refining the search to surface the Q4 change records specifically.",
+        tool_calls=[ToolCall(id="r-tc-2", name="search", arguments={"query": "retry policy changes in Q4"})],
         stop_reason="tool_use",
     ),
-    make_response("Q4 added jitter and lowered max attempts to 3 [R-1] [R-2]."),
+    make_response(
+        "Comparing the Q3 baseline [R-1] with the Q4 records: backoff is now jittered and max attempts "
+        "dropped from 5 to 3 [R-2]."
+    ),
 ]
 _REFLECTION_RESPONSES = [
     make_response(
-        "Attempt 1 cited only [R-1]; the question asks what changed, "
-        "so the answer must cover at least two sources from the refined search."
+        "The first attempt described the Q3 baseline but never named the Q4 changes, even though the "
+        "question asks what *changed*. The next attempt should refine the search to find Q4-specific "
+        "records and cite both the baseline and the change."
     ),
 ]
 _COORDINATOR_RESPONSES = [
     make_response(
-        "Delegating to the grounded researcher.",
+        "I'll delegate this to the grounded researcher to investigate.",
         tool_calls=[
             ToolCall(
                 id="c-tc-1",
@@ -96,16 +136,19 @@ _COORDINATOR_RESPONSES = [
         ],
         stop_reason="tool_use",
     ),
-    make_response("Last quarter we added backoff jitter and lowered max retry attempts to 3 [R-1] [R-2]."),
+    make_response(
+        "Two changes landed last quarter: backoff is now jittered, and max retry attempts dropped "
+        "from 5 to 3 [R-1] [R-2]."
+    ),
 ]
 
 
 async def main(emitter: InMemoryEmitter | None = None) -> tuple[AgentResult, InMemoryEmitter]:
     if emitter is None:
         emitter = make_emitter("homepage")
-    researcher_llm = MockLLMClient(responses=_RESEARCHER_RESPONSES)
-    reflection_llm = MockLLMClient(responses=_REFLECTION_RESPONSES)
-    coordinator_llm = MockLLMClient(responses=_COORDINATOR_RESPONSES)
+    researcher_llm = _DelayedMockLLMClient(MockLLMClient(responses=_RESEARCHER_RESPONSES))
+    reflection_llm = _DelayedMockLLMClient(MockLLMClient(responses=_REFLECTION_RESPONSES))
+    coordinator_llm = _DelayedMockLLMClient(MockLLMClient(responses=_COORDINATOR_RESPONSES))
     # Production evaluators would parse structured output rather than count brackets;
     # the bracket-count predicate keeps the homepage snippet legible at one glance.
 
