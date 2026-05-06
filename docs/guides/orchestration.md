@@ -12,6 +12,8 @@ The SDK provides 8 workflow patterns, all built on the same `Step`/`StepResult` 
 
 **Don't orchestrate when** a single agent can handle the task. Adding workflow structure to a problem one agent can solve just adds complexity. If you're unsure, start with a single agent and extract steps when the task naturally separates into phases.
 
+**The pre-pattern check.** Many "workflows" are equally well expressed as `await`-chains: a `ReasoningAgent` with an `output_schema` produces typed output, then plain Python `await`s a few async functions that consume the typed output. Reach for a workflow primitive only when its specific value is load-bearing — `Parallel` for true concurrency on independent steps, checkpoint-based suspension and resumption between stages, `DAG` for non-trivial dependency topologies, intermediate-result inspection where the workflow's metadata surface is what your code actually needs. If a 5-line `await` chain expresses the same shape, it is also easier to read and easier to test. See [`examples/agents/dispatch_over_structured_output.py`](../../examples/agents/dispatch_over_structured_output.py) for the canonical shape.
+
 **Common indicators you need orchestration:**
 
 - Different steps require different tools, models, or system prompts

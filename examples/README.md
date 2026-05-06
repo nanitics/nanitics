@@ -68,6 +68,7 @@ Multimodal input is also here since it's an agent-capability concern.
 |---|---|---|
 | [agents/react_agent.py](agents/react_agent.py) | `ReActAgent` with tools, multi-turn conversation, `AgentResult` inspection, event tracing | [Getting Started](../docs/guides/getting-started.md) |
 | [agents/reasoning_agent.py](agents/reasoning_agent.py) | `ReasoningAgent`, single-call reasoning, structured output with Pydantic, evaluation-driven revision | [Agent Types](../docs/guides/agent-types.md) |
+| [agents/dispatch_over_structured_output.py](agents/dispatch_over_structured_output.py) | `ReasoningAgent` with `output_schema`, pure-Python dispatch over typed output, `await`-chain orchestration — the pre-pattern check before reaching for multi-agent or workflow primitives | [Multi-Agent Foundations](../docs/guides/multi-agent-foundations.md#pattern-progression) |
 | [agents/reflexion_agent.py](agents/reflexion_agent.py) | `ReflexionAgent`, evaluate-reflect-retry loop, `ProgrammaticEvaluator`, episodic memory | [Agent Types](../docs/guides/agent-types.md) |
 | [agents/rewoo_agent.py](agents/rewoo_agent.py) | `ReWOOAgent` — plan-first execution with variable substitution, parallel steps, plan persistence | [Agent Types](../docs/guides/agent-types.md) |
 | [agents/codeact_agent.py](agents/codeact_agent.py) | `CodeActAgent`, `MockSandbox`, code execution loop, self-correction, tool bridge | [Agent Types](../docs/guides/agent-types.md) |
