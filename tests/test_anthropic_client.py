@@ -590,7 +590,7 @@ class TestAnthropicLLMClient:
         assert client._client.max_retries == 0
 
     def test_preflight_raises_when_no_key_and_no_env(self) -> None:
-        with patch.dict("os.environ", {}, clear=True), pytest.raises(LLMProviderError, match="ANTHROPIC_API_KEY"):
+        with patch.dict("os.environ", {}, clear=True), pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
             AnthropicLLMClient(model="claude-test")
 
     def test_preflight_passes_when_api_key_provided(self) -> None:

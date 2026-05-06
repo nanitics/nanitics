@@ -138,12 +138,14 @@ class TestToolCallLimiterConstruction:
         limiter = ToolCallLimiter(max_tool_calls=1)
         assert limiter.max_tool_calls == 1
 
-    def test_zero_raises(self):
-        with pytest.raises(ValueError, match="at least 1"):
-            ToolCallLimiter(max_tool_calls=0)
+    def test_zero_limit_allows_construction(self):
+        limiter = ToolCallLimiter(max_tool_calls=0)
+        assert limiter.max_tool_calls == 0
+        assert limiter.current_tool_calls == 0
+        assert limiter.remaining == 0
 
     def test_negative_raises(self):
-        with pytest.raises(ValueError, match="at least 1"):
+        with pytest.raises(ValueError, match="non-negative"):
             ToolCallLimiter(max_tool_calls=-3)
 
 
@@ -203,6 +205,18 @@ class TestToolCallLimiterStep:
         limiter.step(1)
         with pytest.raises(AgentToolCallLimitError):
             limiter.step(1)
+
+    def test_zero_limit_rejects_first_tool_call(self):
+        limiter = ToolCallLimiter(max_tool_calls=0)
+        with pytest.raises(AgentToolCallLimitError) as exc_info:
+            limiter.step(1)
+        assert exc_info.value.tool_call_count == 1
+        assert exc_info.value.tool_call_limit == 0
+
+    def test_zero_limit_step_zero_is_noop(self):
+        limiter = ToolCallLimiter(max_tool_calls=0)
+        limiter.step(0)
+        assert limiter.current_tool_calls == 0
 
 
 class TestToolCallLimiterReset:
