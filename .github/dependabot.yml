@@ -43,7 +43,7 @@ updates:
     # once a 1.84+ release loosens the pin.
     ignore:
       - dependency-name: "litellm"
-        versions: ["1.83.x"]
+        versions: [">=1.83.1, <1.84"]
 
   # Observatory frontend — package.json + package-lock.json
   - package-ecosystem: "npm"
