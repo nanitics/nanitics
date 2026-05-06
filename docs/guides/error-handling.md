@@ -90,7 +90,8 @@ NaniticsError
 ├── ToolError
 │   ├── ToolNotFoundError        — correctable
 │   ├── ToolParameterError       — correctable
-│   └── ToolExecutionError       — correctable
+│   ├── ToolExecutionError       — correctable
+│   └── ToolTimeoutError         — retryable
 └── AgentError
     ├── AgentIterationLimitError — fatal
     ├── AgentBudgetExceededError — fatal

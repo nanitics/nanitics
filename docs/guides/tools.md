@@ -268,6 +268,10 @@ The resulting JSON Schema includes `"enum": ["name", "address", "email"]` on the
 - Keep output concise — large tool results consume context window tokens
 - For errors, return a clear error message as a string rather than raising (unless truly unrecoverable)
 
+### Structured Tool Errors
+
+When a tool needs to raise — for example, to surface a typed, structured failure that the agent should reason about — subclass `ToolError` (`from nanitics import ToolError`) rather than raising bare `Exception` or `RuntimeError`. The default classifier in `nanitics.capabilities.errors.classification.classify_error` treats every `ToolError` subclass as `CORRECTABLE` by default, so the correction loop receives the error and the agent gets a chance to self-correct on the next iteration. App-defined typed errors carrying domain fields (entity ids, validation reasons, retry hints) inherit this behavior without per-class registration. The one documented exception is `ToolTimeoutError`, which is classified as `RETRYABLE`; refer to each error class's docstring for the authoritative per-class category. See [Error Handling](error-handling.md) for the full hierarchy and recovery model.
+
 ## Pitfalls
 
 **Tools with side effects:** The LLM may call a tool multiple times or in unexpected order. Design tools to be safe for repeated calls, or use approval wrapping. See [Human-in-the-Loop](human-in-the-loop.md).

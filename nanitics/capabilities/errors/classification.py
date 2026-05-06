@@ -11,9 +11,8 @@ from nanitics.infrastructure.errors import (
     LLMProviderError,
     LLMRateLimitError,
     LLMSchemaViolationError,
-    ToolExecutionError,
-    ToolNotFoundError,
-    ToolParameterError,
+    ToolError,
+    ToolTimeoutError,
 )
 
 
@@ -47,8 +46,14 @@ def classify_error(error: Exception) -> ErrorCategory:
 
     Maps the SDK error hierarchy to ErrorCategory values:
     - RETRYABLE: rate limits, server errors (5xx), tool timeouts
-    - CORRECTABLE: bad tool parameters, wrong tool name, schema violations
+    - CORRECTABLE: bad tool parameters, wrong tool name, schema violations,
+      and any other ``ToolError`` subclass
     - FATAL: context length exceeded, budget exhausted, client errors (4xx)
+
+    ``ToolError`` itself defaults to CORRECTABLE so app-defined typed
+    subclasses route through the correction loop without per-class
+    registration. ``ToolTimeoutError`` is the documented exception and
+    is classified as RETRYABLE.
 
     Unknown error types default to FATAL.
 
@@ -84,7 +89,10 @@ def classify_error(error: Exception) -> ErrorCategory:
             return ErrorCategory.RETRYABLE
         return ErrorCategory.FATAL
 
-    if isinstance(error, (ToolParameterError, ToolExecutionError, ToolNotFoundError)):
+    if isinstance(error, ToolTimeoutError):
+        return ErrorCategory.RETRYABLE
+
+    if isinstance(error, ToolError):
         return ErrorCategory.CORRECTABLE
 
     if isinstance(error, (AgentIterationLimitError, AgentBudgetExceededError, AgentEscalationError)):
