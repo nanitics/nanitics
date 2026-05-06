@@ -290,7 +290,7 @@ def test_readyz_reports_not_ready_when_probe_fails(
     body = response.json()
     assert body["ready"] is False
     assert body["store"] == "error"
-    assert "connection refused" in body["detail"]
+    assert body["detail"] == "trace store probe failed"
 
 
 # ---------------------------------------------------------------------------
@@ -541,7 +541,7 @@ def test_readyz_uses_default_probe_when_none_injected(
     body = response.json()
     assert body["ready"] is False
     assert body["store"] == "error"
-    assert "shell not initialized" in body["detail"]
+    assert body["detail"] == "trace store probe failed"
 
 
 # ---------------------------------------------------------------------------
