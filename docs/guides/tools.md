@@ -268,9 +268,158 @@ The resulting JSON Schema includes `"enum": ["name", "address", "email"]` on the
 - Keep output concise — large tool results consume context window tokens
 - For errors, return a clear error message as a string rather than raising (unless truly unrecoverable)
 
+`ToolResult.metadata` is a dict for application-side data — never sent to the LLM. The agent that consumes the registry's dispatch result copies it onto the constructed `tool_result` `Message.metadata`, so application code that inspects the conversation (for example, a `TruncationPolicy` reading `metadata['protected']` to keep a tool's output sticky against context-window pressure) sees what the tool surfaced. LLM providers strip `Message.metadata` at serialisation — it is registry-side data made available to application logic that walks the conversation, not a side channel into the model.
+
 ### Structured Tool Errors
 
 When a tool needs to raise — for example, to surface a typed, structured failure that the agent should reason about — subclass `ToolError` (`from nanitics import ToolError`) rather than raising bare `Exception` or `RuntimeError`. The default classifier in `nanitics.capabilities.errors.classification.classify_error` treats every `ToolError` subclass as `CORRECTABLE` by default, so the correction loop receives the error and the agent gets a chance to self-correct on the next iteration. App-defined typed errors carrying domain fields (entity ids, validation reasons, retry hints) inherit this behavior without per-class registration. The one documented exception is `ToolTimeoutError`, which is classified as `RETRYABLE`; refer to each error class's docstring for the authoritative per-class category. See [Error Handling](error-handling.md) for the full hierarchy and recovery model.
+
+### Dispatch Boundary Behaviour
+
+`ToolRegistry.dispatch` treats exceptions raised inside a tool by their type. `ToolError` and its subclasses pass through unwrapped — the correction loop classifies them and chooses what to do. `TimeoutError` is rewritten as `ToolTimeoutError`. Every **other** exception is wrapped as `ToolExecutionError` with the original attached as `__cause__` (via `raise ... from e`), so the underlying exception remains reachable for tests and observability tooling.
+
+Two consumer-side implications follow:
+
+1. **Test code that asserts on the underlying exception type walks `__cause__`.** Catch `ToolExecutionError` and check `exc.__cause__` rather than expecting the original exception to propagate.
+2. **Custom `Tool` wrappers that need to surface a typed underlying failure should re-raise as a `ToolError` subclass directly.** The `ToolExecutionError` wrapping fires only for non-`ToolError` exceptions; a wrapper that itself raises a `ToolError` short-circuits the wrapping and lets the typed error reach the correction loop unchanged.
+
+```python
+import pytest
+
+from nanitics import ToolCall, ToolExecutionError, ToolRegistry, tool
+
+
+@tool("buggy", "A tool that raises an unexpected exception.")
+async def buggy() -> str:
+    raise ValueError("unexpected internal error")
+
+
+async def test_dispatch_wraps_non_tool_errors() -> None:
+    registry = ToolRegistry()
+    registry.register(buggy)
+    with pytest.raises(ToolExecutionError) as exc_info:
+        await registry.dispatch(ToolCall(id="c-1", name="buggy", arguments={}))
+    assert isinstance(exc_info.value.__cause__, ValueError)
+```
+
+### Tools That Call LLMs Internally
+
+A tool can construct and call its own `LLMClient` — for example, a "summarise this page" tool that uses a small focused model to compress long inputs before returning. This is the *opposite* shape of the [dispatch-over-structured-output pre-pattern](multi-agent-foundations.md#pattern-progression): the pre-pattern places the LLM in the *agent* and uses deterministic tools downstream; tool-internal LLM places the LLM inside a *tool* in an otherwise deterministic agent loop.
+
+Three trade-offs matter:
+
+1. **Hidden-cost composition.** Tool-internal LLM calls show up in the trace but not in the agent's tool-call counter. Consumers reasoning about cost must aggregate the agent's and the tool's LLM calls separately.
+2. **Observability through `ToolContext.emitter`.** Construct or invoke the tool-internal `LLMClient` with `emitter=context.emitter` so its events nest under the correct trace and span.
+3. **Failure-mode mapping.** When the tool-internal LLM fails (provider error, parse error, etc.), decide whether the tool should surface it as a `ToolError` subclass — which the default classifier treats as `CORRECTABLE` so the agent can retry with adjustment — or let the underlying exception propagate, which the dispatch boundary wraps as `ToolExecutionError` (and the classifier treats as `FATAL`).
+
+```python
+from nanitics import LLMClient, ToolContext, ToolError, ToolResult, ToolSchema
+from nanitics.infrastructure.llm.protocol import Message
+
+
+class SummariseTool:
+    """Compresses long text via an internally-held small-model LLM."""
+
+    def __init__(self, llm: LLMClient) -> None:
+        self._llm = llm
+
+    @property
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="summarise",
+            description="Summarise long text into two sentences.",
+            parameters={
+                "type": "object",
+                "properties": {"text": {"type": "string"}},
+                "required": ["text"],
+            },
+        )
+
+    async def execute(self, text: str, context: ToolContext) -> ToolResult:
+        response = await self._llm.generate(
+            system_prompt="Summarise the user's text in two sentences.",
+            messages=[Message(role="user", content=text)],
+        )
+        if response.content is None:
+            raise ToolError("summariser returned no content")
+        return ToolResult(content=response.content)
+```
+
+### Over-Fetching and Filtering
+
+When an upstream API offers coarse filters but the tool's consumer needs a finer cut, fetch `max_results * N` from upstream, apply the stricter filter client-side, and return the head. Two shapes are common: score-threshold filtering (drop everything below a quality score) and predicate filtering (keep only items matching an application-defined predicate).
+
+The trade-off is increased per-call upstream cost and latency in exchange for better recall on the finer filter. Pick `N` so the post-filter slice reliably contains at least `max_results` items; document the choice in the tool's description so the LLM does not request implausibly large `max_results` values.
+
+<!-- verify: skip — illustrative; `upstream_search` is application-supplied and stubbed with `...` -->
+```python
+from typing import Any
+
+from nanitics import ToolResult, tool
+
+
+async def upstream_search(query: str, limit: int) -> list[dict[str, Any]]:
+    """Stand-in for an external search API; the application supplies this."""
+    ...
+
+
+@tool("search_high_quality", "Search and return only results above a quality threshold.")
+async def search_high_quality(query: str, max_results: int = 5) -> ToolResult:
+    # Over-fetch: pull max_results * 4 candidates from upstream.
+    candidates = await upstream_search(query, limit=max_results * 4)
+    # Client-filter on the stricter cut.
+    above_threshold = [c for c in candidates if c.get("score", 0.0) >= 0.7]
+    # Return the head.
+    head = above_threshold[:max_results]
+    summary = "\n".join(f"- {c['title']}" for c in head)
+    return ToolResult(content=f"Found {len(head)} high-quality results:\n{summary}")
+```
+
+### Multi-Tool Packages with Shared State
+
+When sibling tools need to share runtime per-call state — something a closure cannot bind because it changes per run — package them as a factory returning `((tool_a, tool_b), state_dict)`. The consumer registers the tools (`registry.register_all(tools)` or `tools=list(tools)` on the agent constructor) and threads `state_dict` into the agent's `tool_state`; both tools then see the same state through `ToolContext.state`. Each call to the factory yields a fresh dict, so state is per-run rather than module-global.
+
+When the shared dependency is read-only and known at construction time (e.g., a database connection, an API client), use a plain closure instead — no factory, no shared dict. The factory shape is for *runtime, mutable, per-run* state.
+
+```python
+from typing import Any
+
+from nanitics import FunctionTool, ToolContext, tool
+
+
+def create_counter_tools() -> tuple[tuple[FunctionTool, FunctionTool], dict[str, Any]]:
+    state: dict[str, Any] = {"count": 0}
+
+    @tool("increment_counter", "Increment the run-scoped counter by an amount.")
+    async def increment_counter(amount: int, context: ToolContext) -> str:
+        context.state["count"] += amount
+        return f"count: {context.state['count']}"
+
+    @tool("read_counter", "Read the current run-scoped counter value.")
+    async def read_counter(context: ToolContext) -> str:
+        return f"count: {context.state['count']}"
+
+    return ((increment_counter, read_counter), state)
+```
+
+The consumer wires the factory return into the agent so both tools see the same `state` dict via `ToolContext.state`:
+
+<!-- verify: skip — illustrative wiring; `llm`, `emitter`, and `system_prompt` are caller-supplied -->
+```python
+from nanitics import ReActAgent
+
+tools, state = create_counter_tools()
+agent = ReActAgent(
+    name="counter-agent",
+    llm_client=llm,
+    emitter=emitter,
+    system_prompt="You operate a counter.",
+    tools=list(tools),
+    tool_state=state,
+)
+```
+
+> **See also:** [`examples/tools/multi_tool_package.py`](../../examples/tools/multi_tool_package.py).
 
 ## Pitfalls
 
