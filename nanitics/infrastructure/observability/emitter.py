@@ -82,11 +82,16 @@ class InMemoryEmitter:
         *,
         max_events: int | None = None,
         parent_span_id: str | None = None,
+        initial_span_id: str | None = None,
     ) -> None:
         self._trace_id = trace_id
         self._max_events = max_events
         self._root_parent_span_id = parent_span_id
-        root_span_id = str(uuid4())
+        # ``initial_span_id`` lets ``create_child`` seed the stack with the
+        # parent emitter's current span_id, so the first span opened in the
+        # child parents under that span rather than under a synthetic UUID
+        # that no event ever names.
+        root_span_id = initial_span_id if initial_span_id is not None else str(uuid4())
         self._span_stack: ContextVar[list[str]] = ContextVar("span_stack")
         self._span_stack.set([root_span_id])
         self.events: list[TraceEvent] = []
@@ -140,11 +145,19 @@ class InMemoryEmitter:
         are copied so real-time consumers (e.g. ``InstrumentedLLMClient``
         label partitioning) continue to receive inner events through the
         normal listener mechanism.
+
+        The child's stack is seeded with this emitter's current ``span_id``,
+        so the first span the child opens parents under that span — not under
+        a fresh synthetic UUID. Without this, every span tree built through
+        ``Agent.bind`` (i.e., every ``AgentTool`` delegation, ``ReflexionAgent``
+        inner attempt, and workflow child) would orphan its top-level span in
+        the persisted store.
         """
         child = InMemoryEmitter(
             trace_id=self._trace_id,
             max_events=self._max_events,
-            parent_span_id=self.span_id,
+            parent_span_id=self.parent_span_id,
+            initial_span_id=self.span_id,
         )
         for listener in self._listeners:
             child.add_listener(listener)

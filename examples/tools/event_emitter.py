@@ -328,19 +328,27 @@ async def main() -> None:
     with parent.span("orchestration"):
         parent_current_span = parent.span_id
 
-        # Create a child emitter linked to the parent's current span
+        # Create a child emitter linked to the parent's current span. The
+        # child operates *inside* the parent's current span: any span the
+        # child opens parents under "orchestration", so the persisted span
+        # tree nests correctly across the parent/child boundary.
         child = parent.create_child()
 
         # Child shares the same trace_id
         assert child.trace_id == parent.trace_id, "Child shares parent's trace_id"
-        # Child's parent_span_id links to parent's current span
-        assert child.parent_span_id == parent_current_span, "Child links to parent's span"
-        # Child has its own span_id
-        assert child.span_id != parent.span_id, "Child has independent span_id"
+        # Child operates inside the parent's current span — same span_id until
+        # the child opens its own span.
+        assert child.span_id == parent_current_span, "Child operates in parent's span"
         print(f"  Child trace_id matches parent: {child.trace_id}")
-        print(f"  Child parent_span_id: {child.parent_span_id}")
+        print(f"  Child operates in parent's span: {child.span_id}")
 
-    # Emit events via child
+        # When the child opens its own span, it parents under "orchestration".
+        with child.span("subtask"):
+            assert child.parent_span_id == parent_current_span, "Child's first span parents under parent's current span"
+            print(f"  Child's 'subtask' span parents under: {child.parent_span_id}")
+
+    # Emit events via child (no enclosing child.span, so emits attribute to the
+    # parent's current span at create time — same span_id the child carried).
     child.emit(
         AgentStartEvent(
             trace_id=child.trace_id,
@@ -352,15 +360,17 @@ async def main() -> None:
         )
     )
 
-    # Child has its own events list.
-    assert len(child.events) == 1, "Child has its own events"
+    # Child has its own events list (the subtask span's start/end plus the
+    # AgentStartEvent emitted just above).
+    child_agent_events = [e for e in child.events if isinstance(e, AgentStartEvent)]
+    assert len(child_agent_events) == 1, "Child has its own events"
     # Child-emitter events are forwarded into the parent's ``events`` list so
     # composite-agent inner events surface in the outer trace. The parent is
     # the authoritative source for trace consumers (e.g., ``save_trace``).
     parent_agent_events = [e for e in parent.events if isinstance(e, AgentStartEvent)]
     assert len(parent_agent_events) == 1, "Parent receives child's events via forwarding"
-    assert parent_agent_events[0] is child.events[0], "Parent and child reference the same event"
-    print(f"  Child events: {len(child.events)}, Parent agent events: {len(parent_agent_events)} ✓")
+    assert parent_agent_events[0] is child_agent_events[0], "Parent and child reference the same event"
+    print(f"  Child agent events: {len(child_agent_events)}, Parent agent events: {len(parent_agent_events)} ✓")
 
     # Listeners registered on parent are copied to child
     assert len(parent_listener_events) > 0, "Parent listener received child's event"
