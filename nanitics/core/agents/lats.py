@@ -57,6 +57,12 @@ class ActionNode(BaseModel):
             node is itself failed (hard-prune cascade). Selection skips
             these nodes; ``_select_best_node`` excludes them from the
             final answer.
+        metadata: Structured metadata copied from ``ToolResult.metadata``
+            on the dispatch that produced this node. Carried onto the
+            ``tool_result`` ``Message.metadata`` when the node's
+            trajectory is rebuilt by ``_build_trajectory_messages``.
+            ``None`` when no tool dispatched (root, thought-only nodes,
+            terminal nodes) or when the tool returned no metadata.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -75,6 +81,7 @@ class ActionNode(BaseModel):
     visit_count: int = 0
     is_failed: bool = False
     error_message: str | None = None
+    metadata: dict[str, Any] | None = None
 
 
 _REFLECTION_SYSTEM_PROMPT = (
@@ -255,7 +262,14 @@ class LATSAgent(Agent):
             if node.action:
                 tc = ToolCall(id=node.id, name=node.action, arguments=node.action_input or {})
                 messages.append(Message(role="assistant", content=node.thought, tool_calls=[tc]))
-                messages.append(Message(role="tool_result", content=node.observation or "", tool_call_id=node.id))
+                messages.append(
+                    Message(
+                        role="tool_result",
+                        content=node.observation or "",
+                        tool_call_id=node.id,
+                        metadata=node.metadata,
+                    )
+                )
             elif node.is_terminal:
                 messages.append(Message(role="assistant", content=node.terminal_output or node.thought))
             else:
@@ -357,6 +371,7 @@ class LATSAgent(Agent):
                         action=tc.name,
                         action_input=tc.arguments,
                         observation=result.content,
+                        metadata=result.metadata or None,
                     )
                 except Exception as exc:
                     child = ActionNode(
