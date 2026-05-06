@@ -112,6 +112,10 @@ Long-term memory is the right choice when agents need to remember explicit, name
 
 Namespaces isolate memory between different agents or contexts. Pass `namespace` to `create_long_term_memory_tools()` so each agent operates in its own key space without conflicts.
 
+A second supported use of `namespace` is partitioning a single long-term store into multiple data shapes within the same agent — for example, `namespace="tier-1"` for short-lived working facts vs. `namespace="tier-2"` for long-lived stable knowledge. Application code (or different `create_long_term_memory_tools()` factory calls bound to different namespaces) reads each tier independently. The primitive is identical to the per-agent / per-context use; only the labelling convention differs.
+
+Long-term events (`LongTermStoreEvent`, `LongTermRetrieveEvent`, `LongTermListEvent`, `LongTermDeleteEvent`) are emitted by the agent-facing tool wrapper `create_long_term_memory_tools()`, not by the `LongTermStore` protocol or its implementations. Application code that composes typed logic directly on top of `LongTermStore` (for example, persisting state from outside the agent loop) is responsible for emitting its own observability — wrap the calls in your own emission, or build the calls into a tool that goes through the agent's registry.
+
 `InMemoryLongTermStore` is useful for testing but loses data when the process ends. For production, implement the `LongTermStore` protocol with database-backed storage. The protocol surface is minimal — four async methods: `store`, `retrieve`, `delete`, and `list_keys`.
 
 > **See also:** [`examples/memory/long_term_memory.py`](../../examples/memory/long_term_memory.py) — store/retrieve operations, namespace isolation, agent tool integration, and multi-run persistence.
