@@ -16,7 +16,9 @@ All primitives emit trace events through `EventEmitter`, making multi-agent inte
 
 ### Pattern Progression
 
-Most multi-agent systems evolve through increasing complexity. Start with the simplest pattern that meets your needs:
+Most multi-agent systems evolve through increasing complexity. Before walking that progression, check the pre-pattern: a single LLM-driven agent emitting typed structured output (e.g., a `ReasoningAgent` with an `output_schema`), followed by deterministic Python that consumes the typed output and dispatches to one of several outcomes. If the second stage is a pure function of its typed input — no further LLM calls, no shared state, no concurrency primitive needed — then no multi-agent pattern is warranted. The agent provides judgment; the dispatcher provides routing. See [`examples/agents/dispatch_over_structured_output.py`](../../examples/agents/dispatch_over_structured_output.py) for the canonical shape.
+
+Otherwise, start with the simplest multi-agent pattern that meets your needs:
 
 1. **Single agent** — one agent with all the tools. Start here.
 2. **Agent-as-Tool** — add delegation when a subtask needs different tools or system prompt. The coordinator retains control.
