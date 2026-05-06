@@ -21,13 +21,18 @@ def _has_module(name: str) -> bool:
 
 
 def requires_postgres(fn: F) -> F:
-    """Skip the decorated test if ``POSTGRES_URL`` is missing or ``asyncpg`` absent.
+    """Mark the decorated test as requiring Postgres + ``asyncpg``.
 
-    Skip message: ``Skipping: POSTGRES_URL not set or asyncpg not installed``.
+    Applies the ``postgres`` marker. The validation conftest scans for
+    this marker during collection and (a) lazily provisions a pgvector
+    container on demand when ``POSTGRES_URL`` is unset and Docker is
+    reachable, and (b) skips the test with reason
+    ``Skipping: POSTGRES_URL not set or asyncpg not installed`` when
+    provisioning fails or ``asyncpg`` is unavailable. Provisioning is
+    not attempted when no collected item carries the marker, so runs
+    that don't need Postgres pay no Docker cost.
     """
-    reason = "Skipping: POSTGRES_URL not set or asyncpg not installed"
-    missing = ("POSTGRES_URL" not in os.environ) or not _has_module("asyncpg")
-    return cast("F", pytest.mark.skipif(missing, reason=reason)(fn))
+    return cast("F", pytest.mark.postgres(fn))
 
 
 def _docker_unreachable() -> bool:

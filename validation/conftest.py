@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
@@ -28,49 +29,67 @@ except ImportError:  # pragma: no cover — dotenv is a dev dep, not a hard requ
     pass
 
 
-def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Hard-skip every collected item when ``ANTHROPIC_API_KEY`` is unset."""
-    if "ANTHROPIC_API_KEY" in os.environ:
-        return
-    skip = pytest.mark.skip(reason="Validation suite requires ANTHROPIC_API_KEY")
-    for item in items:
-        item.add_marker(skip)
-    terminal = config.pluginmanager.getplugin("terminalreporter")
-    if terminal is not None:
-        terminal.write_line(
-            "Validation suite: ANTHROPIC_API_KEY not set — all scripts skipped.",
-            yellow=True,
-        )
-
-
 _pgvector_container: Any = None
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Auto-provision a pgvector container when ``POSTGRES_URL`` is unset.
+    """Register validation-specific markers."""
+    config.addinivalue_line(
+        "markers",
+        "postgres: marks tests requiring a Postgres+pgvector database "
+        "(provisioned on demand by the validation conftest)",
+    )
 
-    Runs before collection so decorators that gate on ``POSTGRES_URL``
-    (``requires_postgres``) observe the provisioned URL and do not skip.
-    A no-op when ``testcontainers`` is not installed or the Docker
-    daemon is unreachable — postgres-dependent tests then skip as usual.
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Apply suite-level gating to collected items.
+
+    1. Hard-skip every item when ``ANTHROPIC_API_KEY`` is unset — the
+       table-stakes credential for every real-service run.
+    2. Lazily provision a pgvector container when (and only when) at
+       least one collected item carries the ``postgres`` marker.
+       Provisioning runs after collection so runs that don't touch
+       Postgres pay no Docker cost.
+    3. Skip postgres-marked items (with the documented reason) when
+       provisioning fails or ``asyncpg`` is unavailable.
     """
-    global _pgvector_container
-    if "POSTGRES_URL" in os.environ:
+    if "ANTHROPIC_API_KEY" not in os.environ:
+        skip = pytest.mark.skip(reason="Validation suite requires ANTHROPIC_API_KEY")
+        for item in items:
+            item.add_marker(skip)
+        terminal = config.pluginmanager.getplugin("terminalreporter")
+        if terminal is not None:
+            terminal.write_line(
+                "Validation suite: ANTHROPIC_API_KEY not set — all scripts skipped.",
+                yellow=True,
+            )
         return
-    from validation.helpers.postgres_container import maybe_start_pgvector
 
-    started = maybe_start_pgvector()
-    if started is None:
+    needs_postgres = [item for item in items if item.get_closest_marker("postgres") is not None]
+    if not needs_postgres:
         return
-    url, container = started
-    os.environ["POSTGRES_URL"] = url
-    _pgvector_container = container
-    terminal = config.pluginmanager.getplugin("terminalreporter")
-    if terminal is not None:
-        terminal.write_line(
-            f"Validation suite: auto-provisioned pgvector container at {url}",
-            cyan=True,
-        )
+
+    global _pgvector_container
+    if "POSTGRES_URL" not in os.environ:
+        from validation.helpers.postgres_container import maybe_start_pgvector
+
+        started = maybe_start_pgvector()
+        if started is not None:
+            url, container = started
+            os.environ["POSTGRES_URL"] = url
+            _pgvector_container = container
+            terminal = config.pluginmanager.getplugin("terminalreporter")
+            if terminal is not None:
+                terminal.write_line(
+                    f"Validation suite: auto-provisioned pgvector container at {url}",
+                    cyan=True,
+                )
+
+    missing = "POSTGRES_URL" not in os.environ or importlib.util.find_spec("asyncpg") is None
+    if missing:
+        skip = pytest.mark.skip(reason="Skipping: POSTGRES_URL not set or asyncpg not installed")
+        for item in needs_postgres:
+            item.add_marker(skip)
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
