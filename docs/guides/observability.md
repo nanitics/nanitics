@@ -257,7 +257,60 @@ The callback receives an `EventEmitter` and the pre-generated `run_id` and retur
 
 Use `TracedExecutor` for **standalone agent runs** — the common case where your API endpoint receives a request, runs an agent, and persists the trace. This is what most application endpoints need.
 
-Use manual `TraceCollector` wiring when you need control the pipeline doesn't provide — custom flush intervals, multiple collectors, non-standard emitter types, or integration with existing lifecycle management (e.g., workflows, which manage their own run lifecycle internally).
+Use manual `TraceCollector` wiring when you need control the pipeline doesn't provide — custom flush intervals, multiple collectors, non-standard emitter types, or integration with existing lifecycle management (e.g., workflows, which manage their own run lifecycle internally). The [Lifespan-Scoped Singleton-Emitter Listener](#lifespan-scoped-singleton-emitter-listener) section below names the canonical long-lived shape.
+
+## Lifespan-Scoped Singleton-Emitter Listener
+
+`TracedExecutor` and the **lifespan-scoped singleton-emitter listener** are co-equal patterns; neither is preferred. They answer different design questions: `TracedExecutor` reads as "wrap one async run with one trace"; the singleton pattern reads as "one emitter for the application; many agents emit through it." The singleton pattern is supported by existing primitives — no new SDK API is introduced. Construct one `InMemoryEmitter` at application startup, attach long-lived listeners (`TraceCollector`, metrics aggregators, SSE bridges) once, and hand each agent the singleton itself or a `create_child()` derivative; the child emitters inherit the listener list at child-creation time.
+
+### Trade-offs
+
+| Axis | `TracedExecutor` | Singleton-Emitter Listener |
+|---|---|---|
+| Scope | Per `execute()` call | Application lifespan |
+| Run lifecycle | Auto: `register_run` + `update_run_status` for `completed` / `failed` / `suspended` | Application owns `register_run` and `update_run_status` calls |
+| Status finalisation | Guaranteed on every termination path (success, exception, `SuspendExecution`) | Application owns finalisation; missing it leaves runs in an indeterminate state |
+| Listener attachment | Listeners (collector, queue) wired before `execute()` runs `fn` | Listeners attached at startup; child emitters inherit the listener list **at child-creation time only** — listeners attached to the parent later are not retroactively propagated |
+| Redaction policy | Per-run via `redaction_hook=` parameter on `execute()` | Fixed for the application lifespan; varying per-tenant requires application-level redaction at the listener boundary |
+| `collector.close()` | Auto on every path | Application owns `close()` at shutdown; forgetting it loses buffered events |
+
+### Wiring shape
+
+```python
+from nanitics import InMemoryEmitter, PostgresTraceStore, TraceCollector
+
+# Module-level singletons live for the application lifespan.
+_emitter: InMemoryEmitter | None = None
+_collector: TraceCollector | None = None
+
+
+async def lifespan_setup(trace_store: PostgresTraceStore) -> None:
+    """Wire the singleton emitter and its listener once at startup."""
+    global _emitter, _collector
+    _emitter = InMemoryEmitter(trace_id="app-lifespan-trace")
+    _collector = TraceCollector(store=trace_store, parent_id="app-lifespan")
+    _emitter.add_listener(_collector.handle)
+
+
+async def lifespan_teardown() -> None:
+    """Final flush and listener cleanup at shutdown."""
+    if _collector is not None:
+        await _collector.close()
+
+
+def emitter_for_run() -> InMemoryEmitter:
+    """Hand an agent a child emitter that inherits the listener at create time."""
+    assert _emitter is not None, "lifespan_setup must run before this is called."
+    return _emitter.create_child()
+```
+
+The `assert` documents the load-bearing precondition: the listener inheritance happens *at* `create_child()`, so listeners must be attached to the singleton before any child is requested. Listeners added after child creation do not propagate to existing children.
+
+### When to use which
+
+Pick `TracedExecutor` when each request becomes one Observatory run, when redaction policy varies by tenant, or when suspended runs must be resumable (the auto status-finalisation is load-bearing). Pick the singleton when long-running daemons or workers emit across many runs and listener state (metrics aggregation, cross-run dashboards) should survive the per-run boundary, when a test harness captures all emitted events from many sequentially-run agents into one `events` list, or when the run lifecycle is owned upstream (e.g., a workflow primitive that already calls `register_run` itself).
+
+The two patterns can coexist in one application — for example, a daemon that uses the singleton for cross-run metrics and runs each individual request through `TracedExecutor` to register that request as a distinct run. Each call to `TracedExecutor.execute` constructs its own emitter and collector regardless of any singletons in scope, so the two pipelines do not interfere.
 
 ## Observatory
 
