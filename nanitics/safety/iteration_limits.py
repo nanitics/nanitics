@@ -60,15 +60,17 @@ class ToolCallLimiter:
     request multiple tool calls.
 
     Args:
-        max_tool_calls: Maximum allowed tool calls. Must be at least 1.
+        max_tool_calls: Maximum allowed tool calls. Must be non-negative;
+            ``0`` permits no tool calls (every attempt at the limiter raises
+            ``AgentToolCallLimitError``).
 
     Raises:
-        ValueError: If ``max_tool_calls`` is less than 1.
+        ValueError: If ``max_tool_calls`` is negative.
     """
 
     def __init__(self, max_tool_calls: int) -> None:
-        if max_tool_calls < 1:
-            raise ValueError(f"max_tool_calls must be at least 1, got {max_tool_calls}")
+        if max_tool_calls < 0:
+            raise ValueError(f"max_tool_calls must be non-negative, got {max_tool_calls}")
         self._max_tool_calls = max_tool_calls
         self._current_tool_calls = 0
 

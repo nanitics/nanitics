@@ -63,6 +63,8 @@ Key capabilities that inform when to choose ReAct:
 
 **When not to use:** Pure data extraction (no tools needed), tasks where you need to minimize LLM calls (consider ReWOO), tasks where code is the natural action modality (consider CodeAct).
 
+> **No tools needed?** Reach for [`ReasoningAgent`](#reasoningagent) — `ReActAgent(tools=[])` is not the documented shape for tool-free use.
+
 > **See also:** [examples/agents/react_agent.py](../../examples/agents/react_agent.py)
 
 ## ReasoningAgent

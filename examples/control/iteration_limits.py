@@ -168,13 +168,18 @@ async def main() -> None:
     assert tc_limiter.current_tool_calls == 0
     assert tc_limiter.remaining == 5
 
-    # Invalid construction raises ValueError
-    for invalid in (0, -1):
-        try:
-            ToolCallLimiter(max_tool_calls=invalid)
-            assert False, f"Should have raised ValueError for max_tool_calls={invalid}"
-        except ValueError:
-            pass
+    # Negative max_tool_calls raises ValueError
+    try:
+        ToolCallLimiter(max_tool_calls=-1)
+        assert False, "Should have raised ValueError for max_tool_calls=-1"
+    except ValueError:
+        pass
+
+    # max_tool_calls=0 is valid: it permits no tool calls (the very first
+    # tool-batch dispatch raises AgentToolCallLimitError at the limiter).
+    tc_limiter_zero = ToolCallLimiter(max_tool_calls=0)
+    assert tc_limiter_zero.max_tool_calls == 0
+    print("✓ ToolCallLimiter(max_tool_calls=0) constructs (zero permits no tool calls)")
 
     # Batch counting — step() accepts a count (number of tool calls in one LLM response)
     tc_limiter.step(2)  # 2 tool calls in first response

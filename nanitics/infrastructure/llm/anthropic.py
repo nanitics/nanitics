@@ -196,6 +196,12 @@ class AnthropicLLMClient:
             loss on a single call and only breaks even once the cached
             prefix is reused ≥2 times within the 5-minute TTL. Opt in for
             multi-turn loops or repeated calls that share a stable prefix.
+
+    Raises:
+        ValueError: If no ``api_key`` is provided and ``ANTHROPIC_API_KEY``
+            is unset. This is a construction-time misconfiguration; live-API
+            failures surface as ``LLMProviderError`` (or its subclasses) at
+            generation time.
     """
 
     def __init__(
@@ -208,10 +214,9 @@ class AnthropicLLMClient:
         request_timeout: float | None = 300.0,
     ) -> None:
         if api_key is None and not os.environ.get("ANTHROPIC_API_KEY"):
-            raise LLMProviderError(
+            raise ValueError(
                 "ANTHROPIC_API_KEY env var is not set and no api_key= was provided. "
-                "Set ANTHROPIC_API_KEY or pass api_key= explicitly.",
-                provider="anthropic",
+                "Set ANTHROPIC_API_KEY or pass api_key= explicitly."
             )
         self._model = model
         self._max_tokens = max_tokens
