@@ -1,5 +1,5 @@
 {
-  "_comment": "GitHub repository ruleset for main-branch protection. Apply via `jq 'del(._comment)' .github/branch-protection-ruleset.json | gh api -X POST /repos/<owner>/<repo>/rulesets --input -` to create initially, or `gh api -X PUT /repos/<owner>/<repo>/rulesets/<id> --input -` to update an existing ruleset (find `<id>` via `gh api /repos/<owner>/<repo>/rulesets`). The `_comment` key is stripped before apply because the GitHub Rulesets API rejects unknown top-level fields. The two `Analyze` contexts below require CodeQL to be enabled for the repo (GitHub Advanced Security is free on public repos; CodeQL on private free-tier is disabled, so expect those contexts to appear only after public flip at Phase 1.8.2). `strict_required_status_checks_policy` is set to `false` deliberately: while the project has a single maintainer, merges to `main` are sequential, so the 'must be up to date with main' requirement adds friction without catching real bugs. Conflicts are still detected at merge time. Re-evaluate when MAINTAINERS.md grows beyond one — concurrent merges from multiple maintainers are the case the strict policy actually protects against.",
+  "_comment": "GitHub repository ruleset for main-branch protection. Apply via `jq 'del(._comment)' .github/branch-protection-ruleset.json | gh api -X POST /repos/<owner>/<repo>/rulesets --input -` to create initially, or `gh api -X PUT /repos/<owner>/<repo>/rulesets/<id> --input -` to update an existing ruleset (find `<id>` via `gh api /repos/<owner>/<repo>/rulesets`). The `_comment` key is stripped before apply because the GitHub Rulesets API rejects unknown top-level fields. The two `Analyze` contexts below require CodeQL to be enabled for the repo (GitHub Advanced Security is free on public repos; CodeQL on private free-tier is disabled, so expect those contexts to appear only after public flip at Phase 1.8.2). `strict_required_status_checks_policy` is set to `false` deliberately: while the project has a single maintainer, merges to `main` are sequential, so the 'must be up to date with main' requirement adds friction without catching real bugs. Conflicts are still detected at merge time. Re-evaluate when MAINTAINERS.md grows beyond one — concurrent merges from multiple maintainers are the case the strict policy actually protects against. `bypass_actors` uses `bypass_mode: pull_request` rather than `always`. The Repository Admin role can still bypass branch protection in genuinely urgent break-glass scenarios (see CONTRIBUTING.md § Break-glass), but each bypass must be explicitly requested via the PR UI and is automatically recorded by GitHub — the audit-trail commitment in CONTRIBUTING.md becomes machine-enforced rather than depending on the maintainer's manual follow-up.",
 
   "name": "main branch protection",
   "target": "branch",
@@ -9,7 +9,7 @@
     {
       "actor_id": 5,
       "actor_type": "RepositoryRole",
-      "bypass_mode": "always"
+      "bypass_mode": "pull_request"
     }
   ],
 
