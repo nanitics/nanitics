@@ -157,10 +157,10 @@ def create_app(
                 if active_pool is None:
                     raise RuntimeError("shell not initialized")
                 await _default_probe(active_pool)
-        except Exception as exc:
+        except Exception:
             return JSONResponse(
                 status_code=503,
-                content={"ready": False, "store": "error", "detail": str(exc)},
+                content={"ready": False, "store": "error", "detail": "trace store probe failed"},
             )
         return JSONResponse(
             status_code=200,
