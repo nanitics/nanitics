@@ -91,7 +91,7 @@ rubrics = load_rubrics(paths=[Path("./my_rubrics")], include_builtins=False)
 
 ## Current launch corpus
 
-The v0.1.1 corpus covers three target dimensions:
+The current corpus covers three target dimensions:
 
 - `prompts` — system prompts, user prompts, and dynamic context injection.
 - `tool_descriptions` — tool names, docstrings, and parameter descriptions.

@@ -30,7 +30,7 @@ policy and how the rule evolves as the roster grows.
 
 ## Maintainer roles
 
-Nanitics has one role at v0.1.1: **Maintainer**. Maintainers are listed in
+Nanitics has one role today: **Maintainer**. Maintainers are listed in
 [MAINTAINERS.md](MAINTAINERS.md), which is the roster `CODEOWNERS` routes
 PR review to. The roster evolves per that file's *How the roster evolves*
 section — the signal is earned track record, not request.
@@ -58,7 +58,7 @@ point is GitHub Discussions → *Ideas*. Ideas that gain traction become
 issues; issues that require design attention happen in a Discussion or
 issue first, then in code.
 
-**There is no RFC process at v0.1.1.** This is deliberate: an RFC process
+**There is no RFC process today.** This is deliberate: an RFC process
 at a solo-maintained pre-1.0 project would add ceremony without producing
 review quality that PR review and Discussion threads do not already
 produce. A formal RFC process is a post-launch question driven by adopter
