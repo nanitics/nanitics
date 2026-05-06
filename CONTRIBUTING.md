@@ -192,25 +192,23 @@ reviewable meaning). Rebase-merge is also permitted.
 
 ### Repository merge settings
 
-In addition to branch protection, the repository enables three
-convenience toggles at the GitHub-repo level:
+In addition to branch protection, the repository configures the
+following GitHub-level merge settings:
 
-- `allow_auto_merge: true` — maintainers can flip auto-merge on a PR
-  (`gh pr merge --auto --squash`) and GitHub merges once required checks
-  pass. Auto-merge is opt-in per PR; the repository deliberately does
-  **not** apply auto-merge automatically via a workflow on externally
-  authored PRs (doing so would let an attacker land code without review).
+- `allow_auto_merge: false` — auto-merge is deliberately disabled.
+  Every merge to `main` is an explicit maintainer click, keeping a
+  human in the loop on every change.
 - `delete_branch_on_merge: true` — the source branch is deleted on
   merge. Recovery via `git reflog` remains possible if needed.
 - `allow_update_branch: true` — adds an "Update branch" button on the PR
   page so a contributor can sync from `main` without leaving GitHub.
 
-These toggles are not stored as code (GitHub does not expose a
+These settings are not stored as code (GitHub does not expose a
 single source-of-truth file for them). To audit or update:
 
 ```sh
 gh api /repos/nanitics/nanitics --jq '{auto_merge: .allow_auto_merge, delete_branch: .delete_branch_on_merge, update_branch: .allow_update_branch}'
-gh api -X PATCH /repos/nanitics/nanitics -F allow_auto_merge=true -F delete_branch_on_merge=true -F allow_update_branch=true
+gh api -X PATCH /repos/nanitics/nanitics -F allow_auto_merge=false -F delete_branch_on_merge=true -F allow_update_branch=true
 ```
 
 ### Required status checks on `main`
