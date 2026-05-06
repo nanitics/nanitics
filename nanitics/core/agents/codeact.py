@@ -443,6 +443,12 @@ class CodeActAgent(Agent):
 
                     obs = self._format_observation(result)
                     observations.append(obs)
+                    # CodeAct's "tool result" is a sandbox ``ExecutionResult``,
+                    # not a ``ToolResult`` from the registry. There is no
+                    # ``metadata`` to round-trip onto ``Message.metadata``.
+                    # Projecting ``ExecutionResult`` fields into metadata is a
+                    # codeact-specific design choice deferred to a future
+                    # Phase; ``Message.metadata`` stays ``None`` here by design.
                     tool_result_messages.append(Message(role="tool_result", content=obs, tool_call_id=tc.id))
 
                 observation = "\n\n".join(observations)

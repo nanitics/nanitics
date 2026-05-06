@@ -11,8 +11,13 @@ class ToolResult(BaseModel):
     """Immutable result returned by a tool execution.
 
     The ``content`` field is the text the LLM sees in the conversation
-    history.  ``metadata`` carries structured data for application logic
-    but is not sent to the LLM.
+    history.  ``metadata`` carries structured data for application logic.
+    The agent that consumes the registry's dispatch result copies it onto
+    the ``tool_result`` ``Message.metadata`` so application code that
+    inspects the conversation (for example, a ``TruncationPolicy`` reading
+    ``metadata['protected']``) sees what the tool surfaced. LLM providers
+    strip ``Message.metadata`` at serialization — it is never sent to the
+    model.
 
     The ``executed`` flag is a wrapper-signalling mechanism consumed by
     :class:`~nanitics.core.tools.registry.ToolRegistry`:
@@ -37,7 +42,8 @@ class ToolResult(BaseModel):
 
     Attributes:
         content: Text returned to the agent.
-        metadata: Arbitrary metadata for application use.
+        metadata: Arbitrary metadata for application use. Propagated onto
+            the ``tool_result`` ``Message.metadata``; not sent to the LLM.
         executed: ``True`` (default) when the tool's work ran; ``False``
             when a wrapper short-circuited before executing the inner
             tool, signalling the registry to suppress invoke/result

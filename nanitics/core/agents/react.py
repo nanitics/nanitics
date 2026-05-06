@@ -485,16 +485,25 @@ class ReActAgent(Agent):
             tool_attempts.setdefault(i, 0)
             try:
                 result = await self._tool_registry.dispatch(tool_call)
+                # Propagate ``ToolResult.metadata`` onto ``Message.metadata`` so
+                # application code that inspects the conversation (e.g.
+                # ``TruncationPolicy`` reading ``metadata['protected']``) sees
+                # what the tool surfaced. ``or None`` normalises the empty-dict
+                # default to ``None`` — preserving the convention that
+                # ``Message.metadata is None`` means "no metadata."
+                tr_metadata = result.metadata or None
                 messages.append(
                     Message(
                         role="tool_result",
                         content=result.content,
                         tool_call_id=tool_call.id,
+                        metadata=tr_metadata,
                     )
                 )
                 completed_tool_results[i] = {
                     "content": result.content,
                     "tool_call_id": tool_call.id,
+                    "metadata": tr_metadata,
                 }
             except SuspendExecution as exc:
                 exc.checkpoint_data = self._build_checkpoint_state(
@@ -511,6 +520,11 @@ class ReActAgent(Agent):
                 correction = self._error_handler.handle_tool_error(e, tool_attempts[i], available_tools)
                 tool_attempts[i] += 1
                 if correction is not None:
+                    # No ``ToolResult`` is available on the correction path —
+                    # the correction string is synthesised by the error
+                    # handler. ``metadata`` is only round-tripped from
+                    # successful ``ToolResult`` returns; here it stays
+                    # ``None`` (the default) by design.
                     messages.append(
                         Message(
                             role="tool_result",
@@ -536,6 +550,10 @@ class ReActAgent(Agent):
                     )
                 elif self._error_handler.should_degrade(e, tool_attempts[i]):
                     degradation_msg = self._error_handler.format_degradation_message(e)
+                    # No ``ToolResult`` on the degradation path either — the
+                    # degradation string is synthesised by the error handler.
+                    # ``metadata`` stays ``None`` for the same reason as the
+                    # correction branch above.
                     messages.append(
                         Message(
                             role="tool_result",
@@ -634,7 +652,10 @@ class ReActAgent(Agent):
             )
         )
 
-        # Inject stored tool_result messages for completed tool calls (0..k-1)
+        # Inject stored tool_result messages for completed tool calls (0..k-1).
+        # ``tr.get("metadata")`` (not ``tr["metadata"]``) keeps pre-Phase-3
+        # checkpoints loadable — those entries don't carry the ``"metadata"``
+        # key and restore as ``metadata=None``.
         for idx in sorted(completed_tool_results.keys()):
             if idx < suspended_tool_index:
                 tr = completed_tool_results[idx]
@@ -643,6 +664,7 @@ class ReActAgent(Agent):
                         role="tool_result",
                         content=tr["content"],
                         tool_call_id=tr["tool_call_id"],
+                        metadata=tr.get("metadata"),
                     )
                 )
 
