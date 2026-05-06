@@ -9,9 +9,11 @@ from nanitics.infrastructure.errors import (
     LLMProviderError,
     LLMRateLimitError,
     LLMSchemaViolationError,
+    ToolError,
     ToolExecutionError,
     ToolNotFoundError,
     ToolParameterError,
+    ToolTimeoutError,
 )
 
 
@@ -63,6 +65,21 @@ class TestClassifyError:
 
     def test_tool_not_found_error_is_correctable(self) -> None:
         error = ToolNotFoundError("not found", tool_name="nonexistent")
+        assert classify_error(error) == ErrorCategory.CORRECTABLE
+
+    def test_tool_timeout_error_is_retryable(self) -> None:
+        error = ToolTimeoutError(
+            "timed out",
+            tool_name="slow_tool",
+            timeout_seconds=5.0,
+        )
+        assert classify_error(error) == ErrorCategory.RETRYABLE
+
+    def test_app_defined_tool_error_subclass_is_correctable(self) -> None:
+        class _AppDefinedToolError(ToolError):
+            pass
+
+        error = _AppDefinedToolError("app-specific failure")
         assert classify_error(error) == ErrorCategory.CORRECTABLE
 
     def test_agent_iteration_limit_error_is_fatal(self) -> None:

@@ -68,8 +68,10 @@ from nanitics.infrastructure import (
     LLMProviderError,
     LLMRateLimitError,
     LLMSchemaViolationError,
+    ToolError,
     ToolExecutionError,
     ToolParameterError,
+    ToolTimeoutError,
 )
 from nanitics.infrastructure.observability.events import ErrorRetryEvent
 
@@ -80,6 +82,10 @@ from nanitics.infrastructure.observability.events import ErrorRetryEvent
 
 class _NovelError(Exception):
     """An exception the classifier has never seen — must default to FATAL."""
+
+
+class _AppDefinedToolError(ToolError):
+    """An app-defined ToolError subclass — must classify as CORRECTABLE by default."""
 
 
 @pytest.mark.parametrize(
@@ -124,6 +130,16 @@ class _NovelError(Exception):
             ToolExecutionError("boom", tool_name="search"),
             ErrorCategory.CORRECTABLE,
             id="tool_execution_correctable",
+        ),
+        pytest.param(
+            ToolTimeoutError("timed out", tool_name="search", timeout_seconds=5.0),
+            ErrorCategory.RETRYABLE,
+            id="tool_timeout_retryable",
+        ),
+        pytest.param(
+            _AppDefinedToolError("app-specific tool failure"),
+            ErrorCategory.CORRECTABLE,
+            id="app_defined_tool_error_correctable",
         ),
         pytest.param(
             _NovelError("who knows"),
