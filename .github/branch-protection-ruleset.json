@@ -1,5 +1,5 @@
 {
-  "_comment": "GitHub repository ruleset for main-branch protection. Apply via `jq 'del(._comment)' .github/branch-protection-ruleset.json | gh api -X POST /repos/<owner>/<repo>/rulesets --input -`. The `_comment` key is stripped before apply because the GitHub Rulesets API rejects unknown top-level fields. The two `Analyze` contexts below require CodeQL to be enabled for the repo (GitHub Advanced Security is free on public repos; CodeQL on private free-tier is disabled, so expect those contexts to appear only after public flip at Phase 1.8.2).",
+  "_comment": "GitHub repository ruleset for main-branch protection. Apply via `jq 'del(._comment)' .github/branch-protection-ruleset.json | gh api -X POST /repos/<owner>/<repo>/rulesets --input -` to create initially, or `gh api -X PUT /repos/<owner>/<repo>/rulesets/<id> --input -` to update an existing ruleset (find `<id>` via `gh api /repos/<owner>/<repo>/rulesets`). The `_comment` key is stripped before apply because the GitHub Rulesets API rejects unknown top-level fields. The two `Analyze` contexts below require CodeQL to be enabled for the repo (GitHub Advanced Security is free on public repos; CodeQL on private free-tier is disabled, so expect those contexts to appear only after public flip at Phase 1.8.2). `strict_required_status_checks_policy` is set to `false` deliberately: while the project has a single maintainer, merges to `main` are sequential, so the 'must be up to date with main' requirement adds friction without catching real bugs. Conflicts are still detected at merge time. Re-evaluate when MAINTAINERS.md grows beyond one — concurrent merges from multiple maintainers are the case the strict policy actually protects against.",
 
   "name": "main branch protection",
   "target": "branch",
@@ -26,7 +26,7 @@
     {
       "type": "required_status_checks",
       "parameters": {
-        "strict_required_status_checks_policy": true,
+        "strict_required_status_checks_policy": false,
         "do_not_enforce_on_create": false,
         "required_status_checks": [
           { "context": "Python (3.11)" },
