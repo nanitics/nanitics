@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-05-07
+
+### Fixed
+
+- `InMemoryEmitter.create_child()` now seeds the child emitter's stack with the parent's current `span_id`, so the first span opened by a bound child agent (`Agent.bind(parent)`, `AgentTool` delegation, `ReflexionAgent` inner attempts, workflow children) parents under the calling agent's current span instead of a synthetic root UUID nothing else in the trace ever names. Previously, `PersistentTraceStore` saw those spans as orphans and Observatory's tree builder hoisted every composite-agent subtree to the run root. Three `tests/test_event_emitter.py` cases that pinned the old (buggy) semantics are rewritten under the corrected contract; `examples/tools/event_emitter.py` Section 5 is updated accordingly.
+
+### Changed
+
+- `examples/homepage.py`: tool description, mock LLM responses, and search-corpus snippets reworded for legibility when reading the captured trace in Observatory; jittered LLM/tool delays added so the rendered trace shows realistic per-span durations rather than every span clocking 0ms. Bracket counts pinned by `tests/test_homepage_trace_shape.py` and the delegation task string are unchanged; the website-snippet portion (system prompts, evaluator definition, agent constructors) is untouched.
+
 ## [0.2.0] - 2026-05-06
 
 ### Added
