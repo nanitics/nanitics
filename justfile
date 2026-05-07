@@ -110,6 +110,8 @@ docs:
       -d google \
       --no-show-source \
       -e nanitics=https://github.com/nanitics/nanitics/blob/main/nanitics/ \
+      --logo https://raw.githubusercontent.com/nanitics/nanitics/main/assets/nanitics-logo.png \
+      --logo-link https://github.com/nanitics/nanitics \
       --footer-text "Nanitics ${version}" \
       -o build/docs/ \
       nanitics

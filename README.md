@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/nanitics/nanitics/main/assets/nanitics-logo.png" alt="Nanitics" width="160" />
+</p>
+
 # Nanitics
 
 Python SDK for building single-agent and multi-agent AI systems.
