@@ -18,7 +18,7 @@ authors = [
     {name = "The Nanitics Contributors", email = "maintainers@nanitics.dev"},
 ]
 maintainers = [
-    {name = "Chris Zevenbergen", email = "chris.zevenbergen@sevenpeaks.dev"},
+    {name = "Chris Zevenbergen", email = "chris.zevenbergen@propodeum.com"},
 ]
 keywords = ["agents", "multi-agent", "llm", "ai", "observability", "orchestration", "tools", "memory"]
 classifiers = [
