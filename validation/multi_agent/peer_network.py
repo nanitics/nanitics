@@ -47,8 +47,8 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import (
-    InMemoryEmitter,
+from nanitics import InMemoryEmitter
+from nanitics.experimental.coordination import (
     PeerNetwork,
     PeerSpec,
 )

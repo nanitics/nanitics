@@ -21,8 +21,8 @@ from nanitics import (
     MockLLMClient,
     ProgrammaticEvaluator,
     ReActAgent,
-    ReflexionAgent,
 )
+from nanitics.experimental.strategies import ReflexionAgent
 from nanitics.infrastructure import (
     LLMRequestEvent,
     LLMResponseEvent,

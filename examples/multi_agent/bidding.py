@@ -16,17 +16,19 @@ import json
 
 from examples.helpers import make_emitter, make_response
 from nanitics import (
+    HighestConfidence,
+    LowestCost,
+    MockLLMClient,
+    ReActAgent,
+    WeightedScore,
+)
+from nanitics.experimental.coordination import (
     DEFAULT_CALIBRATED_BID_PROMPT_TEMPLATE,
     Bid,
     BiddableAgent,
     Bidding,
     FixedBidGenerator,
-    HighestConfidence,
     LLMBidGenerator,
-    LowestCost,
-    MockLLMClient,
-    ReActAgent,
-    WeightedScore,
 )
 from nanitics.infrastructure import (
     BidAllocatedEvent,

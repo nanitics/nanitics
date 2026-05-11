@@ -20,11 +20,11 @@ from nanitics import (
     EvaluationContext,
     EvaluationResult,
     EvaluationVerdict,
-    LATSAgent,
     MockLLMClient,
     ToolCall,
     tool,
 )
+from nanitics.experimental.strategies import LATSAgent
 from nanitics.infrastructure import (
     MCTSBackpropagationEvent,
     MCTSIterationEvent,

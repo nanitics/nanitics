@@ -45,15 +45,17 @@ from __future__ import annotations
 import pytest
 
 from nanitics import (
-    BiddableAgent,
-    Bidding,
-    FixedBidGenerator,
     HighestConfidence,
     InMemoryEmitter,
-    LLMBidGenerator,
     LowestCost,
     ReActAgent,
     WeightedScore,
+)
+from nanitics.experimental.coordination import (
+    BiddableAgent,
+    Bidding,
+    FixedBidGenerator,
+    LLMBidGenerator,
 )
 from nanitics.infrastructure import (
     BidAllocatedEvent,

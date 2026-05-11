@@ -30,11 +30,13 @@ from __future__ import annotations
 import pytest
 
 from nanitics import (
+    InMemoryEmitter,
+    ReActAgent,
+)
+from nanitics.experimental.coordination import (
     Debate,
     Debater,
-    InMemoryEmitter,
     JudgeResolution,
-    ReActAgent,
 )
 from nanitics.infrastructure import (
     DebateArgumentEvent,

@@ -33,12 +33,14 @@ from typing import Any
 import pytest
 
 from nanitics import (
+    InMemoryEmitter,
+    ReActAgent,
+)
+from nanitics.experimental.coordination import (
     DEFAULT_CALIBRATED_JUDGE_PROMPT_TEMPLATE,
     BiddableAgent,
     FixedBidGenerator,
-    InMemoryEmitter,
     JudgeRouter,
-    ReActAgent,
 )
 from nanitics.infrastructure import (
     JudgeAllocatedEvent,

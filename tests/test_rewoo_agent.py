@@ -6,9 +6,6 @@ from pydantic import ValidationError
 from nanitics import (
     LLMResponse,
     MockLLMClient,
-    ReWOOAgent,
-    ReWOOPlan,
-    ReWOOStep,
     tool,
 )
 from nanitics.capabilities.planning.store import InMemoryPlanStore
@@ -16,6 +13,11 @@ from nanitics.core.agents.evaluation import (
     EvaluationContext,
     EvaluationResult,
     EvaluationVerdict,
+)
+from nanitics.experimental.strategies import (
+    ReWOOAgent,
+    ReWOOPlan,
+    ReWOOStep,
 )
 from nanitics.infrastructure.observability.events import (
     AgentStartEvent,

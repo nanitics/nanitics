@@ -43,7 +43,6 @@ import pytest
 
 from nanitics import (
     AllEligible,
-    Broadcast,
     CapabilityFilter,
     CollectAll,
     FilterResponses,
@@ -52,6 +51,7 @@ from nanitics import (
     ReActAgent,
     SelectBest,
 )
+from nanitics.experimental.coordination import Broadcast
 from nanitics.infrastructure import (
     AgentStartEvent,
     BroadcastCompleteEvent,

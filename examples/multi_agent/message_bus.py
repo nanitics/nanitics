@@ -12,13 +12,15 @@ import asyncio
 
 from examples.helpers import make_emitter, make_response
 from nanitics import (
-    BusMessage,
     MaxMessagesTermination,
-    MessageBus,
-    MessageBusResult,
     MockLLMClient,
     ReActAgent,
     ToolCall,
+)
+from nanitics.experimental.coordination import (
+    BusMessage,
+    MessageBus,
+    MessageBusResult,
     TopicSubscription,
 )
 from nanitics.infrastructure import (

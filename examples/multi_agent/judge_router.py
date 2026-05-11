@@ -15,14 +15,16 @@ import json
 
 from examples.helpers import make_emitter, make_response
 from nanitics import (
+    HighestConfidence,
+    MockLLMClient,
+    ReActAgent,
+)
+from nanitics.experimental.coordination import (
     DEFAULT_CALIBRATED_JUDGE_PROMPT_TEMPLATE,
     BiddableAgent,
     Bidding,
     FixedBidGenerator,
-    HighestConfidence,
     JudgeRouter,
-    MockLLMClient,
-    ReActAgent,
 )
 from nanitics.infrastructure import (
     JudgeAllocatedEvent,

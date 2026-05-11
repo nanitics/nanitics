@@ -30,8 +30,8 @@ from nanitics import (
     InMemoryEmitter,
     ReActAgent,
     ReasoningAgent,
-    create_orchestrator,
 )
+from nanitics.experimental.coordination import create_orchestrator
 from nanitics.infrastructure import (
     AgentCompleteEvent,
     DelegationEvent,

@@ -13,6 +13,11 @@ import json
 
 from examples.helpers import make_emitter, make_response
 from nanitics import (
+    MockLLMClient,
+    ReActAgent,
+    ResolutionStrategy,
+)
+from nanitics.experimental.coordination import (
     Argument,
     Debate,
     Debater,
@@ -20,9 +25,6 @@ from nanitics import (
     DebateResult,
     JudgeResolution,
     LLMJudgeResolution,
-    MockLLMClient,
-    ReActAgent,
-    ResolutionStrategy,
 )
 from nanitics.infrastructure import (
     DebateArgumentEvent,

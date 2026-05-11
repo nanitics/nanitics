@@ -14,12 +14,14 @@ import asyncio
 from examples.helpers import make_emitter, make_response
 from nanitics import (
     BestOfN,
-    Consensus,
-    DeliberationConfig,
     MajorityVoting,
     MockLLMClient,
     ReActAgent,
     WeightedVoting,
+)
+from nanitics.experimental.coordination import (
+    Consensus,
+    DeliberationConfig,
 )
 from nanitics.infrastructure import (
     ConsensusAgreementEvent,

@@ -39,7 +39,15 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import InMemoryEmitter, InMemoryPlanStore, ReWOOAgent, ReWOOPlan, tool
+from nanitics import (
+    InMemoryEmitter,
+    InMemoryPlanStore,
+    tool,
+)
+from nanitics.experimental.strategies import (
+    ReWOOAgent,
+    ReWOOPlan,
+)
 from nanitics.infrastructure import (
     LLMRequestEvent,
     PlanCreatedEvent,

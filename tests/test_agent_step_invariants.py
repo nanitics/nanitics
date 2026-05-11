@@ -39,9 +39,6 @@ from nanitics import (
     MockSandbox,
     ReActAgent,
     ReasoningAgent,
-    ReWOOAgent,
-    ReWOOPlan,
-    ReWOOStep,
     ToolCall,
     tool,
 )
@@ -57,6 +54,11 @@ from nanitics.core.agents.tree_of_thought import (
     TreeOfThoughtAgent,
     _Candidate,
     _GenerationResponse,
+)
+from nanitics.experimental.strategies import (
+    ReWOOAgent,
+    ReWOOPlan,
+    ReWOOStep,
 )
 from nanitics.infrastructure.observability.events import AgentStepEvent
 from tests.testing_helpers import make_emitter, make_usage

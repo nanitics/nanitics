@@ -13,9 +13,11 @@ from examples.helpers import make_emitter, make_response, make_usage
 from nanitics import (
     LLMResponse,
     MockLLMClient,
+    ToolCall,
+)
+from nanitics.experimental.coordination import (
     PeerNetwork,
     PeerSpec,
-    ToolCall,
 )
 from nanitics.infrastructure import (
     PeerConsultationEvent,

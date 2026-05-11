@@ -12,9 +12,6 @@ import asyncio
 
 from examples.helpers import make_emitter, make_response
 from nanitics import (
-    Blackboard,
-    BlackboardResult,
-    BlackboardRoundEntry,
     InMemorySharedMemory,
     MaxRoundsTermination,
     MockLLMClient,
@@ -24,6 +21,11 @@ from nanitics import (
     ReActAgent,
     ScheduledControl,
     ToolCall,
+)
+from nanitics.experimental.coordination import (
+    Blackboard,
+    BlackboardResult,
+    BlackboardRoundEntry,
 )
 from nanitics.infrastructure import (
     BlackboardCompleteEvent,

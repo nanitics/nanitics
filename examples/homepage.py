@@ -31,10 +31,10 @@ from nanitics import (
     MockLLMClient,
     ProgrammaticEvaluator,
     ReActAgent,
-    ReflexionAgent,
     ToolCall,
     tool,
 )
+from nanitics.experimental.strategies import ReflexionAgent
 from nanitics.infrastructure import (
     DelegationEvent,
     EvaluationEvent,

@@ -31,11 +31,13 @@ from __future__ import annotations
 import pytest
 
 from nanitics import (
-    Consensus,
-    DeliberationConfig,
     InMemoryEmitter,
     MajorityVoting,
     ReActAgent,
+)
+from nanitics.experimental.coordination import (
+    Consensus,
+    DeliberationConfig,
 )
 from nanitics.infrastructure import (
     ConsensusAgreementEvent,

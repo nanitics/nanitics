@@ -20,15 +20,17 @@ from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict, Field
 
 from nanitics import (
-    DEFAULT_CALIBRATED_BID_PROMPT_TEMPLATE,
-    Bid,
-    BiddableAgent,
-    Bidding,
     HighestConfidence,
     LowestCost,
     ReActAgent,
 )
 from nanitics.composition.multi_agent.bidding import BidGenerator
+from nanitics.experimental.coordination import (
+    DEFAULT_CALIBRATED_BID_PROMPT_TEMPLATE,
+    Bid,
+    BiddableAgent,
+    Bidding,
+)
 from nanitics.infrastructure.llm.instrumented import InstrumentedLLMClient
 from nanitics.infrastructure.llm.protocol import LLMClient, Message
 from nanitics.infrastructure.observability.emitter import EventEmitter, InMemoryEmitter

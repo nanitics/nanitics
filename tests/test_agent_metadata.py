@@ -13,8 +13,6 @@ from nanitics import (
     MockLLMClient,
     ReActAgent,
     ReasoningAgent,
-    ReflexionAgent,
-    ReWOOAgent,
     tool,
 )
 from nanitics.capabilities.memory.episodic import (
@@ -35,6 +33,10 @@ from nanitics.core.agents.tree_of_thought import (
     TreeOfThoughtAgent,
     _Candidate,
     _GenerationResponse,
+)
+from nanitics.experimental.strategies import (
+    ReflexionAgent,
+    ReWOOAgent,
 )
 from nanitics.infrastructure.observability.events import AgentStartEvent
 from nanitics.safety.cancellation import CancellationToken

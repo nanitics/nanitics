@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-11
+
+### Changed
+
+- **Public API surface trimmed from 363 symbols to 307.** Advanced agent strategies (`LATSAgent`, `TreeOfThoughtAgent`, `ReflexionAgent`, `ReWOOAgent`, plus their satellite types) move from the top-level `nanitics` namespace to `nanitics.experimental.strategies`. Advanced multi-agent coordination patterns (`Blackboard`, `Debate`, `Consensus`, `Bidding`, `Broadcast`, `MessageBus`, `PeerNetwork`, `JudgeRouter`, the dynamic `create_orchestrator` family, plus their satellite types) move from the top-level `nanitics` namespace to `nanitics.experimental.coordination`. Implementations stay at their existing internal locations; only the public re-export path changes. Code under `nanitics.experimental.*` is held to a looser stability contract and may change without semver-major bumps.
+
+  **Breaking imports:** files that previously did `from nanitics import LATSAgent` (or any other moved symbol) must switch to `from nanitics.experimental.strategies import LATSAgent`. The full list of moved symbols and their new namespaces is in the diff against `tests/public_api_surface.txt`. All in-repo callers (37 example, validation, test, and docker-runner files) are updated in this release.
+
+  This change reflects the positioning that ReAct, Reasoning, and CodeAct are the committed agent strategies, and handoff, supervisor, and agent-as-tool are the committed multi-agent coordination primitives. Everything else remains available, but as advanced patterns rather than headline value.
+
+- Project description in `pyproject.toml` updated to "The Python SDK for production agents."
+
+### Documentation
+
+- README hero rewritten around the depth-tier positioning ("build agentic systems your team can debug, extend, and own"). The "Features" section now leads with committed strategies and patterns, and explicitly points at `nanitics.experimental.*` for advanced patterns. A new "About" section cross-links to Propodeum, which builds and uses Nanitics in production client engagements.
+
 ## [0.2.1] - 2026-05-07
 
 ### Fixed

@@ -4,30 +4,30 @@
 
 # Nanitics
 
-Python SDK for building single-agent and multi-agent AI systems.
+The Python SDK for production agents.
 
 [![CI](https://github.com/nanitics/nanitics/actions/workflows/ci.yml/badge.svg)](https://github.com/nanitics/nanitics/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/nanitics)](https://pypi.org/project/nanitics/)
 [![Python](https://img.shields.io/pypi/pyversions/nanitics)](https://pypi.org/project/nanitics/)
 [![License](https://img.shields.io/github/license/nanitics/nanitics)](LICENSE)
 
+Build agentic systems your team can debug, extend, and own. Built and used by [Propodeum](https://propodeum.com) for production client engagements. Compose any architecture from reusable primitives. Trace every agent decision.
+
 ## Why Nanitics?
 
-Nanitics differs from other agent frameworks in three ways:
-
-- **Composable primitives, not a framework.** Pick the pieces you need — agent strategies, coordination patterns, memory, evaluation, HITL, tools — and compose them. No runtime or opinionated workflow shape is imposed.
-- **Trace-first observability.** Every agent loop, tool call, and coordination event emits a structured event. The built-in Observatory trace viewer turns that into a live debugging surface from day one.
-- **Real-services validation.** Every public component is validated against real LLM providers before release, not just mocks. Mocks drive fast tests; real services prove correctness.
+- **Your team owns the result.** Apache-2.0, typed, documented, with an explicit public API (`nanitics.__all__`). The codebase a client inherits at the end of an engagement is one their engineers can read, extend, and operate.
+- **Trace-first observability.** Every agent loop, tool call, and coordination event emits a structured event. The built-in Observatory trace viewer turns that into a live debugging surface from day one. No instrumentation to add.
+- **Real-services validation.** Public components are validated against real LLM providers before release, not just mocks. Mocks drive fast tests; real services prove correctness.
 
 ## Features
 
-**Agent Strategies** — Built-in strategies for different problem types: [ReAct](docs/guides/agent-types.md), Reasoning, Reflexion, ReWOO, CodeAct, LATS, and Tree of Thought.
+**Agent strategies** — Three committed strategies: [ReAct](docs/guides/agent-types.md), Reasoning, CodeAct. Advanced patterns (Reflexion, ReWOO, LATS, Tree of Thought) are available from `nanitics.experimental.strategies` under a separate stability contract.
 
 **Memory** — [Working, episodic, long-term, and semantic memory](docs/guides/memory.md) for persistent agent state.
 
 **Orchestration** — Compose agents into [pipelines, DAGs, loops, conditionals, and map-reduce workflows](docs/guides/orchestration.md).
 
-**Multi-Agent Coordination** — [Handoff, supervisor, blackboard, debate, consensus, bidding, broadcast, message bus, peer network, orchestrator, and agent-as-tool patterns](docs/guides/multi-agent-coordination.md).
+**Multi-agent coordination** — Committed patterns: [handoff, supervisor, agent-as-tool](docs/guides/multi-agent-coordination.md). Advanced patterns (blackboard, debate, consensus, bidding, broadcast, message bus, peer network, judge router, dynamic orchestrator) are available from `nanitics.experimental.coordination`.
 
 **Evaluation** — [Programmatic and LLM-based evaluators](docs/guides/evaluation.md) for assessing agent output quality.
 
@@ -145,6 +145,10 @@ For the complete catalogue — Memory, Orchestration, Evaluation, HITL, Tools, P
 - **Trademark**: [TRADEMARK.md](TRADEMARK.md) for who owns the Nanitics name and what uses are permitted.
 - **Questions and ideas**: [GitHub Discussions](https://github.com/nanitics/nanitics/discussions); [Getting Help](docs/getting-help.md) for the channel split.
 - **Security**: report vulnerabilities via [SECURITY.md](SECURITY.md); SDK security posture in the [security guide](docs/guides/security.md).
+
+## About
+
+Nanitics is built and maintained by [Propodeum](https://propodeum.com) for production client engagements with technical teams taking agentic AI from prototype to production. If you want help integrating it, see propodeum.com.
 
 ## License
 

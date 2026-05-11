@@ -46,7 +46,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from nanitics import (
-    Blackboard,
     InMemoryEmitter,
     InMemorySharedMemory,
     MaxRoundsTermination,
@@ -56,6 +55,7 @@ from nanitics import (
     ReActAgent,
     ScheduledControl,
 )
+from nanitics.experimental.coordination import Blackboard
 from nanitics.infrastructure import (
     BlackboardCompleteEvent,
     BlackboardRoundEvent,

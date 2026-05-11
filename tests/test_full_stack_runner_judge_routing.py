@@ -28,14 +28,16 @@ from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 
 from nanitics import (
-    BiddableAgent,
-    FixedBidGenerator,
     InMemoryPersistentTraceStore,
     LLMResponse,
     MockLLMClient,
     ReActAgent,
     TracedExecutor,
     Usage,
+)
+from nanitics.experimental.coordination import (
+    BiddableAgent,
+    FixedBidGenerator,
 )
 from nanitics.infrastructure.errors import ToolParameterError
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter
