@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- README, `docs/index.md`, and `docs/vision.md` repositioned around the depth-tier framing. Nanitics is now described as the Python SDK behind [Propodeum](https://propodeum.com)'s production client engagements. The README "Why Nanitics?" section is rewritten around ownability, traceability, and real-services validation; a new "About" section cross-links to propodeum.com. The `pyproject.toml` `description` field is updated to "The Python SDK for production agents." No code, public-API surface, or behavior changes.
+
 ## [0.2.1] - 2026-05-07
 
 ### Fixed

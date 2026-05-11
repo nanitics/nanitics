@@ -1,8 +1,8 @@
 # Vision: Nanitics
 
-Nanitics is an open-source Python SDK for building multi-agent AI systems. It provides the building blocks — agent types, memory, planning, orchestration, multi-agent coordination, evaluation, human-in-the-loop, observability — that a developer composes into an intelligent application. The SDK has no server, no database, and no web framework; it is a pure library that runs inside whatever Python application you build on top of it.
+Nanitics is the open-source Python SDK behind [Propodeum](https://propodeum.com)'s production client engagements. It provides the building blocks — agent types, memory, planning, orchestration, multi-agent coordination, evaluation, human-in-the-loop, observability — that a developer composes into an intelligent application. The SDK has no server, no database, and no web framework; it is a pure library that runs inside whatever Python application you build on top of it.
 
-The SDK is young. It matures through the process of building real applications, not through speculative design. If you are evaluating Nanitics or adopting it to build your own system, this document is the short version of what the project is for and how it evolves.
+The SDK is young. It matures through the process of building real applications with real clients, not through speculative design. If you are evaluating Nanitics or adopting it to build your own system, this document is the short version of what the project is for and how it evolves.
 
 ## SDK Maturity Model
 
