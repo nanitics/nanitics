@@ -6,9 +6,9 @@ This file names the maintainers of Nanitics. It is the authoritative roster —
 
 ## Current maintainers
 
-### Chris Zevenbergen — `@seven-peaks-agents`
+### Chris Zevenbergen — `@propodeum`
 
-- **Email**: `chris.zevenbergen@sevenpeaks.dev`
+- **Email**: `chris.zevenbergen@propodeum.com`
 - **Project alias**: `maintainers@nanitics.dev` — routes to the current maintainer(s); use this when the specific person doesn't matter.
 - **Role**: Maintainer (sole).
 - **Areas**: all.
