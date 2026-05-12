@@ -2,7 +2,11 @@
 
 import pytest
 
-from nanitics import ConditionalTool, ToolRegistry, tool
+from nanitics import (
+    ToolRegistry,
+    tool,
+)
+from nanitics.experimental import ConditionalTool
 from nanitics.infrastructure.errors import ToolNotFoundError
 from nanitics.infrastructure.llm.protocol import ToolCall
 from nanitics.infrastructure.observability.events import ToolInvokeEvent

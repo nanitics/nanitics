@@ -30,10 +30,10 @@ import pytest
 
 from nanitics import (
     AgentStep,
-    Conditional,
     InMemoryEmitter,
     ReActAgent,
 )
+from nanitics.experimental import Conditional
 from nanitics.infrastructure import (
     AgentStartEvent,
     WorkflowStartEvent,

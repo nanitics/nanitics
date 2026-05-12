@@ -17,12 +17,14 @@ from examples.helpers import make_emitter, make_response
 from nanitics import (
     DEFAULT_CALIBRATED_JUDGE_PROMPT_TEMPLATE,
     BiddableAgent,
-    Bidding,
-    FixedBidGenerator,
-    HighestConfidence,
     JudgeRouter,
     MockLLMClient,
     ReActAgent,
+)
+from nanitics.experimental import (
+    Bidding,
+    FixedBidGenerator,
+    HighestConfidence,
 )
 from nanitics.infrastructure import (
     JudgeAllocatedEvent,

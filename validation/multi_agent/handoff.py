@@ -44,9 +44,6 @@ import pytest
 
 from nanitics import (
     AgentResult,
-    HandoffPayload,
-    HandoffStep,
-    HandoffTransfer,
     InMemoryEmitter,
     ReActAgent,
     tool,
@@ -55,6 +52,11 @@ from nanitics.infrastructure import (
     AgentStepEvent,
     HandoffEvent,
     ToolInvokeEvent,
+)
+from nanitics.patterns import (
+    HandoffPayload,
+    HandoffStep,
+    HandoffTransfer,
 )
 from validation.helpers import (
     assert_trace_contains,

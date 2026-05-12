@@ -15,16 +15,18 @@ import asyncio
 from examples.helpers import make_emitter, make_response
 from nanitics import (
     AgentTool,
-    FinalOutputStrategy,
     MockLLMClient,
     ReActAgent,
     ReasoningAgent,
     ToolCall,
-    create_orchestrator,
-    orchestrator_prompt_section,
 )
 from nanitics.infrastructure import (
     DelegationEvent,
+)
+from nanitics.patterns import (
+    FinalOutputStrategy,
+    create_orchestrator,
+    orchestrator_prompt_section,
 )
 
 

@@ -9,7 +9,11 @@ Related guide: docs/guides/tools.md
 
 import asyncio
 
-from nanitics import ConditionalTool, ToolRegistry, tool
+from nanitics import (
+    ToolRegistry,
+    tool,
+)
+from nanitics.experimental import ConditionalTool
 
 
 @tool("search_records", "Search for records by keyword")

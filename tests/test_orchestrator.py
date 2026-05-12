@@ -2,7 +2,6 @@ import pytest
 from pydantic import BaseModel
 
 from nanitics import (
-    FinalOutputStrategy,
     InMemoryEmitter,
     MockLLMClient,
     ReActAgent,
@@ -20,6 +19,7 @@ from nanitics.core.agents.evaluation import (
 )
 from nanitics.core.agents.reasoning import ReasoningAgent
 from nanitics.infrastructure.observability.events import DelegationEvent, EvaluationEvent
+from nanitics.patterns import FinalOutputStrategy
 from tests.testing_helpers import make_emitter, make_response
 
 
@@ -544,9 +544,9 @@ class TestRelayLastStrategy:
         assert result.output == writer_output
         assert result.termination_reason == "evaluation_skipped"
 
-    def test_final_output_strategy_importable_from_top_level(self) -> None:
-        """FinalOutputStrategy is part of the public API."""
-        from nanitics import FinalOutputStrategy as TopLevelEnum
+    def test_final_output_strategy_importable_from_patterns(self) -> None:
+        """FinalOutputStrategy is part of the ``nanitics.patterns`` public API."""
+        from nanitics.patterns import FinalOutputStrategy as PatternsEnum
 
-        assert TopLevelEnum.SYNTHESIZE.value == "synthesize"
-        assert TopLevelEnum.RELAY_LAST.value == "relay_last"
+        assert PatternsEnum.SYNTHESIZE.value == "synthesize"
+        assert PatternsEnum.RELAY_LAST.value == "relay_last"

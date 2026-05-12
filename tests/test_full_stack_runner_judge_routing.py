@@ -29,7 +29,6 @@ from httpx import ASGITransport, AsyncClient
 
 from nanitics import (
     BiddableAgent,
-    FixedBidGenerator,
     InMemoryPersistentTraceStore,
     LLMResponse,
     MockLLMClient,
@@ -37,6 +36,7 @@ from nanitics import (
     TracedExecutor,
     Usage,
 )
+from nanitics.experimental import FixedBidGenerator
 from nanitics.infrastructure.errors import ToolParameterError
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter
 

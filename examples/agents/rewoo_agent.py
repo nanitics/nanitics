@@ -14,10 +14,12 @@ from examples.helpers import make_emitter, make_response
 from nanitics import (
     InMemoryPlanStore,
     MockLLMClient,
+    tool,
+)
+from nanitics.experimental import (
     ReWOOAgent,
     ReWOOPlan,
     ReWOOStep,
-    tool,
 )
 from nanitics.infrastructure import (
     PlanCreatedEvent,

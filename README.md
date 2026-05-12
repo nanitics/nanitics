@@ -21,25 +21,29 @@ Build agentic systems your team can debug, extend, and own. Built and used by [P
 
 ## Features
 
-**Agent strategies** — Built-in strategies for different problem shapes: [ReAct](docs/guides/agent-types.md), Reasoning, CodeAct, Reflexion, ReWOO, LATS, and Tree of Thought.
+**Agent strategies** — Built-in strategies for different problem shapes: [ReAct, Reasoning, CodeAct](docs/guides/agent-types.md) in the core surface; Reflexion, ReWOO, LATS, Tree of Thought in `nanitics.experimental`.
 
-**Memory** — [Working, episodic, long-term, and semantic memory](docs/guides/memory.md) for persistent agent state.
+**Memory** — [Working, episodic, long-term, semantic, and shared memory](docs/guides/memory.md) for persistent agent state.
 
-**Orchestration** — Compose agents into [pipelines, DAGs, loops, conditionals, and map-reduce workflows](docs/guides/orchestration.md).
+**Orchestration** — Compose agents into [Sequential, Parallel, and DAG workflows](docs/guides/orchestration.md) in the core surface; Loop, Conditional, MapReduce, and Pipeline in `nanitics.experimental`.
 
-**Multi-agent coordination** — [Handoff, supervisor, agent-as-tool, blackboard, debate, consensus, bidding, broadcast, message bus, peer network, judge router](docs/guides/multi-agent-coordination.md).
+**Multi-agent coordination** — [agent-as-tool, broadcast, blackboard, supervisor, judge router](docs/guides/multi-agent-coordination.md) in the core surface; the orchestrator factory and structured handoff stack in `nanitics.patterns`; bidding, debate, consensus, message bus, and peer network in `nanitics.experimental`.
 
 **Evaluation** — [Programmatic and LLM-based evaluators](docs/guides/evaluation.md) for assessing agent output quality.
 
 **Human-in-the-Loop** — [Approval gates, revision gates, and durable HITL](docs/guides/human-in-the-loop.md) with checkpoint suspension for long-running workflows.
 
-**Tools** — [Function tools, conditional tools, and tool composition](docs/guides/tools.md) with automatic schema generation.
+**Tools** — [Function tools, MCP tools, and built-in tools](docs/guides/tools.md) (web search, HTTP, file read, code execution) with automatic schema generation.
 
 **Observability** — [Event-based tracing](docs/guides/observability.md) with the Observatory trace viewer for inspecting agent execution.
 
-**Planning** — [Upfront and adaptive planning](docs/guides/planning.md) with goal tracking and plan adherence evaluation.
+**Planning** — [Upfront and adaptive planning](docs/guides/planning.md) with goal tracking and plan adherence evaluation; hierarchical-decomposition planning in `nanitics.experimental`.
 
 **Safety** — [Iteration limits, cancellation tokens, and sandboxed code execution](docs/guides/safety.md).
+
+## Public API surface
+
+The SDK exposes three namespaces. `nanitics` is the recommended core — primitives and load-bearing compositions for building most agentic systems. `nanitics.patterns` exposes named compositions over the core (sugar over primitives — `create_orchestrator`, the structured handoff stack). `nanitics.experimental` exposes specialized primitives that are structurally distinct but niche — reach for them deliberately rather than by default. Everything in `experimental` and `patterns` is part of the v1.0 surface and supported; the namespace signals *adoption guidance*, not maturity. `nanitics.__all__` (plus `nanitics.patterns.__all__` and `nanitics.experimental.__all__`) is the authoritative list.
 
 ## Quick Start
 

@@ -11,11 +11,11 @@ import asyncio
 
 from examples.helpers import make_emitter
 from nanitics import (
-    Conditional,
     FunctionStep,
     Sequential,
     WorkflowStep,
 )
+from nanitics.experimental import Conditional
 from nanitics.infrastructure import (
     WorkflowCompleteEvent,
     WorkflowStartEvent,

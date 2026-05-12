@@ -2,6 +2,8 @@
 
 > For API details — signatures, fields, constraints — read the docstrings in your editor, in the source tree under [`nanitics/`](../../nanitics/), or browse them at [docs.nanitics.dev](https://docs.nanitics.dev/). `nanitics.__all__` is the authoritative public surface.
 
+> **Namespace:** `ReActAgent`, `ReasoningAgent`, and `CodeActAgent` live in top-level `nanitics`. The specialized strategies — `ReWOOAgent`, `ReflexionAgent`, `TreeOfThoughtAgent`, `LATSAgent` — live in `nanitics.experimental`. Import accordingly.
+
 Choosing the right agent type is the most important architectural decision. Each type implements a different reasoning strategy — how the agent thinks, plans, and acts. This guide helps you pick the right one and understand the trade-offs.
 
 For constructor signatures, parameters, and data models, see the docstrings in the source code.

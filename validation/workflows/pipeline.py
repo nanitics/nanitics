@@ -54,9 +54,11 @@ from nanitics import (
     AgentStep,
     FunctionStep,
     InMemoryEmitter,
+    ReActAgent,
+)
+from nanitics.experimental import (
     Pipeline,
     PipelineContractError,
-    ReActAgent,
     Stage,
 )
 from nanitics.infrastructure import (

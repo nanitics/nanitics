@@ -78,9 +78,9 @@ from __future__ import annotations
 from nanitics import (
     InMemoryEmitter,
     InMemoryEpisodeStore,
-    LATSAgent,
     tool,
 )
+from nanitics.experimental import LATSAgent
 from nanitics.infrastructure import (
     LLMRequestEvent,
     MCTSBackpropagationEvent,

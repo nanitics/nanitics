@@ -45,10 +45,10 @@ from nanitics import (
     AgentStep,
     FunctionStep,
     InMemoryEmitter,
-    Loop,
     ReActAgent,
     StepResult,
 )
+from nanitics.experimental import Loop
 from nanitics.infrastructure import (
     AgentStartEvent,
     WorkflowStartEvent,
