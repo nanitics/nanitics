@@ -220,7 +220,10 @@ def test_cli_entrypoint_defaults_resolve_real_project(
     """`main()` with no arguments resolves `nanitics`, `docs/guides`, and `pyproject.toml`.
 
     Exercises the default-parameter branches (`package=None`, `guides_dir=None`,
-    `description=None`) against the real repo.
+    `description=None`) against the real repo. Also verifies that the auto-load
+    path picks up the `nanitics.patterns` and `nanitics.experimental` namespaces
+    as `###` subsections under `## API` with anchors that point at their pdoc
+    pages.
     """
     repo_root = _SCRIPT_PATH.parent.parent
     monkeypatch.chdir(repo_root)
@@ -231,6 +234,13 @@ def test_cli_entrypoint_defaults_resolve_real_project(
     assert text.startswith("# Nanitics\n")
     assert "## API" in text
     assert "## Guides" in text
+    # `nanitics.patterns` and `nanitics.experimental` are rendered as `###`
+    # subsections, and their anchors live at their pdoc pages — not at the
+    # core `nanitics.html`.
+    assert "### nanitics.patterns" in text
+    assert "### nanitics.experimental" in text
+    assert "nanitics/patterns.html#create_orchestrator" in text
+    assert "nanitics/experimental.html#ReWOOAgent" in text
 
 
 def test_whitespace_only_docstring_falls_back_to_no_description(

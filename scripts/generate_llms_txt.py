@@ -1,12 +1,14 @@
 """Generate `llms.txt` for the hosted API reference.
 
-Walks `nanitics.__all__` plus `docs/guides/*.md` and emits an `llms.txt`
-file conforming to the llms.txt spec (https://llmstxt.org/). Invoked by
-`just docs` after pdoc runs and by the `docs.yml` GitHub Actions workflow.
+Walks `nanitics.__all__`, `nanitics.patterns.__all__`, and
+`nanitics.experimental.__all__` plus `docs/guides/*.md` and emits an
+`llms.txt` file conforming to the llms.txt spec (https://llmstxt.org/).
+Invoked by `just docs` after pdoc runs and by the `docs.yml` GitHub
+Actions workflow.
 
-One source of truth: the package's own `__all__` and the existing guide
-tree. No hand-maintained listing — when `__all__` changes or a guide is
-added, the next `just docs` run regenerates `llms.txt` to match.
+One source of truth: each package's own `__all__` and the existing guide
+tree. No hand-maintained listing — when an `__all__` changes or a guide
+is added, the next `just docs` run regenerates `llms.txt` to match.
 """
 
 from __future__ import annotations
@@ -96,9 +98,29 @@ def _walk_attribute_docstrings(package: ModuleType) -> dict[str, str]:
     return mapping
 
 
-def _render_api_section(package: ModuleType, warnings: list[str]) -> list[str]:
-    """Render the `## API` block. Missing docstrings land in `warnings`."""
-    lines = ["## API", ""]
+def _render_api_section(
+    package: ModuleType,
+    warnings: list[str],
+    *,
+    html_path: str = "nanitics.html",
+    section_header: str | None = None,
+) -> list[str]:
+    """Render an API block. Missing docstrings land in `warnings`.
+
+    Args:
+        package: Module whose ``__all__`` to walk.
+        warnings: Accumulator for symbols with no docstring.
+        html_path: Path on the hosted docs site where the symbols are rendered
+            (e.g. ``"nanitics.html"`` for core, ``"nanitics/patterns.html"``
+            for ``nanitics.patterns``). Used to construct each symbol's anchor URL.
+        section_header: Optional subsection name. When ``None`` (the default),
+            the block opens with ``## API``. When provided, the block opens
+            with ``### {section_header}`` — used to mark
+            ``nanitics.patterns`` / ``nanitics.experimental`` subsections
+            under the single top-level ``## API`` heading.
+    """
+    heading = "## API" if section_header is None else f"### {section_header}"
+    lines = [heading, ""]
     attribute_docstrings = _walk_attribute_docstrings(package)
     symbols = sorted(getattr(package, "__all__", []))
     for name in symbols:
@@ -109,7 +131,7 @@ def _render_api_section(package: ModuleType, warnings: list[str]) -> list[str]:
         if description is None:
             warnings.append(name)
             description = "No description available."
-        anchor = f"{_HOSTED_BASE_URL}/nanitics.html#{name}"
+        anchor = f"{_HOSTED_BASE_URL}/{html_path}#{name}"
         lines.append(f"- [{name}]({anchor}): {description}")
     lines.append("")
     return lines
@@ -168,6 +190,7 @@ def main(
     argv: Sequence[str] | None = None,
     *,
     package: ModuleType | None = None,
+    extra_packages: Sequence[tuple[ModuleType, str, str]] | None = None,
     guides_dir: Path | None = None,
     description: str | None = None,
 ) -> int:
@@ -176,14 +199,44 @@ def main(
     Parameters are injectable so the unit tests can exercise the walker
     against a deterministic fixture tree without importing the real
     `nanitics` package or touching the real guides.
+
+    Args:
+        argv: CLI arguments.
+        package: Top-level package whose ``__all__`` is walked into the
+            ``## API`` block. When ``None``, the CLI auto-loads ``nanitics``
+            and seeds ``extra_packages`` with ``nanitics.patterns`` and
+            ``nanitics.experimental`` (when not already provided).
+        extra_packages: Additional packages to render as ``### {header}``
+            subsections under the same ``## API`` heading. Each entry is
+            ``(package, html_path, section_header)``. Tests that inject a
+            ``package`` argument can leave this ``None`` to keep the
+            single-section output shape.
+        guides_dir: Path to ``docs/guides``.
+        description: One-line project tagline (typically loaded from
+            ``pyproject.toml``).
     """
     args = _parse_args(argv)
 
     if package is None:
         try:
             import nanitics as _nanitics
+            import nanitics.experimental as _nanitics_experimental
+            import nanitics.patterns as _nanitics_patterns
 
             package = _nanitics
+            if extra_packages is None:
+                extra_packages = [
+                    (
+                        _nanitics_patterns,
+                        "nanitics/patterns.html",
+                        "nanitics.patterns",
+                    ),
+                    (
+                        _nanitics_experimental,
+                        "nanitics/experimental.html",
+                        "nanitics.experimental",
+                    ),
+                ]
         except ImportError as exc:
             print(f"error: cannot import `nanitics`: {exc}", file=sys.stderr)
             return 2
@@ -207,6 +260,15 @@ def main(
     warnings: list[str] = []
     lines: list[str] = ["# Nanitics", "", f"> {description}", ""]
     lines.extend(_render_api_section(package, warnings))
+    for pkg, html_path, section_header in extra_packages or []:
+        lines.extend(
+            _render_api_section(
+                pkg,
+                warnings,
+                html_path=html_path,
+                section_header=section_header,
+            )
+        )
     lines.extend(_render_guides_section(guides_dir, warnings))
 
     for warning in warnings:
