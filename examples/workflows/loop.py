@@ -14,11 +14,11 @@ from examples.helpers import make_emitter, make_response
 from nanitics import (
     AgentStep,
     FunctionStep,
-    Loop,
     MockLLMClient,
     ReActAgent,
     StepResult,
 )
+from nanitics.experimental import Loop
 from nanitics.infrastructure import (
     WorkflowCompleteEvent,
     WorkflowStartEvent,

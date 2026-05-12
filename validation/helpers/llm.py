@@ -93,7 +93,7 @@ def make_llm_client(
 
         return OpenAILLMClient(model=resolved_model, api_key=api_key)
     if provider == "mistral":
-        from nanitics import MistralLLMClient
+        from nanitics.experimental import MistralLLMClient
 
         return MistralLLMClient(model=resolved_model, api_key=api_key)
     # litellm

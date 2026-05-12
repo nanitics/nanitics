@@ -1,0 +1,177 @@
+"""Specialized Nanitics primitives.
+
+This namespace holds primitives that are structurally distinct from
+those in :mod:`nanitics` but specialized enough that adopters should
+reach for them deliberately rather than by default — niche agent
+strategies, advanced coordination patterns, reactive and peer-consultation
+multi-agent topologies, and provider clients that have a broader
+replacement in :mod:`nanitics`.
+
+Every symbol here is part of the v1.0 surface and supported.
+:mod:`nanitics.experimental` signals adoption guidance, not maturity.
+Nothing here is more likely to change than the rest of the SDK.
+
+What lives here:
+
+* **Agent strategies** — :class:`ReWOOAgent`, :class:`ReflexionAgent`,
+  :class:`TreeOfThoughtAgent`, :class:`LATSAgent` with their supporting
+  types.
+* **Hierarchical-decomposition planning** — :class:`TaskPlan`,
+  :class:`TaskNode`, :class:`DecompositionContributor`,
+  :func:`plan_to_workflow`.
+* **Workflow long-tail** — :class:`Loop`, :class:`Conditional`,
+  :class:`MapReduce`, :class:`Pipeline`.
+* **Reactive / peer-consultation topologies** — :class:`MessageBus`,
+  :class:`PeerNetwork` with their supporting types.
+* **Coordination patterns** — :class:`Bidding`, :class:`Debate`,
+  :class:`Consensus` with their supporting types.
+* **Niche tools** — :class:`ConditionalTool`.
+* **LLM clients** — :class:`MistralLLMClient` (use
+  :class:`nanitics.LiteLLMClient` for Mistral by default).
+"""
+
+from nanitics.capabilities.planning import (
+    DecompositionContributor,
+    TaskNode,
+    TaskPlan,
+)
+from nanitics.composition import (
+    DEFAULT_CALIBRATED_BID_PROMPT_TEMPLATE,
+    AgentExecution,
+    AggregationStrategy,
+    AllocationStrategy,
+    Argument,
+    BestOfN,
+    Bid,
+    Bidding,
+    BiddingResult,
+    BidGenerator,
+    BusCompositeTermination,
+    BusMessage,
+    BusPredicateTermination,
+    BusState,
+    BusTerminationCondition,
+    Conditional,
+    Consensus,
+    ConsensusAggregation,
+    ConsensusResponse,
+    ConsensusResult,
+    Debate,
+    Debater,
+    DebateResolution,
+    DebateResult,
+    DeliberationConfig,
+    FailedExecution,
+    FixedBidGenerator,
+    HighestConfidence,
+    JudgeResolution,
+    LLMBidGenerator,
+    LLMJudgeResolution,
+    Loop,
+    LowestCost,
+    MajorityVoting,
+    MapReduce,
+    MaxExecutionsTermination,
+    MaxMessagesTermination,
+    MessageBus,
+    MessageBusContributor,
+    MessageBusResult,
+    MessageFilter,
+    MessageHistoryProvider,
+    PeerBudgetExceededError,
+    PeerNetwork,
+    PeerSpec,
+    Pipeline,
+    PipelineContractError,
+    ResolutionStrategy,
+    Stage,
+    TopicSubscription,
+    WeightedScore,
+    WeightedVoting,
+    create_bus_tools,
+    plan_to_workflow,
+)
+from nanitics.core import (
+    ActionNode,
+    ConditionalTool,
+    LATSAgent,
+    ReflexionAgent,
+    ReWOOAgent,
+    ReWOOPlan,
+    ReWOOStep,
+    SearchStrategy,
+    ThoughtNode,
+    TreeOfThoughtAgent,
+)
+from nanitics.infrastructure import MistralLLMClient
+
+__all__ = [
+    "DEFAULT_CALIBRATED_BID_PROMPT_TEMPLATE",
+    "ActionNode",
+    "AgentExecution",
+    "AggregationStrategy",
+    "AllocationStrategy",
+    "Argument",
+    "BestOfN",
+    "Bid",
+    "BidGenerator",
+    "Bidding",
+    "BiddingResult",
+    "BusCompositeTermination",
+    "BusMessage",
+    "BusPredicateTermination",
+    "BusState",
+    "BusTerminationCondition",
+    "Conditional",
+    "ConditionalTool",
+    "Consensus",
+    "ConsensusAggregation",
+    "ConsensusResponse",
+    "ConsensusResult",
+    "Debate",
+    "DebateResolution",
+    "DebateResult",
+    "Debater",
+    "DecompositionContributor",
+    "DeliberationConfig",
+    "FailedExecution",
+    "FixedBidGenerator",
+    "HighestConfidence",
+    "JudgeResolution",
+    "LATSAgent",
+    "LLMBidGenerator",
+    "LLMJudgeResolution",
+    "Loop",
+    "LowestCost",
+    "MajorityVoting",
+    "MapReduce",
+    "MaxExecutionsTermination",
+    "MaxMessagesTermination",
+    "MessageBus",
+    "MessageBusContributor",
+    "MessageBusResult",
+    "MessageFilter",
+    "MessageHistoryProvider",
+    "MistralLLMClient",
+    "PeerBudgetExceededError",
+    "PeerNetwork",
+    "PeerSpec",
+    "Pipeline",
+    "PipelineContractError",
+    "ReWOOAgent",
+    "ReWOOPlan",
+    "ReWOOStep",
+    "ReflexionAgent",
+    "ResolutionStrategy",
+    "SearchStrategy",
+    "Stage",
+    "TaskNode",
+    "TaskPlan",
+    "ThoughtNode",
+    "TopicSubscription",
+    "TreeOfThoughtAgent",
+    "WeightedScore",
+    "WeightedVoting",
+    "create_bus_tools",
+    "plan_to_workflow",
+]

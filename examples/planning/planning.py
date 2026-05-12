@@ -17,8 +17,6 @@ import re
 from examples.helpers import make_emitter, make_response
 from nanitics import (
     AdaptivePlanningContributor,
-    DecompositionContributor,
-    # Evaluation
     EvaluationContext,
     EvaluationVerdict,
     GoalTrackingContributor,
@@ -26,24 +24,19 @@ from nanitics import (
     LLMResponse,
     Message,
     MockLLMClient,
-    # Models
     Plan,
-    # Evaluator
     PlanAdherenceEvaluator,
-    # Capability
     PlanningCapability,
     PlanStatus,
     PlanStep,
-    # Agent
     ReActAgent,
     StepStatus,
-    # Prompt
     SystemPromptBuilder,
     ToolCall,
     UpfrontPlanContributor,
-    # Factory
     create_planning_tools,
 )
+from nanitics.experimental import DecompositionContributor
 from nanitics.infrastructure import (
     # Events
     PlanCreatedEvent,

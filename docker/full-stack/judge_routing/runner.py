@@ -27,13 +27,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from nanitics import (
     DEFAULT_CALIBRATED_JUDGE_PROMPT_TEMPLATE,
     BiddableAgent,
-    FixedBidGenerator,
     JudgeRouter,
     JudgeRouterResult,
     RankedCandidate,
     ReActAgent,
     Tool,
 )
+from nanitics.experimental import FixedBidGenerator
 from nanitics.infrastructure.llm.instrumented import InstrumentedLLMClient
 from nanitics.infrastructure.llm.protocol import LLMClient, Message
 from nanitics.infrastructure.observability.emitter import EventEmitter, InMemoryEmitter

@@ -2,6 +2,8 @@
 
 > For API details — signatures, fields, constraints — read the docstrings in your editor, in the source tree under [`nanitics/`](../../nanitics/), or browse them at [docs.nanitics.dev](https://docs.nanitics.dev/). `nanitics.__all__` is the authoritative public surface.
 
+> **Namespace:** `Sequential`, `Parallel`, and `DAG` live in top-level `nanitics`. The long-tail workflow patterns — `Loop`, `Conditional`, `MapReduce`, `Pipeline` — and the planning bridge `plan_to_workflow` live in `nanitics.experimental`.
+
 Orchestration composes steps — agent runs, async functions, or nested workflows — into multi-step workflows. Instead of building complex logic inside a single agent, you decompose work into discrete steps and let a workflow pattern handle sequencing, concurrency, branching, and failure recovery.
 
 The SDK provides 8 workflow patterns, all built on the same `Step`/`StepResult` protocol. Every pattern supports cancellation, checkpoint-based suspension and resumption, and event emission for observability.

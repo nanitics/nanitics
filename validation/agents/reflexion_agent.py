@@ -53,8 +53,8 @@ from nanitics import (
     InMemoryEpisodeStore,
     ProgrammaticEvaluator,
     ReActAgent,
-    ReflexionAgent,
 )
+from nanitics.experimental import ReflexionAgent
 from nanitics.infrastructure import (
     EpisodeRecallEvent,
     EvaluationEvent,

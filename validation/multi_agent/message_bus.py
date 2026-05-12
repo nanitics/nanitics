@@ -54,11 +54,13 @@ from __future__ import annotations
 import pytest
 
 from nanitics import (
-    BusMessage,
     InMemoryEmitter,
+    ReActAgent,
+)
+from nanitics.experimental import (
+    BusMessage,
     MaxMessagesTermination,
     MessageBus,
-    ReActAgent,
     TopicSubscription,
 )
 from nanitics.infrastructure import (

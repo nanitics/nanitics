@@ -14,9 +14,9 @@ from examples.helpers import make_emitter
 from nanitics import (
     FailurePolicy,
     FunctionStep,
-    MapReduce,
     StepResult,
 )
+from nanitics.experimental import MapReduce
 
 
 async def main() -> None:

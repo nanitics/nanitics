@@ -14,20 +14,22 @@ import asyncio
 from examples.helpers import make_emitter, make_response
 from nanitics import (
     AgentResult,
-    HandoffPayload,
-    HandoffStep,
-    HandoffTransfer,
     Message,
     MockLLMClient,
     RawOutputTransfer,
     ReActAgent,
     Usage,
-    create_handoff_chain,
-    handoff_receiver_instructions,
-    handoff_sender_instructions,
 )
 from nanitics.infrastructure import (
     HandoffEvent,
+)
+from nanitics.patterns import (
+    HandoffPayload,
+    HandoffStep,
+    HandoffTransfer,
+    create_handoff_chain,
+    handoff_receiver_instructions,
+    handoff_sender_instructions,
 )
 
 

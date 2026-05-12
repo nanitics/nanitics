@@ -17,12 +17,14 @@ from nanitics import (
     AgentStep,
     FunctionStep,
     MockLLMClient,
-    Pipeline,
-    PipelineContractError,
     ReActAgent,
     Sequential,
-    Stage,
     WorkflowStep,
+)
+from nanitics.experimental import (
+    Pipeline,
+    PipelineContractError,
+    Stage,
 )
 from nanitics.infrastructure import (
     WorkflowStepCompleteEvent,

@@ -26,15 +26,17 @@ from __future__ import annotations
 
 from nanitics import (
     AgentTool,
-    FinalOutputStrategy,
     InMemoryEmitter,
     ReActAgent,
     ReasoningAgent,
-    create_orchestrator,
 )
 from nanitics.infrastructure import (
     AgentCompleteEvent,
     DelegationEvent,
+)
+from nanitics.patterns import (
+    FinalOutputStrategy,
+    create_orchestrator,
 )
 from validation.helpers import (
     assert_result_satisfies,

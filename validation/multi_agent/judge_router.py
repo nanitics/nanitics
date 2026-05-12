@@ -35,11 +35,11 @@ import pytest
 from nanitics import (
     DEFAULT_CALIBRATED_JUDGE_PROMPT_TEMPLATE,
     BiddableAgent,
-    FixedBidGenerator,
     InMemoryEmitter,
     JudgeRouter,
     ReActAgent,
 )
+from nanitics.experimental import FixedBidGenerator
 from nanitics.infrastructure import (
     JudgeAllocatedEvent,
     JudgeRankingEvent,

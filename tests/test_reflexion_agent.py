@@ -3,7 +3,6 @@ from nanitics import (
     MockEmbeddingClient,
     MockLLMClient,
     ReasoningAgent,
-    ReflexionAgent,
 )
 from nanitics.capabilities.memory.episodic import (
     InMemoryEpisodeStore,
@@ -15,6 +14,7 @@ from nanitics.core.agents.evaluation import (
     EvaluationVerdict,
     OutputEvaluator,
 )
+from nanitics.experimental import ReflexionAgent
 from nanitics.infrastructure.observability.events import (
     AgentCompleteEvent,
     AgentStartEvent,

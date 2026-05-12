@@ -52,7 +52,6 @@ from __future__ import annotations
 
 from nanitics import (
     AdaptivePlanningContributor,
-    DecompositionContributor,
     GoalTrackingContributor,
     InMemoryEmitter,
     InMemoryPlanStore,
@@ -61,6 +60,7 @@ from nanitics import (
     PlanStep,
     ReActAgent,
 )
+from nanitics.experimental import DecompositionContributor
 from nanitics.infrastructure import (
     GoalStatusChangedEvent,
     LLMRequestEvent,

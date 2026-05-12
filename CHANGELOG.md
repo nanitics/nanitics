@@ -7,10 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-12
+
+### Changed
+
+- **Public API surface split into three namespaces.** Top-level `nanitics` is now curated to primitives and load-bearing compositions for building most agentic systems (286 symbols); `nanitics.patterns` exposes named compositions over the core primitives — `create_orchestrator`, the structured handoff stack (9 symbols); `nanitics.experimental` exposes specialized primitives that are structurally distinct but niche — `ReWOOAgent`, `ReflexionAgent`, `TreeOfThoughtAgent`, `LATSAgent`, the `Loop`/`Conditional`/`MapReduce`/`Pipeline` workflows, `Bidding`/`Debate`/`Consensus`, `MessageBus`, `PeerNetwork`, hierarchical-decomposition planning, `MistralLLMClient`, `ConditionalTool` (68 symbols). Nothing was removed — every symbol from the previous surface is reachable in one of the three namespaces. **The `experimental` and `patterns` namespaces signal adoption guidance, not maturity** — every symbol there is part of the v1.0 surface and supported. Examples, tests, validation scripts, and guides updated to match.
+
+#### Migration
+
+Adopters with `from nanitics import X` for moved symbols need to update imports. The mapping by area:
+
+| Area | Symbols | New import |
+|---|---|---|
+| Orchestrator factory | `create_orchestrator`, `orchestrator_prompt_section`, `FinalOutputStrategy` | `from nanitics.patterns import ...` |
+| Structured handoff stack | `HandoffPayload`, `HandoffStep`, `HandoffTransfer`, `create_handoff_chain`, `handoff_sender_instructions`, `handoff_receiver_instructions` | `from nanitics.patterns import ...` |
+| Specialized agent strategies | `ReWOOAgent`, `ReflexionAgent`, `TreeOfThoughtAgent`, `LATSAgent` (+ `ReWOOPlan`, `ReWOOStep`, `SearchStrategy`, `ActionNode`, `ThoughtNode`) | `from nanitics.experimental import ...` |
+| Long-tail workflows | `Loop`, `Conditional`, `MapReduce`, `Pipeline`, `Stage`, `PipelineContractError` | `from nanitics.experimental import ...` |
+| Coordination long-tail | `Bidding` (+ allocation strategies, `BidGenerator`, `Bid`, `BiddingResult`, `FixedBidGenerator`, `LLMBidGenerator`, `DEFAULT_CALIBRATED_BID_PROMPT_TEMPLATE`); `Debate`, `Debater`, `Argument`, `DebateResolution`, `DebateResult`, `ResolutionStrategy`, `JudgeResolution`, `LLMJudgeResolution`; `Consensus`, `ConsensusAggregation`, `ConsensusResponse`, `ConsensusResult`, `DeliberationConfig`, `AggregationStrategy`, `MajorityVoting`, `WeightedVoting`, `BestOfN` | `from nanitics.experimental import ...` |
+| Reactive / peer topologies | `MessageBus`, `PeerNetwork` (+ `BusMessage`, `BusState`, `TopicSubscription`, `MessageFilter`, `MessageHistoryProvider`, `MessageBusContributor`, `MessageBusResult`, termination conditions, `PeerSpec`, `PeerBudgetExceededError`, `AgentExecution`, `FailedExecution`, `create_bus_tools`) | `from nanitics.experimental import ...` |
+| Hierarchical-decomposition planning | `TaskPlan`, `TaskNode`, `DecompositionContributor`, `plan_to_workflow` | `from nanitics.experimental import ...` |
+| Niche tools | `ConditionalTool` | `from nanitics.experimental import ConditionalTool` |
+| LLM clients | `MistralLLMClient` (`LiteLLMClient` in core covers Mistral too) | `from nanitics.experimental import MistralLLMClient` |
+
+`Blackboard`, `Supervisor`, `JudgeRouter`, `BiddableAgent` (shared with `JudgeRouter`), `Broadcast`, `AgentTool`, and the four context-transfer strategies remain at the top level — they are core primitives.
+
 ### Documentation
 
 - README, `docs/index.md`, and `docs/vision.md` repositioned around the depth-tier framing. Nanitics is now described as the Python SDK behind [Propodeum](https://propodeum.com)'s production client engagements. The README "Why Nanitics?" section is rewritten around ownability, traceability, and real-services validation; a new "About" section cross-links to propodeum.com. The `pyproject.toml` `description` field is updated to "The Python SDK for production agents." No code, public-API surface, or behavior changes.
 - `docs/guides/diagnosing-agent-issues.md` refactored from a six-layer ordered ladder into an eight-domain map plus an SDK-domain check. The previous "walk top-to-bottom, fix at the highest layer" framing was self-contradictory (the misdiagnosis examples recommended deeper-layer fixes before surface ones). The new framing names domains as categories and introduces a symptom-to-domain routing table as the front door for triage. Substantive additions: multi-agent coordination promoted to its own domain (per Cemri et al.'s MAST taxonomy, where 36.9% of multi-agent failures live in inter-agent dynamics); the deterministic-code layer broadened to cover both "wrong layer of decision-making" and "buggy plumbing around the agent"; cascading failures named as a cross-cutting concern with "trace backwards to the first wrong step" as the operational discipline; a diagnostic-process header (read trace, classify symptom, route to domain, fix at root); references to external taxonomies (MAST, Hamel Husain's evaluation methodology). No code or public-API surface changes.
+- New `docs/missing-patterns.md` capturing what was considered and rejected for v1.0 inclusion during the API-surface audit, plus the surface-decision notes for `BiddableAgent` / template constants / planning-track / Mistral splits.
+- Namespace-tiering callouts added to `docs/guides/agent-types.md`, `orchestration.md`, `multi-agent-foundations.md`, `multi-agent-coordination.md`, `planning.md`, the README, and `docs/index.md` so readers know where each named symbol lives.
 
 ## [0.2.1] - 2026-05-07
 

@@ -46,13 +46,15 @@ import pytest
 
 from nanitics import (
     BiddableAgent,
+    InMemoryEmitter,
+    ReActAgent,
+)
+from nanitics.experimental import (
     Bidding,
     FixedBidGenerator,
     HighestConfidence,
-    InMemoryEmitter,
     LLMBidGenerator,
     LowestCost,
-    ReActAgent,
     WeightedScore,
 )
 from nanitics.infrastructure import (

@@ -376,9 +376,10 @@ import asyncio
 from nanitics import (
     ReActAgent, ReasoningAgent, AnthropicLLMClient, InMemoryEmitter,
     ProgrammaticEvaluator, EvaluationCheck,
-    HandoffStep, create_handoff_chain, RawOutputTransfer,
+    RawOutputTransfer,
     Sequential, AgentStep, tool,
 )
+from nanitics.patterns import HandoffStep, create_handoff_chain
 
 emitter = InMemoryEmitter()
 llm = AnthropicLLMClient(model="claude-haiku-4-5-20251001")
