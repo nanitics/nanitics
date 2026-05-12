@@ -114,7 +114,7 @@ docs:
       --logo-link https://github.com/nanitics/nanitics \
       --footer-text "Nanitics ${version}" \
       -o build/docs/ \
-      nanitics
+      nanitics nanitics.patterns nanitics.experimental
     uv run python scripts/generate_llms_txt.py --output build/docs/llms.txt
     cp docs/CNAME build/docs/CNAME
 
