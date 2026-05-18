@@ -141,7 +141,7 @@ class TracedExecutor:
             min_level=min_level,
             redaction_hook=redaction_hook,
         )
-        emitter.add_listener(collector.handle)
+        emitter.add_listener(collector.handle, internal=True)
 
         try:
             result = await fn(emitter, run_id)

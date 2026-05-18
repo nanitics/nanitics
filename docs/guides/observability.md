@@ -128,7 +128,25 @@ Spans are the foundation of the Observatory's tree visualization — the span hi
 
 ## Listeners
 
-Register callbacks via `add_listener()` for real-time event processing. Listeners are called synchronously on `emit()` and receive every event — filter by type or level within the callback. If a listener raises an exception, it is automatically removed to prevent a broken listener from crashing the agent.
+Register callbacks via `add_listener()` for real-time event processing. Listeners are called synchronously on `emit()` and receive every event — filter by type or level within the callback.
+
+### Two tiers: external vs. internal
+
+`add_listener(callback, *, internal=False)` has two failure modes, picked by the `internal` flag. The default `internal=False` is for adopter-supplied listeners (Slack alerters, metrics, SSE bridges) — if the listener raises, `emit()` catches the exception, issues a `warnings.warn`, and continues, so a buggy listener cannot crash the agent run. `internal=True` is for SDK-internal infrastructure (the trace collector, blackboard contribution forwarding) — exceptions propagate out of `emit()` and fail the run, so an observability-layer failure surfaces instead of silently truncating the trace.
+
+Dispatch order in `emit()` is externals first, then internals. An SSE consumer observes the event before a failing internal listener short-circuits the dispatch.
+
+Rationale: SDK-internal observability failures must surface as run failures; adopter listeners must not crash the run.
+
+```python
+# External (default): adopter code, soft-fail with warning.
+emitter.add_listener(slack_alerter)
+
+# Internal: SDK infrastructure, propagate on failure.
+emitter.add_listener(collector.handle, internal=True)
+```
+
+Most application code uses the default. Reach for `internal=True` only when the listener is part of the SDK's own observability plumbing and you want its failures to abort the run.
 
 Common listener patterns:
 - **SSE streaming** — push events to an `asyncio.Queue`, consume from your SSE endpoint
@@ -431,7 +449,7 @@ For the full trust model, production deployment checklist, and end-to-end guidan
 
 ## Pitfalls
 
-- **Listener exceptions are silent.** If a listener throws, the exception is caught and ignored — the listener stays registered. Keep listener logic simple and handle exceptions within the callback.
+- **External listener exceptions soft-fail.** Adopter-supplied listeners (the default) that throw are caught and converted to a `warnings.warn`; the listener stays registered. Keep listener logic simple and handle exceptions within the callback. SDK-internal listeners (`internal=True`) propagate instead — a failing internal listener fails the run.
 - **`InMemoryEmitter` is not persistent.** Events are lost when the process ends. Use `TraceStore` or listeners for persistence.
 - **`max_events` drops oldest events.** If you set a cap, you lose early events (agent start, initial context). Set it high enough to keep the full trace, or use a listener to persist events before they're dropped.
 - **Span nesting relies on `ContextVar`.** If you create tasks with `asyncio.create_task()`, each task inherits the span stack at creation time but has its own copy. Spans created in child tasks don't affect the parent.

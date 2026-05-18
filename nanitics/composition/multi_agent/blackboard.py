@@ -357,7 +357,7 @@ class Blackboard:
             elif isinstance(event, SharedMemoryRetractEvent):
                 collector.record_retract(event)
 
-        self._emitter.add_listener(_contribution_listener)
+        self._emitter.add_listener(_contribution_listener, internal=True)
 
         try:
             for round_number in range(1, self._max_rounds + 1):
