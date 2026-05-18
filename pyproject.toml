@@ -10,7 +10,7 @@ exclude = [
 [project]
 name = "nanitics"
 version = "0.3.0"
-description = "The Python SDK for production agents."
+description = "Python SDK for building single-agent and multi-agent AI systems"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"
