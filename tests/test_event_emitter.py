@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from nanitics import (
     EventEmitter,
     InMemoryEmitter,
@@ -227,7 +229,11 @@ class TestListeners:
 
         assert order == ["first", "second"]
 
-    def test_listener_exception_does_not_remove_listener(self) -> None:
+    def test_external_listener_exception_does_not_remove_listener(self) -> None:
+        """External (adopter-supplied) listener exceptions are soft-failed:
+        ``emit`` returns normally, a warning is emitted, and the failing
+        listener stays registered for subsequent emits.
+        """
         emitter = InMemoryEmitter(trace_id="trace-1")
         calls: list[str] = []
 
@@ -237,8 +243,8 @@ class TestListeners:
         def good_listener(e: object) -> None:
             calls.append("good")
 
-        emitter.add_listener(bad_listener)
-        emitter.add_listener(good_listener)
+        emitter.add_listener(bad_listener, internal=False)
+        emitter.add_listener(good_listener, internal=False)
 
         event = AgentStartEvent(
             trace_id=emitter.trace_id,
@@ -282,6 +288,58 @@ class TestListeners:
 
         # Listener should see the event already in the list
         assert events_at_callback == [1]
+
+    def test_internal_listener_exception_propagates(self) -> None:
+        """SDK-internal listener failures must surface as run failures."""
+        emitter = InMemoryEmitter(trace_id="trace-1")
+
+        def bad_internal(_: object) -> None:
+            raise RuntimeError("collector down")
+
+        emitter.add_listener(bad_internal, internal=True)
+
+        event = AgentStartEvent(
+            trace_id=emitter.trace_id,
+            span_id=emitter.span_id,
+            agent_name="test",
+            task_input="hello",
+            tools_available=[],
+        )
+        with pytest.raises(RuntimeError, match="collector down"):
+            emitter.emit(event)
+
+        # Event is still appended before dispatch — preserves prior contract.
+        assert emitter.events == [event]
+
+    def test_dispatch_order_externals_before_internals(self) -> None:
+        """Externals run first so an SSE consumer observes the event before a
+        failing internal listener propagates."""
+        emitter = InMemoryEmitter(trace_id="trace-1")
+        order: list[str] = []
+
+        def external(_: object) -> None:
+            order.append("external")
+
+        def bad_internal(_: object) -> None:
+            order.append("internal")
+            raise RuntimeError("boom")
+
+        # Register internal first to prove dispatch order is by classification,
+        # not registration order.
+        emitter.add_listener(bad_internal, internal=True)
+        emitter.add_listener(external, internal=False)
+
+        event = AgentStartEvent(
+            trace_id=emitter.trace_id,
+            span_id=emitter.span_id,
+            agent_name="test",
+            task_input="hello",
+            tools_available=[],
+        )
+        with pytest.raises(RuntimeError, match="boom"):
+            emitter.emit(event)
+
+        assert order == ["external", "internal"]
 
 
 class TestMaxEvents:
@@ -491,6 +549,55 @@ class TestCreateChild:
                 )
             )
         assert len(child.events) == 3
+
+    def test_child_preserves_listener_classification(self) -> None:
+        """``create_child`` copies each listener with its original
+        internal/external flag; ``_append_forwarded`` is itself internal."""
+        parent = InMemoryEmitter(trace_id="trace-1")
+        external_calls: list[object] = []
+        internal_calls: list[object] = []
+
+        def bad_internal(_: object) -> None:
+            internal_calls.append("hit")
+            raise RuntimeError("internal boom")
+
+        parent.add_listener(external_calls.append, internal=False)
+        parent.add_listener(bad_internal, internal=True)
+
+        child = parent.create_child()
+
+        event = AgentStartEvent(
+            trace_id=child.trace_id,
+            span_id=child.span_id,
+            agent_name="test",
+            task_input="hello",
+            tools_available=[],
+        )
+
+        # Internal classification carried over: child emit must raise.
+        with pytest.raises(RuntimeError, match="internal boom"):
+            child.emit(event)
+
+        # External listener still received the event before the internal raise.
+        assert external_calls == [event]
+        assert internal_calls == ["hit"]
+        # _append_forwarded is internal — the event reached the parent's events
+        # list (forwarding ran, since internals dispatch even when a later one
+        # raises only if registered earlier; here _append_forwarded is the
+        # last-added internal, so a prior failing internal short-circuits it.
+        # Re-test forwarding alone with a non-raising parent:
+        parent2 = InMemoryEmitter(trace_id="trace-2")
+        child2 = parent2.create_child()
+        child2.emit(
+            AgentStartEvent(
+                trace_id=child2.trace_id,
+                span_id=child2.span_id,
+                agent_name="t",
+                task_input="hi",
+                tools_available=[],
+            )
+        )
+        assert len(parent2.events) == 1
 
 
 class TestAgentBind:

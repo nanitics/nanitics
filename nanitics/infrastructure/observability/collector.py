@@ -33,7 +33,7 @@ class TraceCollector:
     Register as a listener on an :class:`EventEmitter`::
 
         collector = TraceCollector(store=store, parent_id="run-123")
-        emitter.add_listener(collector.handle)
+        emitter.add_listener(collector.handle, internal=True)
 
     Args:
         store: Persistent store to flush events to.

@@ -43,8 +43,29 @@ class EventEmitter(Protocol):
         """Record an event and notify all listeners."""
         ...
 
-    def add_listener(self, callback: Callable[[TraceEvent], None]) -> None:
-        """Register a callback invoked for every emitted event."""
+    def add_listener(
+        self,
+        callback: Callable[[TraceEvent], None],
+        *,
+        internal: bool = False,
+    ) -> None:
+        """Register a callback invoked for every emitted event.
+
+        Args:
+            callback: Function called with each emitted ``TraceEvent``.
+            internal: When ``False`` (the default), the listener is treated as
+                adopter-supplied: exceptions raised from ``callback`` are
+                caught and converted to a ``warnings.warn`` so a buggy
+                listener cannot crash the agent run. When ``True``, the
+                listener is treated as SDK-internal infrastructure (e.g. the
+                trace collector): exceptions propagate out of ``emit`` and
+                fail the run, so observability failures surface instead of
+                being silently swallowed.
+
+        Dispatch order in ``emit`` is externals first, then internals — so a
+        failing internal listener does not prevent externals from observing
+        the event.
+        """
         ...
 
     def span(self, name: str) -> AbstractContextManager[None]:
@@ -95,7 +116,7 @@ class InMemoryEmitter:
         self._span_stack: ContextVar[list[str]] = ContextVar("span_stack")
         self._span_stack.set([root_span_id])
         self.events: list[TraceEvent] = []
-        self._listeners: list[Callable[[TraceEvent], None]] = []
+        self._listeners: list[tuple[Callable[[TraceEvent], None], bool]] = []
 
     @property
     def trace_id(self) -> str:
@@ -116,14 +137,30 @@ class InMemoryEmitter:
         self.events.append(event)
         if self._max_events is not None and len(self.events) > self._max_events:
             self.events = self.events[-self._max_events :]
-        for listener in list(self._listeners):
+        # Dispatch order: externals first, then internals. A failing internal
+        # listener propagates out of ``emit`` and fails the run, but only
+        # after externals (e.g. SSE consumers) have already observed the
+        # event.
+        snapshot = list(self._listeners)
+        for listener, is_internal in snapshot:
+            if is_internal:
+                continue
             try:
                 listener(event)
             except Exception as exc:
                 warnings.warn(f"Event listener failed: {exc}", stacklevel=2)
+        for listener, is_internal in snapshot:
+            if not is_internal:
+                continue
+            listener(event)
 
-    def add_listener(self, callback: Callable[[TraceEvent], None]) -> None:
-        self._listeners.append(callback)
+    def add_listener(
+        self,
+        callback: Callable[[TraceEvent], None],
+        *,
+        internal: bool = False,
+    ) -> None:
+        self._listeners.append((callback, internal))
 
     def _append_forwarded(self, event: TraceEvent) -> None:
         """Append a child-emitter event to this emitter's ``events`` list.
@@ -159,9 +196,9 @@ class InMemoryEmitter:
             parent_span_id=self.parent_span_id,
             initial_span_id=self.span_id,
         )
-        for listener in self._listeners:
-            child.add_listener(listener)
-        child.add_listener(self._append_forwarded)
+        for listener, is_internal in self._listeners:
+            child.add_listener(listener, internal=is_internal)
+        child.add_listener(self._append_forwarded, internal=True)
         return child
 
     @contextmanager
