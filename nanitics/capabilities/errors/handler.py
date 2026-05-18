@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 
 from nanitics.capabilities.errors.classification import (
     ErrorCategory,
@@ -48,7 +49,19 @@ class ErrorHandler:
         self._retry_policy = retry_policy
         self._max_corrections = max_corrections
         self._max_total_corrections = max_total_corrections
-        self._total_corrections = 0
+        # Per-instance ``ContextVar`` holding the correction counter for
+        # the current asyncio task. Mirrors ``Agent._emitter_var`` — a
+        # shared ``Agent`` (and so its single ``ErrorHandler``) can serve
+        # multiple concurrent bound runs without one run's ``reset()`` or
+        # increments leaking into another's budget. Unset reads default
+        # to ``0`` via the ``_get_total`` helper.
+        self._total_corrections_var: ContextVar[int] = ContextVar(f"error_handler_total_corrections_{id(self)}")
+
+    def _get_total(self) -> int:
+        return self._total_corrections_var.get(0)
+
+    def _set_total(self, n: int) -> None:
+        self._total_corrections_var.set(n)
 
     @classmethod
     def default(cls) -> ErrorHandler:
@@ -126,8 +139,8 @@ class ErrorHandler:
             ErrorCategory.CORRECTABLE,
             ErrorCategory.RETRYABLE,
         ):
-            if attempt < self._max_corrections and self._total_corrections < self._max_total_corrections:
-                self._total_corrections += 1
+            if attempt < self._max_corrections and self._get_total() < self._max_total_corrections:
+                self._set_total(self._get_total() + 1)
                 return format_correction_prompt(
                     error,
                     attempt + 1,
@@ -161,8 +174,8 @@ class ErrorHandler:
         if category != ErrorCategory.CORRECTABLE:
             return None
 
-        if attempt < self._max_corrections and self._total_corrections < self._max_total_corrections:
-            self._total_corrections += 1
+        if attempt < self._max_corrections and self._get_total() < self._max_total_corrections:
+            self._set_total(self._get_total() + 1)
             return format_correction_prompt(
                 error,
                 attempt + 1,
@@ -178,7 +191,7 @@ class ErrorHandler:
         """
         if self._max_corrections == 0:
             return False
-        return attempt >= self._max_corrections or self._total_corrections >= self._max_total_corrections
+        return attempt >= self._max_corrections or self._get_total() >= self._max_total_corrections
 
     def format_degradation_message(self, error: Exception) -> str:
         """Produce a terminal feedback message for the LLM after exhausting corrections.
@@ -197,8 +210,14 @@ class ErrorHandler:
         )
 
     def reset(self) -> None:
-        """Reset per-run state. Called at the start of each _execute()."""
-        self._total_corrections = 0
+        """Reset per-run state. Called at the start of each _execute().
+
+        Clears the correction counter for the current asyncio task only —
+        the counter is task-scoped via a per-instance ``ContextVar``
+        (mirroring ``Agent._emitter_var``), so concurrent bound runs of a
+        shared agent do not wipe each other's budget.
+        """
+        self._set_total(0)
 
     @property
     def max_corrections(self) -> int:
@@ -206,7 +225,19 @@ class ErrorHandler:
 
     @property
     def total_corrections(self) -> int:
-        return self._total_corrections
+        """Corrections consumed in the current asyncio task.
+
+        Backed by a per-instance ``ContextVar``, so concurrent bound runs
+        of a shared agent each observe their own count.
+        """
+        return self._get_total()
 
     def restore(self, total_corrections: int) -> None:
-        self._total_corrections = total_corrections
+        """Set the correction counter for the current asyncio task.
+
+        Used by ReAct/CodeAct resume to re-seed the count from a
+        checkpoint. The write is scoped to the resuming task's
+        ``ContextVar`` slot, so a parallel idle task on the same agent
+        still observes its own (typically zero) count.
+        """
+        self._set_total(total_corrections)

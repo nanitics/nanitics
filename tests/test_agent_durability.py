@@ -879,6 +879,37 @@ class TestErrorHandlerRestore:
         handler = ErrorHandler()
         assert handler.total_corrections == 0
 
+    async def test_restore_is_scoped_to_resuming_task(self) -> None:
+        """``restore(...)`` writes to the resuming task's ContextVar slot
+        only — a parallel idle task on the same shared handler must still
+        observe its own (zero) count. Guards the per-task isolation that
+        ``Agent._emitter_var`` already provides for emitters.
+        """
+        import asyncio
+
+        handler = ErrorHandler(max_corrections=3, max_total_corrections=5)
+        gate_restored = asyncio.Event()
+        gate_idle_checked = asyncio.Event()
+
+        async def resuming_task() -> int:
+            handler.restore(4)
+            gate_restored.set()
+            await gate_idle_checked.wait()
+            return handler.total_corrections
+
+        async def idle_task() -> int:
+            await gate_restored.wait()
+            # This task never called ``restore`` itself — its slot must
+            # still read the default ``0`` even though the resuming task
+            # set ``4`` on the same handler instance.
+            observed = handler.total_corrections
+            gate_idle_checked.set()
+            return observed
+
+        resumed_count, idle_count = await asyncio.gather(resuming_task(), idle_task())
+        assert resumed_count == 4
+        assert idle_count == 0
+
 
 # ── Error Handler + Checkpoint Integration ─────────────────
 
