@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from nanitics.capabilities.errors.handler import ErrorHandler
@@ -268,3 +270,93 @@ class TestFailFast:
         error = LLMSchemaViolationError("bad schema")
         result = handler.handle_llm_correction(error, attempt=0)
         assert result is None
+
+
+class TestConcurrentRunsIsolation:
+    """Two concurrent asyncio tasks sharing one ``ErrorHandler`` instance must
+    each get their own correction budget. Mirrors the per-task isolation that
+    ``Agent._emitter_var`` already provides — a shared ``Agent`` (and so its
+    single ``ErrorHandler``) must not let task A's corrections bleed into
+    task B's budget, nor let task B's ``reset()`` wipe task A's count.
+    """
+
+    async def test_per_task_budget_isolation(self) -> None:
+        # Shared handler — same instance both tasks see, just like a shared
+        # Agent's _error_handler is shared across concurrent BoundAgent.run
+        # calls.
+        handler = ErrorHandler(max_corrections=10, max_total_corrections=3)
+        from nanitics.infrastructure.errors import ToolParameterError
+
+        error = ToolParameterError("bad", tool_name="search")
+        gate_a = asyncio.Event()
+        gate_b = asyncio.Event()
+
+        async def run_a() -> int:
+            # Simulate the start-of-_execute reset() on this task.
+            handler.reset()
+            # Consume 2 of "this task's" budget of 3.
+            handler.handle_tool_error(error, attempt=0, available_tools=[])
+            handler.handle_tool_error(error, attempt=1, available_tools=[])
+            # Hand off to run_b so it can do its own reset + corrections.
+            gate_a.set()
+            await gate_b.wait()
+            # After run_b's interleaved activity, this task should still
+            # see its own 2 corrections — not a count poisoned by run_b's
+            # reset() or increments.
+            return handler.total_corrections
+
+        async def run_b() -> int:
+            await gate_a.wait()
+            # Simulate run_b's _execute() reset(). Under the broken shared-
+            # attribute model this also wipes run_a's count.
+            handler.reset()
+            handler.handle_tool_error(error, attempt=0, available_tools=[])
+            gate_b.set()
+            return handler.total_corrections
+
+        count_a, count_b = await asyncio.gather(run_a(), run_b())
+
+        # Each task must observe only its own corrections.
+        assert count_a == 2, (
+            f"run_a saw {count_a} corrections — run_b's reset()/increments leaked into run_a's task-local count."
+        )
+        assert count_b == 1, (
+            f"run_b saw {count_b} corrections — run_a's increments leaked "
+            "into run_b's task-local count after its reset()."
+        )
+
+    async def test_per_task_degradation_uses_own_count(self) -> None:
+        # Same shared handler, but now we assert each task's degradation
+        # decision is driven by its own count, not the union.
+        handler = ErrorHandler(max_corrections=10, max_total_corrections=3)
+        from nanitics.infrastructure.errors import ToolParameterError
+
+        error = ToolParameterError("bad", tool_name="search")
+        gate_a = asyncio.Event()
+        gate_b_done = asyncio.Event()
+
+        async def run_a() -> bool:
+            handler.reset()
+            # run_a uses 1 of 3.
+            handler.handle_tool_error(error, attempt=0, available_tools=[])
+            gate_a.set()
+            await gate_b_done.wait()
+            # run_a is well within its budget — it must not be told to
+            # degrade just because run_b also consumed corrections on the
+            # same shared instance.
+            return handler.should_degrade(error, attempt=0)
+
+        async def run_b() -> None:
+            await gate_a.wait()
+            handler.reset()
+            # run_b exhausts its own budget of 3.
+            handler.handle_tool_error(error, attempt=0, available_tools=[])
+            handler.handle_tool_error(error, attempt=1, available_tools=[])
+            handler.handle_tool_error(error, attempt=2, available_tools=[])
+            gate_b_done.set()
+
+        a_should_degrade, _ = await asyncio.gather(run_a(), run_b())
+
+        assert a_should_degrade is False, (
+            "run_a was prematurely degraded by run_b's correction activity on the shared ErrorHandler instance."
+        )
