@@ -1,9 +1,6 @@
 # Nanitics
 
-The Python SDK for production agents. Build agentic systems your team can
-debug, extend, and own. Nanitics is built and maintained by
-[Propodeum](https://propodeum.com) for production client engagements with
-technical teams taking agentic AI from prototype to production.
+Python SDK for building single-agent and multi-agent AI systems.
 
 Composable primitives — agent strategies, memory, planning, orchestration,
 multi-agent coordination, evaluation, human-in-the-loop, observability —

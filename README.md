@@ -4,18 +4,18 @@
 
 # Nanitics
 
-The Python SDK for production agents.
+Python SDK for building single-agent and multi-agent AI systems.
 
 [![CI](https://github.com/nanitics/nanitics/actions/workflows/ci.yml/badge.svg)](https://github.com/nanitics/nanitics/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/nanitics)](https://pypi.org/project/nanitics/)
 [![Python](https://img.shields.io/pypi/pyversions/nanitics)](https://pypi.org/project/nanitics/)
 [![License](https://img.shields.io/github/license/nanitics/nanitics)](LICENSE)
 
-Build agentic systems your team can debug, extend, and own. Built and used by [Propodeum](https://propodeum.com) for production client engagements. Compose any architecture from reusable primitives. Trace every agent decision.
+Compose agents from typed primitives. Trace every decision through the built-in Observatory. No framework lock-in.
 
 ## Why Nanitics?
 
-- **Your team owns the result.** Apache-2.0, typed, documented, with an explicit public API (`nanitics.__all__`). The codebase a client inherits at the end of an engagement is one their engineers can read, extend, and operate.
+- **Composable primitives, not a framework.** Pick the pieces you need — agent strategies, coordination patterns, memory, evaluation, HITL, tools — and compose them. No runtime or opinionated workflow shape is imposed. Apache-2.0, typed, with an explicit public API (`nanitics.__all__`).
 - **Trace-first observability.** Every agent loop, tool call, and coordination event emits a structured event. The built-in Observatory trace viewer turns that into a live debugging surface from day one. No instrumentation to add.
 - **Real-services validation.** Public components are validated against real LLM providers before release, not just mocks. Mocks drive fast tests; real services prove correctness.
 
@@ -152,7 +152,7 @@ For the complete catalogue — Memory, Orchestration, Evaluation, HITL, Tools, P
 
 ## About
 
-Nanitics is built and maintained by [Propodeum](https://propodeum.com) for production client engagements with technical teams taking agentic AI from prototype to production. If you want help integrating it, see propodeum.com.
+Nanitics is maintained by [Propodeum](https://propodeum.com).
 
 ## License
 

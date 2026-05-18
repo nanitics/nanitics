@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- Reverted the Propodeum-client framing introduced in #47. The README tagline, `docs/index.md` opener, `docs/vision.md` opener, and `pyproject.toml` `description` field are restored to SDK-focused positioning. The README "Why Nanitics?" first bullet returns to "Composable primitives, not a framework." The README "About" section now carries a single neutral attribution line. Nanitics is the SDK; Propodeum is the maintainer, not the audience. No code, public-API surface, or behavior changes.
+
 ## [0.3.0] - 2026-05-12
 
 ### Changed
