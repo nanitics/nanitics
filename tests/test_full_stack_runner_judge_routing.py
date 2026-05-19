@@ -36,9 +36,9 @@ from nanitics import (
     TracedExecutor,
     Usage,
 )
-from nanitics.experimental import FixedBidGenerator
 from nanitics.infrastructure.errors import ToolParameterError
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter
+from nanitics.specialized import FixedBidGenerator
 
 # ── Path setup — make ``judge_routing`` importable as a package ──
 

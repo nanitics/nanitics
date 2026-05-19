@@ -2,7 +2,7 @@
 
 > For API details — signatures, fields, constraints — read the docstrings in your editor, in the source tree under [`nanitics/`](../../nanitics/), or browse them at [docs.nanitics.dev](https://docs.nanitics.dev/). `nanitics.__all__` is the authoritative public surface.
 
-> **Namespace:** `AgentTool`, the four context-transfer strategies (`RawOutputTransfer`/`TrajectoryTransfer`/`SummaryTransfer`/`CustomTransfer`), and `Broadcast` live in top-level `nanitics`. The structured handoff stack — `HandoffPayload`, `HandoffTransfer`, `HandoffStep`, `create_handoff_chain`, `handoff_sender_instructions`, `handoff_receiver_instructions` — lives in `nanitics.patterns`. The reactive and peer-consultation topologies — `MessageBus` and `PeerNetwork` with their supporting types — live in `nanitics.experimental`.
+> **Namespace:** `AgentTool`, the four context-transfer strategies (`RawOutputTransfer`/`TrajectoryTransfer`/`SummaryTransfer`/`CustomTransfer`), and `Broadcast` live in top-level `nanitics`. The structured handoff stack — `HandoffPayload`, `HandoffTransfer`, `HandoffStep`, `create_handoff_chain`, `handoff_sender_instructions`, `handoff_receiver_instructions` — lives in `nanitics.patterns`. The reactive and peer-consultation topologies — `MessageBus` and `PeerNetwork` with their supporting types — live in `nanitics.specialized`.
 
 Multi-agent systems let you split work across specialized agents that communicate and share context. Instead of building one agent that does everything, you compose agents with different expertise, tools, and system prompts — then connect them through communication patterns.
 

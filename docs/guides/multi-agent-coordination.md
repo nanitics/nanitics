@@ -2,7 +2,7 @@
 
 > For API details — signatures, fields, constraints — read the docstrings in your editor, in the source tree under [`nanitics/`](../../nanitics/), or browse them at [docs.nanitics.dev](https://docs.nanitics.dev/). `nanitics.__all__` is the authoritative public surface.
 
-> **Namespace:** `Blackboard`, `Supervisor`, and `JudgeRouter` (with their supporting types) live in top-level `nanitics`. The orchestrator factory — `create_orchestrator`, `orchestrator_prompt_section`, `FinalOutputStrategy` — lives in `nanitics.patterns`. `Bidding`, `Debate`, and `Consensus` (with their supporting types) live in `nanitics.experimental`.
+> **Namespace:** `Blackboard`, `Supervisor`, and `JudgeRouter` (with their supporting types) live in top-level `nanitics`. The orchestrator factory — `create_orchestrator`, `orchestrator_prompt_section`, `FinalOutputStrategy` — lives in `nanitics.patterns`. `Bidding`, `Debate`, and `Consensus` (with their supporting types) live in `nanitics.specialized`.
 
 Coordination patterns handle higher-level concerns: dynamic task delegation, quality monitoring, shared-state collaboration, competitive allocation, adversarial reasoning, and collective agreement. These patterns build on the foundations covered in [Multi-Agent Foundations](multi-agent-foundations.md) — read that first.
 

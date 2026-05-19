@@ -31,8 +31,8 @@ from nanitics import (
     ReActAgent,
     StepResult,
 )
-from nanitics.experimental import MapReduce
 from nanitics.infrastructure import WorkflowStepCompleteEvent
+from nanitics.specialized import MapReduce
 from validation.helpers import (
     assert_result_satisfies,
     make_llm_client,

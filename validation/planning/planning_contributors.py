@@ -60,13 +60,13 @@ from nanitics import (
     PlanStep,
     ReActAgent,
 )
-from nanitics.experimental import DecompositionContributor
 from nanitics.infrastructure import (
     GoalStatusChangedEvent,
     LLMRequestEvent,
     PlanCreatedEvent,
     PlanRevisedEvent,
 )
+from nanitics.specialized import DecompositionContributor
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

@@ -48,12 +48,12 @@ from nanitics import (
     ReActAgent,
     StepResult,
 )
-from nanitics.experimental import Loop
 from nanitics.infrastructure import (
     AgentStartEvent,
     WorkflowStartEvent,
     WorkflowStepCompleteEvent,
 )
+from nanitics.specialized import Loop
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

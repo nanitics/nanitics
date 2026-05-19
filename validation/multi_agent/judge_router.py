@@ -39,7 +39,6 @@ from nanitics import (
     JudgeRouter,
     ReActAgent,
 )
-from nanitics.experimental import FixedBidGenerator
 from nanitics.infrastructure import (
     JudgeAllocatedEvent,
     JudgeRankingEvent,
@@ -47,6 +46,7 @@ from nanitics.infrastructure import (
     JudgeRoutingStartEvent,
     LLMRequestEvent,
 )
+from nanitics.specialized import FixedBidGenerator
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

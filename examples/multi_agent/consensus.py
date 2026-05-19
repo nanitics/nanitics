@@ -16,18 +16,18 @@ from nanitics import (
     MockLLMClient,
     ReActAgent,
 )
-from nanitics.experimental import (
-    BestOfN,
-    Consensus,
-    DeliberationConfig,
-    MajorityVoting,
-    WeightedVoting,
-)
 from nanitics.infrastructure import (
     ConsensusAgreementEvent,
     ConsensusCompleteEvent,
     ConsensusStartEvent,
     ConsensusVoteEvent,
+)
+from nanitics.specialized import (
+    BestOfN,
+    Consensus,
+    DeliberationConfig,
+    MajorityVoting,
+    WeightedVoting,
 )
 
 

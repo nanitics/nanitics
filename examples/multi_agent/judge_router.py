@@ -21,16 +21,16 @@ from nanitics import (
     MockLLMClient,
     ReActAgent,
 )
-from nanitics.experimental import (
-    Bidding,
-    FixedBidGenerator,
-    HighestConfidence,
-)
 from nanitics.infrastructure import (
     JudgeAllocatedEvent,
     JudgeRankingEvent,
     JudgeRoutingCompleteEvent,
     JudgeRoutingStartEvent,
+)
+from nanitics.specialized import (
+    Bidding,
+    FixedBidGenerator,
+    HighestConfidence,
 )
 
 

@@ -8,7 +8,6 @@ from nanitics.capabilities.memory.episodic import (
     InMemoryEpisodeStore,
     OutcomeType,
 )
-from nanitics.experimental import ReflexionAgent
 from nanitics.infrastructure.observability.events import (
     AgentCompleteEvent,
     AgentStartEvent,
@@ -18,6 +17,7 @@ from nanitics.infrastructure.observability.events import (
     ReflectionGeneratedEvent,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.specialized import ReflexionAgent
 from nanitics.strategies.agents.evaluation import (
     EvaluationContext,
     EvaluationResult,

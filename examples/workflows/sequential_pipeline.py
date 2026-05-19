@@ -21,13 +21,13 @@ from nanitics import (
     Sequential,
     WorkflowStep,
 )
-from nanitics.experimental import (
+from nanitics.infrastructure import (
+    WorkflowStepCompleteEvent,
+)
+from nanitics.specialized import (
     Pipeline,
     PipelineContractError,
     Stage,
-)
-from nanitics.infrastructure import (
-    WorkflowStepCompleteEvent,
 )
 
 

@@ -48,16 +48,16 @@ from __future__ import annotations
 import pytest
 
 from nanitics import InMemoryEmitter
-from nanitics.experimental import (
-    PeerNetwork,
-    PeerSpec,
-)
 from nanitics.infrastructure import (
     AgentStartEvent,
     PeerConsultationEvent,
     PeerNetworkCompleteEvent,
     PeerNetworkStartEvent,
     ToolInvokeEvent,
+)
+from nanitics.specialized import (
+    PeerNetwork,
+    PeerSpec,
 )
 from validation.helpers import (
     assert_trace_contains,

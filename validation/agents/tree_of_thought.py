@@ -66,15 +66,15 @@ from __future__ import annotations
 import pytest
 
 from nanitics import InMemoryEmitter
-from nanitics.experimental import (
-    SearchStrategy,
-    TreeOfThoughtAgent,
-)
 from nanitics.infrastructure import (
     TreeSearchCompleteEvent,
     TreeSearchNodeCreatedEvent,
     TreeSearchNodeEvaluatedEvent,
     TreeSearchNodePrunedEvent,
+)
+from nanitics.specialized import (
+    SearchStrategy,
+    TreeOfThoughtAgent,
 )
 from validation.helpers import assert_trace_contains, make_llm_client, run_with_retry
 from validation.helpers.search_evaluators import (

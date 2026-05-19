@@ -36,13 +36,13 @@ from nanitics import (
     UpfrontPlanContributor,
     create_planning_tools,
 )
-from nanitics.experimental import DecompositionContributor
 from nanitics.infrastructure import (
     # Events
     PlanCreatedEvent,
     PlanRevisedEvent,
     PlanStepUpdatedEvent,
 )
+from nanitics.specialized import DecompositionContributor
 
 
 async def main() -> None:

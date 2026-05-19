@@ -1,7 +1,7 @@
 """Generate `llms.txt` for the hosted API reference.
 
 Walks `nanitics.__all__`, `nanitics.patterns.__all__`, and
-`nanitics.experimental.__all__` plus `docs/guides/*.md` and emits an
+`nanitics.specialized.__all__` plus `docs/guides/*.md` and emits an
 `llms.txt` file conforming to the llms.txt spec (https://llmstxt.org/).
 Invoked by `just docs` after pdoc runs and by the `docs.yml` GitHub
 Actions workflow.
@@ -116,7 +116,7 @@ def _render_api_section(
         section_header: Optional subsection name. When ``None`` (the default),
             the block opens with ``## API``. When provided, the block opens
             with ``### {section_header}`` — used to mark
-            ``nanitics.patterns`` / ``nanitics.experimental`` subsections
+            ``nanitics.patterns`` / ``nanitics.specialized`` subsections
             under the single top-level ``## API`` heading.
     """
     heading = "## API" if section_header is None else f"### {section_header}"
@@ -205,7 +205,7 @@ def main(
         package: Top-level package whose ``__all__`` is walked into the
             ``## API`` block. When ``None``, the CLI auto-loads ``nanitics``
             and seeds ``extra_packages`` with ``nanitics.patterns`` and
-            ``nanitics.experimental`` (when not already provided).
+            ``nanitics.specialized`` (when not already provided).
         extra_packages: Additional packages to render as ``### {header}``
             subsections under the same ``## API`` heading. Each entry is
             ``(package, html_path, section_header)``. Tests that inject a
@@ -220,8 +220,8 @@ def main(
     if package is None:
         try:
             import nanitics as _nanitics
-            import nanitics.experimental as _nanitics_experimental
             import nanitics.patterns as _nanitics_patterns
+            import nanitics.specialized as _nanitics_experimental
 
             package = _nanitics
             if extra_packages is None:
@@ -234,7 +234,7 @@ def main(
                     (
                         _nanitics_experimental,
                         "nanitics/experimental.html",
-                        "nanitics.experimental",
+                        "nanitics.specialized",
                     ),
                 ]
         except ImportError as exc:

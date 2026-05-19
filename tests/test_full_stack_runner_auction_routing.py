@@ -34,11 +34,11 @@ from nanitics import (
     Usage,
 )
 from nanitics.composition.multi_agent.bidding import BidGenerator
-from nanitics.experimental import (
+from nanitics.infrastructure.observability.emitter import EventEmitter, InMemoryEmitter
+from nanitics.specialized import (
     Bid,
     FixedBidGenerator,
 )
-from nanitics.infrastructure.observability.emitter import EventEmitter, InMemoryEmitter
 
 # ---------------------------------------------------------------------------
 # Path setup — make ``auction_routing`` importable as a package.

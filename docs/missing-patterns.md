@@ -16,7 +16,7 @@ The SDK threads token usage through `Usage`, `LLMResponseEvent`, and `RoutingLLM
 
 ### Tool composition primitives
 
-Beyond `ConditionalTool` (experimental), there are no primitives for sequencing two tools, falling back from one tool to another on failure, or composing tools into pipelines.
+Beyond `ConditionalTool` (specialized), there are no primitives for sequencing two tools, falling back from one tool to another on failure, or composing tools into pipelines.
 
 **Why rejected:** Tools are functions. Python composes functions. A tool that wraps two other tools is two lines. Naming this pattern adds nothing the language doesn't already provide.
 
@@ -54,7 +54,7 @@ The built-in tools are web search, HTTP, file read, code execution. Adopters fre
 
 `ReWOOAgent` plans a workflow then executes it without re-reasoning. There is no primitive for "user supplies a plan as data, SDK executes it" without an LLM planner stage at all.
 
-**Why rejected:** That is `plan_to_workflow` (experimental) applied to a user-constructed `TaskPlan`. The capability exists; it just lives in experimental because the hierarchical-decomposition track is specialized.
+**Why rejected:** That is `plan_to_workflow` applied to a user-constructed `TaskPlan`. The capability exists; it just lives in `nanitics.specialized` because the hierarchical-decomposition track is reached for deliberately rather than by default.
 
 ## Genuinely flagged for consideration
 
@@ -66,7 +66,7 @@ These were the candidates where the bar is closest to met. They are not in v1.0 
 
 A few decisions made during the audit that are worth recording, since they will look arbitrary in retrospect:
 
-- **`BiddableAgent` stays in core, even though `Bidding` moved to experimental.** `JudgeRouter` (core) reuses `BiddableAgent` so adopters can swap `Bidding` ↔ `JudgeRouter` at the call site. The type's `bid_generator` field is unused by `JudgeRouter` — that asymmetry is documented at the field level and is the deliberate cost of keeping the primitives interchangeable.
-- **`DEFAULT_CALIBRATED_JUDGE_PROMPT_TEMPLATE` is core; `DEFAULT_CALIBRATED_BID_PROMPT_TEMPLATE` is experimental.** The two templates have parallel calibration anchors but ship with their respective routing primitive. `JudgeRouter` is core, so the judge template is core; `Bidding` is experimental, so the bid template is experimental.
-- **`Plan`/`PlanStep` are core; `TaskPlan`/`TaskNode` are experimental.** Two planning data shapes coexist. The linear `Plan` is what `UpfrontPlanContributor` and `AdaptivePlanningContributor` produce. The hierarchical `TaskPlan` is what `DecompositionContributor` produces and what `plan_to_workflow` consumes. Splitting them tracks the split in their consumers.
-- **`MistralLLMClient` is experimental.** `LiteLLMClient` covers Mistral through LiteLLM's translation layer. The native Mistral client exists for adopters who want native error classification and cache-token reporting, but it is not the default reach.
+- **`BiddableAgent` stays in core, even though `Bidding` moved to specialized.** `JudgeRouter` (core) reuses `BiddableAgent` so adopters can swap `Bidding` ↔ `JudgeRouter` at the call site. The type's `bid_generator` field is unused by `JudgeRouter` — that asymmetry is documented at the field level and is the deliberate cost of keeping the primitives interchangeable.
+- **`DEFAULT_CALIBRATED_JUDGE_PROMPT_TEMPLATE` is core; `DEFAULT_CALIBRATED_BID_PROMPT_TEMPLATE` is specialized.** The two templates have parallel calibration anchors but ship with their respective routing primitive. `JudgeRouter` is core, so the judge template is core; `Bidding` is specialized, so the bid template is specialized.
+- **`Plan`/`PlanStep` are core; `TaskPlan`/`TaskNode` are specialized.** Two planning data shapes coexist. The linear `Plan` is what `UpfrontPlanContributor` and `AdaptivePlanningContributor` produce. The hierarchical `TaskPlan` is what `DecompositionContributor` produces and what `plan_to_workflow` consumes. Splitting them tracks the split in their consumers.
+- **`MistralLLMClient` is specialized.** `LiteLLMClient` covers Mistral through LiteLLM's translation layer. The native Mistral client exists for adopters who want native error classification and cache-token reporting, but it is not the default reach.

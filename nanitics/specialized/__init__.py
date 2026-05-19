@@ -1,15 +1,10 @@
 """Specialized Nanitics primitives.
 
-This namespace holds primitives that are structurally distinct from
-those in :mod:`nanitics` but specialized enough that adopters should
-reach for them deliberately rather than by default — niche agent
-strategies, advanced coordination patterns, reactive and peer-consultation
-multi-agent topologies, and provider clients that have a broader
-replacement in :mod:`nanitics`.
-
-Every symbol here is part of the v1.0 surface and supported.
-:mod:`nanitics.experimental` signals adoption guidance, not maturity.
-Nothing here is more likely to change than the rest of the SDK.
+This package holds primitives that are structurally distinct from those
+in :mod:`nanitics` and that adopters should reach for deliberately rather
+than by default — niche agent strategies, advanced coordination patterns,
+reactive and peer-consultation multi-agent topologies, and provider
+clients that have a broader replacement in :mod:`nanitics`.
 
 What lives here:
 

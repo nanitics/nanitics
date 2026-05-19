@@ -16,18 +16,18 @@ from nanitics import (
     ReActAgent,
     ToolCall,
 )
-from nanitics.experimental import (
-    BusMessage,
-    MaxMessagesTermination,
-    MessageBus,
-    MessageBusResult,
-    TopicSubscription,
-)
 from nanitics.infrastructure import (
     MessageBusCompleteEvent,
     MessageBusStartEvent,
     MessageDeliveredEvent,
     MessagePublishedEvent,
+)
+from nanitics.specialized import (
+    BusMessage,
+    MaxMessagesTermination,
+    MessageBus,
+    MessageBusResult,
+    TopicSubscription,
 )
 
 

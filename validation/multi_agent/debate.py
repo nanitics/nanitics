@@ -33,16 +33,16 @@ from nanitics import (
     InMemoryEmitter,
     ReActAgent,
 )
-from nanitics.experimental import (
-    Debate,
-    Debater,
-    JudgeResolution,
-)
 from nanitics.infrastructure import (
     DebateArgumentEvent,
     DebateCompleteEvent,
     DebateResolutionEvent,
     DebateStartEvent,
+)
+from nanitics.specialized import (
+    Debate,
+    Debater,
+    JudgeResolution,
 )
 from validation.helpers import (
     assert_result_satisfies,

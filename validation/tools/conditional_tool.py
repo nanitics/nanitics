@@ -38,8 +38,8 @@ from nanitics import (
     ReActAgent,
     tool,
 )
-from nanitics.experimental import ConditionalTool
 from nanitics.infrastructure import AgentStartEvent, ToolInvokeEvent
+from nanitics.specialized import ConditionalTool
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

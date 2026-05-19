@@ -16,7 +16,7 @@ from nanitics import (
     FunctionStep,
     StepResult,
 )
-from nanitics.experimental import MapReduce
+from nanitics.specialized import MapReduce
 
 
 async def main() -> None:

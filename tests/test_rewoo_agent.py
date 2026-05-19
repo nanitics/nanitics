@@ -9,17 +9,17 @@ from nanitics import (
     tool,
 )
 from nanitics.capabilities.planning.store import InMemoryPlanStore
-from nanitics.experimental import (
-    ReWOOAgent,
-    ReWOOPlan,
-    ReWOOStep,
-)
 from nanitics.infrastructure.observability.events import (
     AgentStartEvent,
     PlanCreatedEvent,
     PlanStepUpdatedEvent,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.specialized import (
+    ReWOOAgent,
+    ReWOOPlan,
+    ReWOOStep,
+)
 from nanitics.strategies.agents.evaluation import (
     EvaluationContext,
     EvaluationResult,

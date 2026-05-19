@@ -21,13 +21,13 @@ from nanitics.capabilities.memory.episodic import (
 )
 from nanitics.capabilities.memory.working_memory import InMemoryWorkingMemory, WorkingMemoryProvider
 from nanitics.capabilities.planning.store import InMemoryPlanStore
-from nanitics.experimental import (
-    ReflexionAgent,
-    ReWOOAgent,
-)
 from nanitics.infrastructure.observability.events import AgentStartEvent
 from nanitics.safety.cancellation import CancellationToken
 from nanitics.safety.sandbox.protocol import ExecutionResult
+from nanitics.specialized import (
+    ReflexionAgent,
+    ReWOOAgent,
+)
 from nanitics.strategies.agents.codeact import CodeActAgent
 from nanitics.strategies.agents.evaluation import (
     EvaluationContext,

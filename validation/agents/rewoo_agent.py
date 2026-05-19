@@ -44,16 +44,16 @@ from nanitics import (
     InMemoryPlanStore,
     tool,
 )
-from nanitics.experimental import (
-    ReWOOAgent,
-    ReWOOPlan,
-)
 from nanitics.infrastructure import (
     LLMRequestEvent,
     PlanCreatedEvent,
     PlanStepUpdatedEvent,
     ToolInvokeEvent,
     ToolResultEvent,
+)
+from nanitics.specialized import (
+    ReWOOAgent,
+    ReWOOPlan,
 )
 from validation.helpers import (
     assert_result_satisfies,
