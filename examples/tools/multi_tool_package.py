@@ -12,14 +12,14 @@ import asyncio
 from typing import Any
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.infrastructure import MockLLMClient
+from nanitics.strategies import (
     FunctionTool,
-    MockLLMClient,
     ReActAgent,
-    ToolCall,
     ToolContext,
     tool,
 )
+from nanitics.tracing import ToolCall
 
 
 def create_counter_tools() -> tuple[tuple[FunctionTool, FunctionTool], dict[str, Any]]:

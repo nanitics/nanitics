@@ -10,16 +10,14 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
-from nanitics import (
-    ImageContentBlock,
-    LLMClient,
+from nanitics.errors import (
     LLMContextLengthError,
     LLMProviderError,
     LLMRateLimitError,
     LLMSchemaViolationError,
-    Message,
-    TextContentBlock,
-    ToolCall,
+)
+from nanitics.infrastructure import (
+    LLMClient,
     ToolSchema,
 )
 from nanitics.infrastructure.llm.mistral import (
@@ -30,6 +28,12 @@ from nanitics.infrastructure.llm.mistral import (
     _parse_tool_calls,
     _to_mistral_messages,
     _to_mistral_tools,
+)
+from nanitics.tracing import (
+    ImageContentBlock,
+    Message,
+    TextContentBlock,
+    ToolCall,
 )
 
 # --- Helpers ---

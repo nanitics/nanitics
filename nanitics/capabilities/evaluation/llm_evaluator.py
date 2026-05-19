@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from asyncio import sleep  # module-local seam — see ``await sleep(wait)`` below
 from collections.abc import Callable
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from pydantic import BaseModel, ConfigDict
 
@@ -19,7 +19,9 @@ from nanitics.infrastructure.observability.events import (
     LLMRequestEvent,
     LLMResponseEvent,
 )
-from nanitics.strategies.agents.base import AgentInput, _input_to_text
+
+if TYPE_CHECKING:
+    from nanitics.strategies.agents.base import AgentInput
 
 
 class _EvaluationResponse(BaseModel):
@@ -49,6 +51,8 @@ def _build_evaluation_prompt(
     criteria: str,
     context: EvaluationContext | None = None,
 ) -> str:
+    from nanitics.strategies.agents.base import _input_to_text
+
     task_text = _input_to_text(task_input)
     prompt = f"""## Original Task
 {task_text}

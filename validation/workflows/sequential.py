@@ -27,11 +27,16 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import AgentStep, InMemoryEmitter, ReActAgent, Sequential
+from nanitics.composition import (
+    AgentStep,
+    Sequential,
+)
 from nanitics.infrastructure import (
     AgentStartEvent,
     WorkflowStepCompleteEvent,
 )
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

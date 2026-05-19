@@ -1,15 +1,6 @@
 import pytest
 from pydantic import ValidationError
 
-from nanitics import (
-    EvaluationCheck,
-    InMemoryEmitter,
-    LLMResponse,
-    MockLLMClient,
-    ProgrammaticEvaluator,
-    ReActAgent,
-    Usage,
-)
 from nanitics.composition.multi_agent.supervisor import (
     BudgetTrigger,
     PredicateTrigger,
@@ -19,9 +10,22 @@ from nanitics.composition.multi_agent.supervisor import (
     SupervisionResult,
     Supervisor,
 )
+from nanitics.evaluation import (
+    EvaluationCheck,
+    ProgrammaticEvaluator,
+)
+from nanitics.infrastructure import (
+    LLMResponse,
+    MockLLMClient,
+)
 from nanitics.infrastructure.llm.protocol import Message
 from nanitics.infrastructure.observability.events import SupervisionEvent
+from nanitics.strategies import ReActAgent
 from nanitics.strategies.agents.base import AgentResult
+from nanitics.tracing import (
+    InMemoryEmitter,
+    Usage,
+)
 
 
 def make_agent(name: str, responses: list[LLMResponse], emitter: InMemoryEmitter) -> ReActAgent:

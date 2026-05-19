@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from nanitics import InMemoryEmitter, MockLLMClient
 from nanitics.capabilities.evaluation.llm_evaluator import LLMEvaluator
 from nanitics.capabilities.evaluation.protocol import EvaluationContext
+from nanitics.infrastructure import MockLLMClient
 from nanitics.infrastructure.errors import LLMRateLimitError
 from nanitics.infrastructure.llm.protocol import LLMResponse, Message
 from nanitics.infrastructure.observability.events import (
@@ -12,6 +12,7 @@ from nanitics.infrastructure.observability.events import (
     LLMResponseEvent,
     Usage,
 )
+from nanitics.tracing import InMemoryEmitter
 
 USAGE = Usage(input_tokens=100, output_tokens=50)
 

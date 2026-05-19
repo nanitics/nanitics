@@ -11,22 +11,24 @@ Related guide: docs/guides/orchestration.md
 import asyncio
 
 from examples.helpers import make_emitter
-from nanitics import (
-    ApprovalGate,
+from nanitics.composition import (
+    CHECKPOINT_SCHEMA_VERSION,
     CheckpointStore,
-    CheckpointVersionError,
-    DurableHumanInputProvider,
     FunctionStep,
-    HumanDecision,
-    HumanInputResponse,
     InMemoryCheckpointStore,
-    InMemoryHitlRequestStore,
     RunCheckpoint,
     Sequential,
     SuspendExecution,
     SuspensionInfo,
 )
-from nanitics.composition import CHECKPOINT_SCHEMA_VERSION
+from nanitics.errors import CheckpointVersionError
+from nanitics.hitl import (
+    ApprovalGate,
+    DurableHumanInputProvider,
+    HumanDecision,
+    HumanInputResponse,
+    InMemoryHitlRequestStore,
+)
 from nanitics.infrastructure import (
     CheckpointSavedEvent,
     ExecutionResumedEvent,

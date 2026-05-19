@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from nanitics import InMemoryEmitter
+from nanitics.tracing import InMemoryEmitter
 
 try:
     from dotenv import load_dotenv

@@ -47,17 +47,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from nanitics import (
-    ErrorHandler,
-    InMemoryEmitter,
-    ReActAgent,
-    tool,
-)
+from nanitics.errors import ErrorHandler
 from nanitics.infrastructure import (
     ErrorCorrectionEvent,
     ToolInvokeEvent,
     ToolResultEvent,
 )
+from nanitics.strategies import (
+    ReActAgent,
+    tool,
+)
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

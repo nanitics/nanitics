@@ -11,20 +11,18 @@ Related guide: docs/guides/agent-types.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    InMemoryPlanStore,
-    MockLLMClient,
-    tool,
-)
 from nanitics.infrastructure import (
+    MockLLMClient,
     PlanCreatedEvent,
     PlanStepUpdatedEvent,
 )
+from nanitics.planning import InMemoryPlanStore
 from nanitics.specialized import (
     ReWOOAgent,
     ReWOOPlan,
     ReWOOStep,
 )
+from nanitics.strategies import tool
 
 # --- Shared tools ---
 

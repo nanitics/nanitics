@@ -41,15 +41,13 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import (
+from nanitics.composition import (
     AllEligible,
     Broadcast,
     CapabilityFilter,
     CollectAll,
     FilterResponses,
-    InMemoryEmitter,
     MergeResponses,
-    ReActAgent,
     SelectBest,
 )
 from nanitics.infrastructure import (
@@ -57,6 +55,8 @@ from nanitics.infrastructure import (
     BroadcastCompleteEvent,
     BroadcastStartEvent,
 )
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

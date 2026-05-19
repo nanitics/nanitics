@@ -28,7 +28,9 @@ Running a local model? See [Using a local LLM](./local-llms.md) — any OpenAI-c
 ```python
 import asyncio
 import os
-from nanitics import ReActAgent, AnthropicLLMClient, InMemoryEmitter, tool
+from nanitics.infrastructure import AnthropicLLMClient
+from nanitics.strategies import ReActAgent, tool
+from nanitics.tracing import InMemoryEmitter
 
 
 # 1. Define a tool
@@ -119,7 +121,8 @@ See [Observability](observability.md) for the full event catalog.
 For tests, use `MockLLMClient` to script deterministic responses without calling the API:
 
 ```python
-from nanitics import MockLLMClient, LLMResponse, ToolCall, Usage
+from nanitics.infrastructure import LLMResponse, MockLLMClient
+from nanitics.tracing import ToolCall, Usage
 
 llm = MockLLMClient(responses=[
     LLMResponse(

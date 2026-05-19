@@ -64,7 +64,7 @@ Tools are how agents interact with the world. See [Tools](tools.md) for implemen
 **Tool state** lets you inject per-run dependencies (database connections, API clients) into tools without globals. Pass a `dict[str, Any]` as `tool_state` and access values via `ctx.state["key"]`:
 
 ```python
-from nanitics import ReActAgent, tool, ToolContext
+from nanitics.strategies import ReActAgent, ToolContext, tool
 
 @tool(name="query_db", description="Run a database query")
 async def query_db(query: str, ctx: ToolContext) -> str:
@@ -260,7 +260,8 @@ Safety constraints bound agent execution. See [Safety](safety.md).
 All agent types accept `CancellationToken` for external stop signals. `CodeActAgent` requires a `Sandbox` for code isolation.
 
 ```python
-from nanitics import ReActAgent, CancellationToken
+from nanitics.safety import CancellationToken
+from nanitics.strategies import ReActAgent
 
 agent = ReActAgent(
     name="bounded-agent",
@@ -288,7 +289,9 @@ Events cover the entire lifecycle: agent steps, LLM calls, tool invocations, mem
 
 ```python
 import asyncio
-from nanitics import ReActAgent, AnthropicLLMClient, InMemoryEmitter, tool
+from nanitics.infrastructure import AnthropicLLMClient
+from nanitics.strategies import ReActAgent, tool
+from nanitics.tracing import InMemoryEmitter
 
 @tool(name="search", description="Search for information")
 async def search(query: str) -> str:
@@ -315,14 +318,18 @@ result = asyncio.run(agent.run("What is the capital of France?"))
 
 ```python
 import asyncio
-from nanitics import (
-    ReActAgent, AnthropicLLMClient, InMemoryEmitter, MockEmbeddingClient,
-    ContextManager, EstimateTokenCounter, TruncationPolicy,
+from nanitics.context import ContextManager, EstimateTokenCounter, TruncationPolicy
+from nanitics.infrastructure import AnthropicLLMClient, MockEmbeddingClient
+from nanitics.memory import (
+    EpisodicMemoryContributor,
+    EpisodicMemoryProvider,
+    InMemoryEpisodeStore,
+    InMemorySemanticStore,
     InMemoryWorkingMemory,
-    InMemorySemanticStore, create_semantic_memory_tools,
-    InMemoryEpisodeStore, EpisodicMemoryProvider, EpisodicMemoryContributor,
-    tool,
+    create_semantic_memory_tools,
 )
+from nanitics.strategies import ReActAgent, tool
+from nanitics.tracing import InMemoryEmitter
 
 emitter = InMemoryEmitter()
 embedding_client = MockEmbeddingClient()  # Use VoyageEmbeddingClient in production
@@ -373,12 +380,11 @@ result = asyncio.run(agent.run("Research the latest developments in quantum comp
 
 ```python
 import asyncio
-from nanitics import (
-    ReActAgent, ReasoningAgent, AnthropicLLMClient, InMemoryEmitter,
-    ProgrammaticEvaluator, EvaluationCheck,
-    RawOutputTransfer,
-    Sequential, AgentStep, tool,
-)
+from nanitics.composition import AgentStep, RawOutputTransfer, Sequential
+from nanitics.evaluation import EvaluationCheck, ProgrammaticEvaluator
+from nanitics.infrastructure import AnthropicLLMClient
+from nanitics.strategies import ReActAgent, ReasoningAgent, tool
+from nanitics.tracing import InMemoryEmitter
 from nanitics.patterns import HandoffStep, create_handoff_chain
 
 emitter = InMemoryEmitter()
@@ -435,17 +441,15 @@ result = asyncio.run(workflow.execute("Write an article about renewable energy t
 
 ```python
 import asyncio
-from nanitics import (
-    ReActAgent, AnthropicLLMClient, InMemoryEmitter, MockEmbeddingClient,
-    CancellationToken,
-    ErrorHandler, RetryPolicy,
-    ProgrammaticEvaluator, EvaluationCheck,
-    InMemoryEpisodeStore, EpisodicMemoryProvider, EpisodicMemoryContributor,
-    AgentTool,
-    ApprovalWrappedTool,
-    CallbackHumanInputProvider, HumanInputResponse, HumanDecision,
-    tool,
-)
+from nanitics.composition import AgentTool
+from nanitics.errors import ErrorHandler, RetryPolicy
+from nanitics.evaluation import EvaluationCheck, ProgrammaticEvaluator
+from nanitics.hitl import ApprovalWrappedTool, CallbackHumanInputProvider, HumanDecision, HumanInputResponse
+from nanitics.infrastructure import AnthropicLLMClient, MockEmbeddingClient
+from nanitics.memory import EpisodicMemoryContributor, EpisodicMemoryProvider, InMemoryEpisodeStore
+from nanitics.safety import CancellationToken
+from nanitics.strategies import ReActAgent, tool
+from nanitics.tracing import InMemoryEmitter
 
 emitter = InMemoryEmitter()
 llm = AnthropicLLMClient(model="claude-haiku-4-5-20251001")

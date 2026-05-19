@@ -33,13 +33,13 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import (
-    InMemoryEmitter,
+from nanitics.infrastructure import AgentStartEvent, ToolInvokeEvent
+from nanitics.specialized import ConditionalTool
+from nanitics.strategies import (
     ReActAgent,
     tool,
 )
-from nanitics.infrastructure import AgentStartEvent, ToolInvokeEvent
-from nanitics.specialized import ConditionalTool
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

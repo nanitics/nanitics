@@ -12,7 +12,6 @@ Uses ``MockLLMClient`` for determinism; no real provider calls.
 
 from __future__ import annotations
 
-from nanitics import InMemoryEmitter, ReActAgent
 from nanitics.capabilities.evaluation.llm_evaluator import LLMEvaluator
 from nanitics.capabilities.memory.episodic import (
     Episode,
@@ -39,7 +38,9 @@ from nanitics.infrastructure.observability.events import (
     SharedMemoryReadEvent,
     WorkingMemoryReadEvent,
 )
+from nanitics.strategies import ReActAgent
 from nanitics.strategies.agents.evaluation import EvaluationContext
+from nanitics.tracing import InMemoryEmitter
 from tests.testing_helpers import make_response, make_usage
 
 

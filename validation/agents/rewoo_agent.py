@@ -39,11 +39,6 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import (
-    InMemoryEmitter,
-    InMemoryPlanStore,
-    tool,
-)
 from nanitics.infrastructure import (
     LLMRequestEvent,
     PlanCreatedEvent,
@@ -51,10 +46,13 @@ from nanitics.infrastructure import (
     ToolInvokeEvent,
     ToolResultEvent,
 )
+from nanitics.planning import InMemoryPlanStore
 from nanitics.specialized import (
     ReWOOAgent,
     ReWOOPlan,
 )
+from nanitics.strategies import tool
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

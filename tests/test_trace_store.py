@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
-from nanitics import (
+from nanitics.infrastructure.observability.events import AgentStartEvent, LLMResponseEvent
+from nanitics.tracing import (
     InMemoryTraceStore,
     Trace,
     TraceQuery,
@@ -8,7 +9,6 @@ from nanitics import (
     TraceSummary,
     Usage,
 )
-from nanitics.infrastructure.observability.events import AgentStartEvent, LLMResponseEvent
 
 # --- Helpers ---
 

@@ -42,13 +42,13 @@ from __future__ import annotations
 
 import uuid
 
-from nanitics import (
-    InMemoryEmitter,
+from nanitics.infrastructure import SemanticSearchEvent
+from nanitics.memory import (
     PostgresSemanticStore,
-    ReActAgent,
     create_semantic_memory_tools,
 )
-from nanitics.infrastructure import SemanticSearchEvent
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_trace_contains,
     make_embedding_client,

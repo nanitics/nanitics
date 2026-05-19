@@ -11,7 +11,7 @@ Related guide: docs/guides/orchestration.md
 import asyncio
 
 from examples.helpers import make_emitter
-from nanitics import (
+from nanitics.composition import (
     FailurePolicy,
     FunctionStep,
     StepResult,

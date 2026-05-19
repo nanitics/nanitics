@@ -4,7 +4,6 @@ from uuid import uuid4
 
 import pytest
 
-from nanitics import Tool
 from nanitics.collaboration.approval_wrapped import ApprovalWrappedTool
 from nanitics.collaboration.protocol import (
     CallbackHumanInputProvider,
@@ -20,6 +19,7 @@ from nanitics.infrastructure.observability.events import (
     ToolInvokeEvent,
     ToolResultEvent,
 )
+from nanitics.strategies import Tool
 from nanitics.strategies.tools import ToolRegistry
 from nanitics.strategies.tools.function_tool import tool
 from nanitics.strategies.tools.protocol import ToolResult

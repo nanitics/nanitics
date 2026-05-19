@@ -25,7 +25,11 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
-from nanitics import FunctionTool, Tool, ToolResult
+from nanitics.strategies import (
+    FunctionTool,
+    Tool,
+    ToolResult,
+)
 
 from . import fixtures
 

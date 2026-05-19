@@ -3,12 +3,11 @@ import asyncio
 import pytest
 from pydantic import ValidationError
 
-from nanitics import (
+from nanitics.capabilities.planning.store import InMemoryPlanStore
+from nanitics.infrastructure import (
     LLMResponse,
     MockLLMClient,
-    tool,
 )
-from nanitics.capabilities.planning.store import InMemoryPlanStore
 from nanitics.infrastructure.observability.events import (
     AgentStartEvent,
     PlanCreatedEvent,
@@ -20,6 +19,7 @@ from nanitics.specialized import (
     ReWOOPlan,
     ReWOOStep,
 )
+from nanitics.strategies import tool
 from nanitics.strategies.agents.evaluation import (
     EvaluationContext,
     EvaluationResult,

@@ -26,11 +26,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from nanitics import (
-    InMemoryPersistentTraceStore,
-    MockLLMClient,
-    TracedExecutor,
-)
+from nanitics.infrastructure import MockLLMClient
 from nanitics.infrastructure.llm.protocol import LLMResponse, ToolCall
 from nanitics.infrastructure.observability.events import (
     AgentStartEvent,
@@ -41,6 +37,10 @@ from nanitics.infrastructure.observability.events import (
 from nanitics.infrastructure.observability.storage import (
     StoredTraceEvent,
     TraceEventRecord,
+)
+from nanitics.tracing import (
+    InMemoryPersistentTraceStore,
+    TracedExecutor,
 )
 
 # ---------------------------------------------------------------------------
@@ -414,7 +414,7 @@ def test_caching_client_missing_env_returns_base(
     the Anthropic-with-caching construction path is covered by the step-9
     live run. Here we confirm the fallback does not explode.
     """
-    from nanitics import AnthropicLLMClient
+    from nanitics.infrastructure import AnthropicLLMClient
 
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("NANITICS_LLM_MODEL", raising=False)
@@ -428,7 +428,7 @@ def test_caching_client_reconstructs_with_caching(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Reconstruct an ``AnthropicLLMClient`` with caching when env is set."""
-    from nanitics import AnthropicLLMClient
+    from nanitics.infrastructure import AnthropicLLMClient
 
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setenv("NANITICS_LLM_MODEL", "claude-haiku-4-5-20251001")

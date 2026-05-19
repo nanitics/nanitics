@@ -13,18 +13,13 @@ from typing import Any
 
 import pytest
 
-from nanitics import (
-    InMemoryCheckpointStore,
-    InMemoryHitlRequestStore,
-    MockLLMClient,
-    ReActAgent,
-    Sequential,
-    ToolCall,
-    tool,
-)
 from nanitics.collaboration.approval_wrapped import ApprovalWrappedTool
 from nanitics.collaboration.durable_provider import DurableHumanInputProvider
 from nanitics.collaboration.protocol import HumanDecision, HumanInputResponse
+from nanitics.composition import (
+    InMemoryCheckpointStore,
+    Sequential,
+)
 from nanitics.composition.durability.resume import (
     DurableRun,
     ResumeContext,
@@ -33,7 +28,14 @@ from nanitics.composition.durability.resume import (
     SuspendedRun,
 )
 from nanitics.composition.orchestration.adapters import AgentStep, FunctionStep
+from nanitics.hitl import InMemoryHitlRequestStore
+from nanitics.infrastructure import MockLLMClient
 from nanitics.infrastructure.observability.events import ExecutionResumedEvent
+from nanitics.strategies import (
+    ReActAgent,
+    tool,
+)
+from nanitics.tracing import ToolCall
 from tests.testing_helpers import make_emitter, make_response
 
 _RUN_ID = "agent-step-resume-test"

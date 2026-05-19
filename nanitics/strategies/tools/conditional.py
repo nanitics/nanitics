@@ -7,7 +7,7 @@ and cannot be invoked.
 
 Example::
 
-    from nanitics import ConditionalTool, tool
+    from nanitics.strategies import ConditionalTool, tool
 
     @tool("delete_record", "Delete a database record")
     async def delete_record(record_id: str) -> str:

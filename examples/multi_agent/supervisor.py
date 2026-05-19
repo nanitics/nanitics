@@ -12,21 +12,23 @@ Related guide: docs/guides/multi-agent-coordination.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response, make_usage
-from nanitics import (
+from nanitics.composition import (
     BudgetTrigger,
-    EvaluationCheck,
-    MockLLMClient,
     PredicateTrigger,
-    ProgrammaticEvaluator,
     QualityTrigger,
-    ReActAgent,
     SupervisionAction,
     SupervisionDecision,
     Supervisor,
 )
+from nanitics.evaluation import (
+    EvaluationCheck,
+    ProgrammaticEvaluator,
+)
 from nanitics.infrastructure import (
+    MockLLMClient,
     SupervisionEvent,
 )
+from nanitics.strategies import ReActAgent
 
 
 async def main() -> None:

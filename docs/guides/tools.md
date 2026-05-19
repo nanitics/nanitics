@@ -92,7 +92,8 @@ pip install nanitics[mcp]
 
 <!-- verify: skip — illustrative usage; `llm` and `emitter` are caller-supplied and the `async with` / `await` run inside an async context -->
 ```python
-from nanitics import MCPClient, MCPStdioParameters, ReActAgent
+from nanitics.infrastructure import MCPClient, MCPStdioParameters
+from nanitics.strategies import ReActAgent
 
 params = MCPStdioParameters(
     command="npx",
@@ -166,7 +167,7 @@ pip install nanitics[tools]
 ### `create_web_search_tool`
 
 ```python
-from nanitics import create_web_search_tool
+from nanitics.tools import create_web_search_tool
 
 tool = create_web_search_tool(api_key="...", provider="tavily")  # or provider="brave"
 ```
@@ -178,7 +179,7 @@ Requires `pip install nanitics[http-tools]`. Supports Tavily (default) and Brave
 ### `create_http_tool`
 
 ```python
-from nanitics import create_http_tool
+from nanitics.tools import create_http_tool
 
 tool = create_http_tool(allowed_domains=["api.example.com"])
 ```
@@ -190,7 +191,7 @@ Requires `pip install nanitics[http-tools]`. Construction requires either a non-
 ### `create_file_read_tool`
 
 ```python
-from nanitics import create_file_read_tool
+from nanitics.tools import create_file_read_tool
 
 tool = create_file_read_tool(allowed_paths=["/srv/data"])
 ```
@@ -203,7 +204,8 @@ No optional extras required. Construction requires a non-empty `allowed_paths` l
 
 <!-- verify: skip — illustrative sketch with `...` placeholder; the `async with` runs inside an async context -->
 ```python
-from nanitics import DockerSandbox, SandboxConfig, create_code_execution_tool
+from nanitics.safety import DockerSandbox, SandboxConfig
+from nanitics.tools import create_code_execution_tool
 
 sandbox = DockerSandbox(config=SandboxConfig())
 async with sandbox:
@@ -272,7 +274,7 @@ The resulting JSON Schema includes `"enum": ["name", "address", "email"]` on the
 
 ### Structured Tool Errors
 
-When a tool needs to raise — for example, to surface a typed, structured failure that the agent should reason about — subclass `ToolError` (`from nanitics import ToolError`) rather than raising bare `Exception` or `RuntimeError`. The default classifier in `nanitics.capabilities.errors.classification.classify_error` treats every `ToolError` subclass as `CORRECTABLE` by default, so the correction loop receives the error and the agent gets a chance to self-correct on the next iteration. App-defined typed errors carrying domain fields (entity ids, validation reasons, retry hints) inherit this behavior without per-class registration. The one documented exception is `ToolTimeoutError`, which is classified as `RETRYABLE`; refer to each error class's docstring for the authoritative per-class category. See [Error Handling](error-handling.md) for the full hierarchy and recovery model.
+When a tool needs to raise — for example, to surface a typed, structured failure that the agent should reason about — subclass `ToolError` (`from nanitics.errors import ToolError`) rather than raising bare `Exception` or `RuntimeError`. The default classifier in `nanitics.capabilities.errors.classification.classify_error` treats every `ToolError` subclass as `CORRECTABLE` by default, so the correction loop receives the error and the agent gets a chance to self-correct on the next iteration. App-defined typed errors carrying domain fields (entity ids, validation reasons, retry hints) inherit this behavior without per-class registration. The one documented exception is `ToolTimeoutError`, which is classified as `RETRYABLE`; refer to each error class's docstring for the authoritative per-class category. See [Error Handling](error-handling.md) for the full hierarchy and recovery model.
 
 ### Dispatch Boundary Behaviour
 
@@ -286,7 +288,9 @@ Two consumer-side implications follow:
 ```python
 import pytest
 
-from nanitics import ToolCall, ToolExecutionError, ToolRegistry, tool
+from nanitics.errors import ToolExecutionError
+from nanitics.strategies import ToolRegistry, tool
+from nanitics.tracing import ToolCall
 
 
 @tool("buggy", "A tool that raises an unexpected exception.")
@@ -313,7 +317,9 @@ Three trade-offs matter:
 3. **Failure-mode mapping.** When the tool-internal LLM fails (provider error, parse error, etc.), decide whether the tool should surface it as a `ToolError` subclass — which the default classifier treats as `CORRECTABLE` so the agent can retry with adjustment — or let the underlying exception propagate, which the dispatch boundary wraps as `ToolExecutionError` (and the classifier treats as `FATAL`).
 
 ```python
-from nanitics import LLMClient, ToolContext, ToolError, ToolResult, ToolSchema
+from nanitics.errors import ToolError
+from nanitics.infrastructure import LLMClient, ToolSchema
+from nanitics.strategies import ToolContext, ToolResult
 from nanitics.infrastructure.llm.protocol import Message
 
 
@@ -355,7 +361,7 @@ The trade-off is increased per-call upstream cost and latency in exchange for be
 ```python
 from typing import Any
 
-from nanitics import ToolResult, tool
+from nanitics.strategies import ToolResult, tool
 
 
 async def upstream_search(query: str, limit: int) -> list[dict[str, Any]]:
@@ -384,7 +390,7 @@ When the shared dependency is read-only and known at construction time (e.g., a 
 ```python
 from typing import Any
 
-from nanitics import FunctionTool, ToolContext, tool
+from nanitics.strategies import FunctionTool, ToolContext, tool
 
 
 def create_counter_tools() -> tuple[tuple[FunctionTool, FunctionTool], dict[str, Any]]:
@@ -406,7 +412,7 @@ The consumer wires the factory return into the agent so both tools see the same 
 
 <!-- verify: skip — illustrative wiring; `llm`, `emitter`, and `system_prompt` are caller-supplied -->
 ```python
-from nanitics import ReActAgent
+from nanitics.strategies import ReActAgent
 
 tools, state = create_counter_tools()
 agent = ReActAgent(

@@ -3,11 +3,6 @@
 import pytest
 from pydantic import ValidationError
 
-from nanitics import (
-    InMemoryEmitter,
-    MockLLMClient,
-    ReActAgent,
-)
 from nanitics.composition.multi_agent.debate import (
     Argument,
     Debate,
@@ -19,12 +14,15 @@ from nanitics.composition.multi_agent.debate import (
     ResolutionStrategy,
     _format_transcript,
 )
+from nanitics.infrastructure import MockLLMClient
 from nanitics.infrastructure.observability.events import (
     DebateArgumentEvent,
     DebateCompleteEvent,
     DebateResolutionEvent,
     DebateStartEvent,
 )
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from tests.testing_helpers import make_emitter, make_response
 
 
@@ -230,7 +228,7 @@ class TestLLMJudgeResolution:
             await strategy.resolve(transcript, "topic")
 
     async def test_fallback_when_parsed_is_none(self) -> None:
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from tests.testing_helpers import make_usage
 
         # Response with content=None → parsed stays None → fallback path

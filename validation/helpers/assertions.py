@@ -15,10 +15,14 @@ from typing import TYPE_CHECKING, TypeVar
 
 from pydantic import BaseModel, Field, ValidationError
 
-from nanitics import LLMClient, Message, TraceEvent
+from nanitics.infrastructure import LLMClient
+from nanitics.tracing import (
+    Message,
+    TraceEvent,
+)
 
 if TYPE_CHECKING:
-    from nanitics import InMemoryEmitter
+    from nanitics.tracing import InMemoryEmitter
 
 E = TypeVar("E", bound=TraceEvent)
 

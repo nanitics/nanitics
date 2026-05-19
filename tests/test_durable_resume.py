@@ -16,18 +16,15 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import (
-    InMemoryCheckpointStore,
-    InMemoryHitlRequestStore,
-    MockLLMClient,
-    ReActAgent,
-    Sequential,
-)
 from nanitics.collaboration.approval_gate import ApprovalGate
 from nanitics.collaboration.durable_provider import DurableHumanInputProvider
 from nanitics.collaboration.protocol import (
     HumanDecision,
     HumanInputResponse,
+)
+from nanitics.composition import (
+    InMemoryCheckpointStore,
+    Sequential,
 )
 from nanitics.composition.durability.models import RunCheckpoint, SuspensionInfo
 from nanitics.composition.durability.resume import (
@@ -39,6 +36,9 @@ from nanitics.composition.durability.resume import (
 )
 from nanitics.composition.durability.suspension import SuspendExecution
 from nanitics.composition.orchestration.adapters import FunctionStep
+from nanitics.hitl import InMemoryHitlRequestStore
+from nanitics.infrastructure import MockLLMClient
+from nanitics.strategies import ReActAgent
 from tests.testing_helpers import make_emitter
 
 _RUN_ID = "durable-run-test"
@@ -429,8 +429,9 @@ class TestDurableRunWrappedAgent:
     """
 
     async def test_agent_is_wrapped_and_suspension_returns_suspended_run(self) -> None:
-        from nanitics import ToolCall, tool
         from nanitics.collaboration.approval_wrapped import ApprovalWrappedTool
+        from nanitics.strategies import tool
+        from nanitics.tracing import ToolCall
         from tests.testing_helpers import make_response
 
         @tool(name="add", description="Add two numbers")

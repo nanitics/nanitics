@@ -12,15 +12,12 @@ import asyncio
 import json
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    MockLLMClient,
-    ReActAgent,
-)
 from nanitics.infrastructure import (
     DebateArgumentEvent,
     DebateCompleteEvent,
     DebateResolutionEvent,
     DebateStartEvent,
+    MockLLMClient,
 )
 from nanitics.specialized import (
     Argument,
@@ -32,6 +29,7 @@ from nanitics.specialized import (
     LLMJudgeResolution,
     ResolutionStrategy,
 )
+from nanitics.strategies import ReActAgent
 
 
 async def main() -> None:

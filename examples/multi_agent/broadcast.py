@@ -11,7 +11,7 @@ Related guide: docs/guides/multi-agent-foundations.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.composition import (
     AgentFailure,
     Broadcast,
     BroadcastResponse,
@@ -20,15 +20,15 @@ from nanitics import (
     CollectAll,
     FilterResponses,
     MergeResponses,
-    MockLLMClient,
-    ReActAgent,
     SelectBest,
 )
 from nanitics.infrastructure import (
     BroadcastCompleteEvent,
     BroadcastResponseEvent,
     BroadcastStartEvent,
+    MockLLMClient,
 )
+from nanitics.strategies import ReActAgent
 
 TASK = "Should we expand into the European market?"
 

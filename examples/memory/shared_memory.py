@@ -11,23 +11,25 @@ Related guide: docs/guides/memory.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.infrastructure import (
+    MockLLMClient,
+    SharedMemoryWriteEvent,
+)
+from nanitics.memory import (
     ContextContent,
     InMemorySharedMemory,
-    MockLLMClient,
-    ReActAgent,
     SharedEntry,
     SharedMemory,
     SharedMemoryContributor,
     SharedMemoryProvider,
-    SystemPromptBuilder,
-    SystemPromptContributor,
-    ToolCall,
     create_shared_memory_tools,
 )
-from nanitics.infrastructure import (
-    SharedMemoryWriteEvent,
+from nanitics.strategies import (
+    ReActAgent,
+    SystemPromptBuilder,
+    SystemPromptContributor,
 )
+from nanitics.tracing import ToolCall
 
 
 async def main() -> None:
@@ -346,7 +348,7 @@ async def main() -> None:
     provider = SharedMemoryProvider(store, emitter=emitter, scopes=["findings"], max_entries=50)
 
     # Provider returns ContextContent with formatted board state
-    from nanitics import Message
+    from nanitics.tracing import Message
 
     messages = [Message(role="user", content="Summarize the findings")]
     context = await provider.provide(messages)

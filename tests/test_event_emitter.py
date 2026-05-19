@@ -2,20 +2,20 @@ import asyncio
 
 import pytest
 
-from nanitics import (
-    EventEmitter,
-    InMemoryEmitter,
-    LLMResponse,
-    MockLLMClient,
-    ReasoningAgent,
-    Usage,
-)
 from nanitics.infrastructure import (
     AgentStartEvent,
     BaseEvent,
+    LLMResponse,
+    MockLLMClient,
     SpanEndEvent,
     SpanStartEvent,
     TraceEvent,
+)
+from nanitics.strategies import ReasoningAgent
+from nanitics.tracing import (
+    EventEmitter,
+    InMemoryEmitter,
+    Usage,
 )
 
 
@@ -639,8 +639,12 @@ class TestAgentBind:
 
     async def test_bound_run_routes_tool_events_to_child_emitter(self) -> None:
         """Tool dispatch inside a bound run emits to the bound child emitter."""
-        from nanitics import ReActAgent, ToolCall, tool
         from nanitics.infrastructure.observability.events import ToolInvokeEvent
+        from nanitics.strategies import (
+            ReActAgent,
+            tool,
+        )
+        from nanitics.tracing import ToolCall
 
         @tool(name="stub", description="Stub tool for testing bind()")
         async def stub_tool(query: str) -> str:

@@ -24,20 +24,22 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 
-from nanitics import (
-    BiddableAgent,
-    InMemoryPersistentTraceStore,
+from nanitics.composition import BiddableAgent
+from nanitics.composition.multi_agent.bidding import BidGenerator
+from nanitics.infrastructure import (
     LLMResponse,
     MockLLMClient,
-    ReActAgent,
-    TracedExecutor,
-    Usage,
 )
-from nanitics.composition.multi_agent.bidding import BidGenerator
 from nanitics.infrastructure.observability.emitter import EventEmitter, InMemoryEmitter
 from nanitics.specialized import (
     Bid,
     FixedBidGenerator,
+)
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import (
+    InMemoryPersistentTraceStore,
+    TracedExecutor,
+    Usage,
 )
 
 # ---------------------------------------------------------------------------

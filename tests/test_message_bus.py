@@ -6,12 +6,6 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from pydantic import ValidationError
 
-from nanitics import (
-    InMemoryEmitter,
-    LLMResponse,
-    MockLLMClient,
-    ReActAgent,
-)
 from nanitics.composition.multi_agent.message_bus import (
     BusCompositeTermination,
     BusMessage,
@@ -27,6 +21,10 @@ from nanitics.composition.multi_agent.message_bus import (
     TopicSubscription,
     create_bus_tools,
 )
+from nanitics.infrastructure import (
+    LLMResponse,
+    MockLLMClient,
+)
 from nanitics.infrastructure.llm.protocol import ToolCall
 from nanitics.infrastructure.observability.events import (
     MessageBusCompleteEvent,
@@ -35,6 +33,8 @@ from nanitics.infrastructure.observability.events import (
     MessagePublishedEvent,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from tests.testing_helpers import make_emitter, make_response, make_usage
 
 

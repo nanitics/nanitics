@@ -11,23 +11,25 @@ Related guide: docs/guides/error-handling.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.errors import (
     ErrorCategory,
     ErrorHandler,
     LLMContextLengthError,
     LLMRateLimitError,
-    MockLLMClient,
-    ReActAgent,
     RetryPolicy,
-    ToolCall,
     ToolParameterError,
     classify_error,
-    tool,
 )
 from nanitics.infrastructure import (
     ErrorCorrectionEvent,
     ErrorDegradationEvent,
+    MockLLMClient,
 )
+from nanitics.strategies import (
+    ReActAgent,
+    tool,
+)
+from nanitics.tracing import ToolCall
 
 
 async def main() -> None:

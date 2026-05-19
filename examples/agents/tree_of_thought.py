@@ -10,13 +10,13 @@ import asyncio
 import json
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.evaluation import (
     EvaluationContext,
     EvaluationResult,
     EvaluationVerdict,
-    MockLLMClient,
 )
 from nanitics.infrastructure import (
+    MockLLMClient,
     TreeSearchCompleteEvent,
     TreeSearchNodeCreatedEvent,
     TreeSearchNodeEvaluatedEvent,

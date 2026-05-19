@@ -11,19 +11,19 @@ Related guide: docs/guides/orchestration.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.composition import (
     AgentStep,
     FunctionStep,
-    MockLLMClient,
-    ReActAgent,
     StepResult,
 )
 from nanitics.infrastructure import (
+    MockLLMClient,
     WorkflowCompleteEvent,
     WorkflowStartEvent,
     WorkflowStepCompleteEvent,
 )
 from nanitics.specialized import Loop
+from nanitics.strategies import ReActAgent
 
 
 async def main() -> None:

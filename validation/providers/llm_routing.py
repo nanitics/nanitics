@@ -31,21 +31,21 @@ import os
 
 import pytest
 
-from nanitics import (
+from nanitics.infrastructure import (
     CostBudgetRouting,
-    InMemoryEmitter,
-    InstrumentedLLMClient,
-    Message,
+    LLMRequestEvent,
+    LLMResponseEvent,
+    ModelRoutingEvent,
     RoutingLLMClient,
     RuleBasedRouting,
     ToolSchema,
 )
-from nanitics.infrastructure import (
-    LLMRequestEvent,
-    LLMResponseEvent,
-    ModelRoutingEvent,
-)
 from nanitics.infrastructure.llm.anthropic import AnthropicLLMClient
+from nanitics.tracing import (
+    InMemoryEmitter,
+    InstrumentedLLMClient,
+    Message,
+)
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

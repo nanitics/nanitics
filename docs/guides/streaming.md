@@ -34,7 +34,7 @@ The canonical shape, stripped down to show how the primitives wire together:
 ```python
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
-from nanitics import TraceCollector
+from nanitics.tracing import TraceCollector
 
 app = FastAPI()
 

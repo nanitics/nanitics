@@ -13,7 +13,10 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from nanitics import InMemoryEmitter, TraceEvent
+from nanitics.tracing import (
+    InMemoryEmitter,
+    TraceEvent,
+)
 
 
 def _resolve_script_name() -> str:

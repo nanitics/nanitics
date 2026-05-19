@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pytest
 
-from nanitics import tool
+from nanitics.strategies import tool
 
 # --- Inline tool definitions (identical to former builtins.py) ---
 

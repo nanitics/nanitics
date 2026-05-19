@@ -15,21 +15,23 @@ import asyncio
 import re
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.infrastructure import (
+    GoalStatusChangedEvent,
+    LLMResponse,
+    MockLLMClient,
+)
+from nanitics.planning import (
     Goal,
     GoalStatus,
     InMemoryPlanStore,
-    LLMResponse,
-    Message,
-    MockLLMClient,
     Plan,
     PlanningCapability,
     PlanStep,
-    ReActAgent,
-    ToolCall,
 )
-from nanitics.infrastructure import (
-    GoalStatusChangedEvent,
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import (
+    Message,
+    ToolCall,
 )
 
 

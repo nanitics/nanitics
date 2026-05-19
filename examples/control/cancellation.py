@@ -11,16 +11,16 @@ import asyncio
 import threading
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    CancellationToken,
-    MockLLMClient,
-    ReActAgent,
-    ToolCall,
-    tool,
-)
 from nanitics.infrastructure import (
+    MockLLMClient,
     SafetyCancellationEvent,
 )
+from nanitics.safety import CancellationToken
+from nanitics.strategies import (
+    ReActAgent,
+    tool,
+)
+from nanitics.tracing import ToolCall
 
 
 async def main() -> None:

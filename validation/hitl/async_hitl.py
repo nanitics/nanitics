@@ -47,12 +47,10 @@ from collections import Counter
 
 import pytest
 
-from nanitics import (
+from nanitics.hitl import (
     AsyncHumanInputProvider,
     HumanDecision,
     HumanInputResponse,
-    InMemoryEmitter,
-    ReActAgent,
     create_ask_human_tool,
 )
 from nanitics.infrastructure import (
@@ -62,6 +60,8 @@ from nanitics.infrastructure import (
     LLMRequestEvent,
     LLMResponseEvent,
 )
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

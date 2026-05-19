@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import os
 
-from nanitics import LLMClient
+from nanitics.infrastructure import LLMClient
 
 _PROVIDER_ENV = "NANITICS_LLM_PROVIDER"
 _MODEL_ENV = "NANITICS_LLM_MODEL"
@@ -50,7 +50,7 @@ def build_llm_client() -> LLMClient:
         api_key = os.environ.get(_ANTHROPIC_KEY_ENV)
         if not api_key:
             raise RuntimeError(f"{_PROVIDER_ENV}=anthropic requires {_ANTHROPIC_KEY_ENV}.")
-        from nanitics import AnthropicLLMClient
+        from nanitics.infrastructure import AnthropicLLMClient
 
         return AnthropicLLMClient(model=model, api_key=api_key)
 
@@ -58,6 +58,6 @@ def build_llm_client() -> LLMClient:
     api_key = os.environ.get(_OPENAI_KEY_ENV)
     if not api_key:
         raise RuntimeError(f"{_PROVIDER_ENV}=openai requires {_OPENAI_KEY_ENV}.")
-    from nanitics import OpenAILLMClient
+    from nanitics.infrastructure import OpenAILLMClient
 
     return OpenAILLMClient(model=model, api_key=api_key)

@@ -25,8 +25,14 @@ Acceptance criteria:
 
 from __future__ import annotations
 
-from nanitics import DAG, AgentStep, DAGNode, InMemoryEmitter, ReActAgent
+from nanitics.composition import (
+    DAG,
+    AgentStep,
+    DAGNode,
+)
 from nanitics.infrastructure import WorkflowStartEvent, WorkflowStepCompleteEvent
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

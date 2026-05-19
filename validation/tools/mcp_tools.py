@@ -52,12 +52,13 @@ if _has_mcp:
     import anyio
     from mcp.server.fastmcp import FastMCP
 
-    from nanitics import InMemoryEmitter, MCPClient, ReActAgent
-    from nanitics.infrastructure import ToolInvokeEvent, ToolResultEvent
+    from nanitics.infrastructure import MCPClient, ToolInvokeEvent, ToolResultEvent
     from nanitics.infrastructure.errors import (
         LLMProviderError,
         ToolExecutionError,
     )
+    from nanitics.strategies import ReActAgent
+    from nanitics.tracing import InMemoryEmitter
 
 
 class _ServerState:

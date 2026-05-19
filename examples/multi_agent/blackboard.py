@@ -11,25 +11,25 @@ Related guide: docs/guides/multi-agent-coordination.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.composition import (
     Blackboard,
     BlackboardResult,
-    BlackboardRoundEntry,
-    InMemorySharedMemory,
     MaxRoundsTermination,
-    MockLLMClient,
     NoNewContributions,
     OpportunisticControl,
     PrioritizedControl,
-    ReActAgent,
     ScheduledControl,
-    ToolCall,
 )
 from nanitics.infrastructure import (
     BlackboardCompleteEvent,
+    BlackboardRoundEntry,
     BlackboardRoundEvent,
     BlackboardStartEvent,
+    MockLLMClient,
 )
+from nanitics.memory import InMemorySharedMemory
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import ToolCall
 
 
 async def main() -> None:

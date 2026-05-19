@@ -31,7 +31,9 @@ Create a ReAct agent with a tool:
 
 ```python
 import asyncio
-from nanitics import ReActAgent, MockLLMClient, InMemoryEmitter, tool
+from nanitics.infrastructure import MockLLMClient
+from nanitics.strategies import ReActAgent, tool
+from nanitics.tracing import InMemoryEmitter
 
 
 @tool("greet", "Greet someone by name")

@@ -24,12 +24,7 @@ surfaces ``"coordinator"`` on the ``DelegationEvent``.
 
 from __future__ import annotations
 
-from nanitics import (
-    AgentTool,
-    InMemoryEmitter,
-    ReActAgent,
-    ReasoningAgent,
-)
+from nanitics.composition import AgentTool
 from nanitics.infrastructure import (
     AgentCompleteEvent,
     DelegationEvent,
@@ -38,6 +33,11 @@ from nanitics.patterns import (
     FinalOutputStrategy,
     create_orchestrator,
 )
+from nanitics.strategies import (
+    ReActAgent,
+    ReasoningAgent,
+)
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

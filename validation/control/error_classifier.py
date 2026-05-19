@@ -55,14 +55,13 @@ import math
 
 import pytest
 
-from nanitics import (
+from nanitics.capabilities.errors import retry as _retry_module
+from nanitics.capabilities.errors.retry import retry_with_backoff
+from nanitics.errors import (
     ErrorCategory,
-    InMemoryEmitter,
     RetryPolicy,
     classify_error,
 )
-from nanitics.capabilities.errors import retry as _retry_module
-from nanitics.capabilities.errors.retry import retry_with_backoff
 from nanitics.infrastructure import (
     LLMContextLengthError,
     LLMProviderError,
@@ -74,6 +73,7 @@ from nanitics.infrastructure import (
     ToolTimeoutError,
 )
 from nanitics.infrastructure.observability.events import ErrorRetryEvent
+from nanitics.tracing import InMemoryEmitter
 
 # ---------------------------------------------------------------------------
 # Classification

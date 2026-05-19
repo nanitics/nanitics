@@ -91,7 +91,8 @@ Implement the `OutputEvaluator` protocol for evaluation logic that doesn't fit t
 The protocol hands your `evaluate(output, context)` two things: the final output string and an `EvaluationContext` with `messages` (the full conversation including tool-call and tool-result messages), `task_input` (the original prompt), and tree-search fields for `LATSAgent` / `TreeOfThoughtAgent`. For grounding, verification, or any check that depends on *what the agent did* rather than only *what it said*, walk `context.messages` to reconstruct tool-call history:
 
 ```python
-from nanitics import EvaluationResult, Message
+from nanitics.evaluation import EvaluationResult
+from nanitics.tracing import Message
 
 class SearchBeforeClaimingEvaluator:
     """Fail if the agent produced a factual answer without calling search first."""

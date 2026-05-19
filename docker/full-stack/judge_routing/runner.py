@@ -24,14 +24,12 @@ from typing import TYPE_CHECKING, Any, cast
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from nanitics import (
+from nanitics.composition import (
     DEFAULT_CALIBRATED_JUDGE_PROMPT_TEMPLATE,
     BiddableAgent,
     JudgeRouter,
     JudgeRouterResult,
     RankedCandidate,
-    ReActAgent,
-    Tool,
 )
 from nanitics.infrastructure.llm.instrumented import InstrumentedLLMClient
 from nanitics.infrastructure.llm.protocol import LLMClient, Message
@@ -43,6 +41,10 @@ from nanitics.infrastructure.observability.events import (
     JudgeRoutingStartEvent,
 )
 from nanitics.specialized import FixedBidGenerator
+from nanitics.strategies import (
+    ReActAgent,
+    Tool,
+)
 
 from .tools import account_tools, billing_tools, policy_tools, technical_tools
 

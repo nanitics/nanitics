@@ -50,13 +50,18 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import AgentTool, InMemoryEmitter, ReActAgent, tool
+from nanitics.composition import AgentTool
 from nanitics.infrastructure import (
     AgentStartEvent,
     DelegationEvent,
     ToolInvokeEvent,
     ToolResultEvent,
 )
+from nanitics.strategies import (
+    ReActAgent,
+    tool,
+)
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

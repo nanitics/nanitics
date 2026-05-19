@@ -4,11 +4,6 @@ import json
 
 import pytest
 
-from nanitics import (
-    InMemoryEmitter,
-    MockLLMClient,
-    ReActAgent,
-)
 from nanitics.composition.multi_agent.bidding import (
     DEFAULT_CALIBRATED_BID_PROMPT_TEMPLATE,
     AllocationStrategy,
@@ -23,6 +18,7 @@ from nanitics.composition.multi_agent.bidding import (
     LowestCost,
     WeightedScore,
 )
+from nanitics.infrastructure import MockLLMClient
 from nanitics.infrastructure.observability.events import (
     BidAllocatedEvent,
     BiddingCompleteEvent,
@@ -32,6 +28,8 @@ from nanitics.infrastructure.observability.events import (
     LLMResponseEvent,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from tests.testing_helpers import make_emitter, make_response
 
 

@@ -14,14 +14,13 @@ Related guide: docs/guides/human-in-the-loop.md
 import asyncio
 
 from examples.helpers import make_emitter
-from nanitics import (
+from nanitics.composition import FunctionStep
+from nanitics.hitl import (
     ApprovalGate,
     CallbackHumanInputProvider,
-    FunctionStep,
     HumanDecision,
     HumanInputRequest,
     HumanInputResponse,
-    InMemoryEmitter,
     RevisionGate,
 )
 from nanitics.infrastructure import (
@@ -29,6 +28,7 @@ from nanitics.infrastructure import (
     RevisionCompleteEvent,
     RevisionStartEvent,
 )
+from nanitics.tracing import InMemoryEmitter
 
 
 def make_gate(

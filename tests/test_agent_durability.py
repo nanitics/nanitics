@@ -16,12 +16,6 @@ from typing import Any
 
 import pytest
 
-from nanitics import (
-    MockLLMClient,
-    ReActAgent,
-    ToolCall,
-    tool,
-)
 from nanitics.capabilities.errors.handler import ErrorHandler
 from nanitics.capabilities.memory.working_memory import InMemoryWorkingMemory
 from nanitics.collaboration.approval_wrapped import ApprovalWrappedTool
@@ -42,10 +36,16 @@ from nanitics.composition.durability.store import InMemoryCheckpointStore
 from nanitics.composition.durability.suspension import SuspendExecution
 from nanitics.composition.orchestration.adapters import AgentStep
 from nanitics.composition.orchestration.sequential import Sequential
+from nanitics.infrastructure import MockLLMClient
 from nanitics.infrastructure.observability.events import (
     ExecutionResumedEvent,
     ExecutionSuspendedEvent,
 )
+from nanitics.strategies import (
+    ReActAgent,
+    tool,
+)
+from nanitics.tracing import ToolCall
 from tests.testing_helpers import make_emitter, make_response
 
 # Constant run_id used across the suspend/resume tests in this module. The

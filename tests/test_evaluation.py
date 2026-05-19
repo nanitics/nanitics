@@ -245,15 +245,19 @@ class TestEvaluationRevisionEvent:
 # Agent Integration Tests
 # ──────────────────────────────────────────────────────────
 
-from nanitics import (
-    InMemoryEmitter,
+from nanitics.infrastructure import (
     LLMResponse,
     MockLLMClient,
+)
+from nanitics.strategies import (
     ReActAgent,
     ReasoningAgent,
+    tool,
+)
+from nanitics.tracing import (
+    InMemoryEmitter,
     ToolCall,
     Usage,
-    tool,
 )
 
 

@@ -2,7 +2,6 @@ import asyncio
 
 import pytest
 
-from nanitics import CancellationToken
 from nanitics.composition.orchestration.mapreduce import MapReduce
 from nanitics.composition.orchestration.protocol import FailurePolicy, Step
 from nanitics.infrastructure.observability.events import (
@@ -11,6 +10,7 @@ from nanitics.infrastructure.observability.events import (
     WorkflowStartEvent,
     WorkflowStepCompleteEvent,
 )
+from nanitics.safety import CancellationToken
 from tests.testing_helpers import make_emitter, make_step
 
 # ── Helpers ────────────────────────────────────────────────

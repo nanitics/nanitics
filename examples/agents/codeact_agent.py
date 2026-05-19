@@ -15,18 +15,20 @@ Related guide: docs/guides/agent-types.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    CodeActAgent,
-    ExecutionResult,
-    MockLLMClient,
-    MockSandbox,
-    ToolCall,
-    tool,
-)
 from nanitics.infrastructure import (
     CodeExecutionEvent,
     CodeExecutionResultEvent,
+    MockLLMClient,
 )
+from nanitics.safety import (
+    ExecutionResult,
+    MockSandbox,
+)
+from nanitics.strategies import (
+    CodeActAgent,
+    tool,
+)
+from nanitics.tracing import ToolCall
 
 # --- Local helpers for CodeAct-specific patterns ---
 

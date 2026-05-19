@@ -122,10 +122,6 @@ docs:
 coverage:
     uv run pytest --no-header -q tests --cov=nanitics --cov=docker/full-stack --cov-report=term-missing:skip-covered --cov-fail-under=100 --cov-config=.coveragerc-no-docker
 
-# Public-API surface drift check (advisory, non-blocking — always exits 0).
-check-api-surface:
-    uv run python scripts/check_api_surface.py
-
 # Hard-skips every script when ANTHROPIC_API_KEY is unset. An empty suite
 # (no scripts collected yet) is treated as success so the target is usable
 # during framework bootstrap before scripts exist.

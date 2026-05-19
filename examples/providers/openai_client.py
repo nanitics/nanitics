@@ -12,14 +12,18 @@ Related guide: docs/guides/core-concepts.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    Message,
+from nanitics.infrastructure import (
     MockLLMClient,
-    ReActAgent,
     RoutingLLMClient,
     RuleBasedRouting,
-    ToolCall,
+)
+from nanitics.strategies import (
+    ReActAgent,
     tool,
+)
+from nanitics.tracing import (
+    Message,
+    ToolCall,
 )
 
 
@@ -108,7 +112,7 @@ async def main() -> None:
     assert len(openai_mock.calls) == 1
     assert len(anthropic_mock.calls) == 0
 
-    from nanitics import ToolSchema
+    from nanitics.infrastructure import ToolSchema
 
     with_tools = await router.generate(
         system_prompt="You are helpful.",

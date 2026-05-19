@@ -8,7 +8,10 @@ external service being flaky at the right moment.
 
 from __future__ import annotations
 
-from nanitics import Tool, tool
+from nanitics.strategies import (
+    Tool,
+    tool,
+)
 
 
 def make_failing_tool(

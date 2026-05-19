@@ -12,15 +12,15 @@ import asyncio
 import base64
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    ImageContentBlock,
-    MockLLMClient,
-    ReasoningAgent,
-    TextContentBlock,
-)
 from nanitics.infrastructure import (
     AgentStartEvent,
     LLMRequestEvent,
+    MockLLMClient,
+)
+from nanitics.strategies import ReasoningAgent
+from nanitics.tracing import (
+    ImageContentBlock,
+    TextContentBlock,
 )
 
 

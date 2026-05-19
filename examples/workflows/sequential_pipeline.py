@@ -13,15 +13,14 @@ import asyncio
 from pydantic import BaseModel
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.composition import (
     AgentStep,
     FunctionStep,
-    MockLLMClient,
-    ReActAgent,
     Sequential,
     WorkflowStep,
 )
 from nanitics.infrastructure import (
+    MockLLMClient,
     WorkflowStepCompleteEvent,
 )
 from nanitics.specialized import (
@@ -29,6 +28,7 @@ from nanitics.specialized import (
     PipelineContractError,
     Stage,
 )
+from nanitics.strategies import ReActAgent
 
 
 async def main() -> None:

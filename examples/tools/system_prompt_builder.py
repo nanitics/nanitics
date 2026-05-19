@@ -9,7 +9,10 @@ Related guide: docs/guides/core-concepts.md
 
 import asyncio
 
-from nanitics import SystemPromptBuilder, SystemPromptContributor
+from nanitics.strategies import (
+    SystemPromptBuilder,
+    SystemPromptContributor,
+)
 
 # --- Section 4: SystemPromptContributor Protocol ---
 # (Defined here so they're available in main(), but demonstrated in Section 4)

@@ -39,17 +39,15 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import (
-    AgentStep,
+from nanitics.collaboration.protocol import HumanInputRequest
+from nanitics.composition import AgentStep
+from nanitics.hitl import (
     ApprovalGate,
     CallbackHumanInputProvider,
     HumanDecision,
     HumanInputResponse,
-    InMemoryEmitter,
-    ReActAgent,
     RevisionGate,
 )
-from nanitics.collaboration.protocol import HumanInputRequest
 from nanitics.infrastructure import (
     AgentStartEvent,
     HumanInputRequestEvent,
@@ -58,6 +56,8 @@ from nanitics.infrastructure import (
     RevisionCompleteEvent,
     RevisionStartEvent,
 )
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

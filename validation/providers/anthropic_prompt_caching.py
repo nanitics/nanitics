@@ -33,8 +33,9 @@ import asyncio
 
 import pytest
 
-from nanitics import InMemoryEmitter, ReActAgent
 from nanitics.infrastructure import LLMRequestEvent, LLMResponseEvent
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

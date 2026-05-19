@@ -6,7 +6,13 @@ Importable by test files via ``from helpers import make_response, ...``.
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from nanitics import FunctionStep, InMemoryEmitter, LLMResponse, ToolCall, Usage
+from nanitics.composition import FunctionStep
+from nanitics.infrastructure import LLMResponse
+from nanitics.tracing import (
+    InMemoryEmitter,
+    ToolCall,
+    Usage,
+)
 
 
 def make_usage(input_tokens: int = 10, output_tokens: int = 5) -> Usage:

@@ -30,15 +30,15 @@ from typing import TYPE_CHECKING, Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict
 
-from nanitics import (
-    AnthropicLLMClient,
+from nanitics.composition import (
     PredicateTrigger,
     QualityTrigger,
-    ReActAgent,
     SupervisionAction,
     SupervisionDecision,
     Supervisor,
 )
+from nanitics.infrastructure import AnthropicLLMClient
+from nanitics.strategies import ReActAgent
 from nanitics.strategies.agents.base import AgentResult
 from sql_analyst.bootstrap import ensure_analyst_schema
 from sql_analyst.evaluator import GroundTruthEvaluator

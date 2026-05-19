@@ -2,7 +2,6 @@
 
 import pytest
 
-from nanitics import Tool, ToolCall, ToolRegistry
 from nanitics.capabilities.planning.models import (
     Goal,
     GoalStatus,
@@ -21,7 +20,12 @@ from nanitics.infrastructure.observability.events import (
     PlanRevisedEvent,
     PlanStepUpdatedEvent,
 )
+from nanitics.strategies import (
+    Tool,
+    ToolRegistry,
+)
 from nanitics.strategies.tools.function_tool import FunctionTool
+from nanitics.tracing import ToolCall
 from tests.testing_helpers import make_emitter
 
 

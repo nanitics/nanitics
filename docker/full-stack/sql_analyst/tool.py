@@ -26,7 +26,11 @@ import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from nanitics import FunctionTool, Tool, ToolResult
+from nanitics.strategies import (
+    FunctionTool,
+    Tool,
+    ToolResult,
+)
 from nanitics.strategies.tools.context import ToolContext
 
 # Key the tool writes to ``ToolContext.state`` carrying the latest

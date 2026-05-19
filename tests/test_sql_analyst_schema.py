@@ -92,7 +92,7 @@ async def schema_applied(privileged_pool: Any) -> Any:
     """
     from sql_analyst.bootstrap import ensure_analyst_schema
 
-    from nanitics import PostgresTraceStore
+    from nanitics.tracing import PostgresTraceStore
 
     trace_store = PostgresTraceStore(privileged_pool)
     await trace_store.ensure_schema()

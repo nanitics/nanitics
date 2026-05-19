@@ -25,15 +25,14 @@ from __future__ import annotations
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.infrastructure import MockLLMClient, ToolInvokeEvent, ToolResultEvent
+from nanitics.safety import (
     ExecutionResult,
-    MockLLMClient,
     MockSandbox,
-    ReActAgent,
-    ToolCall,
-    create_code_execution_tool,
 )
-from nanitics.infrastructure import ToolInvokeEvent, ToolResultEvent
+from nanitics.strategies import ReActAgent
+from nanitics.tools import create_code_execution_tool
+from nanitics.tracing import ToolCall
 
 
 async def main() -> None:
@@ -129,7 +128,10 @@ async def main() -> None:
     print("\n--- Section 2: DockerSandbox (conditional) ---")
     try:
         import docker as _docker_client_lib  # noqa: F401
-        from nanitics import DockerSandbox, SandboxConfig
+        from nanitics.safety import (
+            DockerSandbox,
+            SandboxConfig,
+        )
 
         docker_available = True
     except ImportError:

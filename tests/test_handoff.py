@@ -1,11 +1,5 @@
 import pytest
 
-from nanitics import (
-    InMemoryEmitter,
-    LLMResponse,
-    MockLLMClient,
-    ReActAgent,
-)
 from nanitics.composition.multi_agent.context_transfer import RawOutputTransfer
 from nanitics.composition.multi_agent.handoff import HandoffStep, create_handoff_chain
 from nanitics.composition.multi_agent.handoff_protocol import (
@@ -14,8 +8,14 @@ from nanitics.composition.multi_agent.handoff_protocol import (
 )
 from nanitics.composition.orchestration.protocol import Step, StepResult
 from nanitics.composition.orchestration.sequential import Sequential
+from nanitics.infrastructure import (
+    LLMResponse,
+    MockLLMClient,
+)
 from nanitics.infrastructure.observability.events import HandoffEvent
+from nanitics.strategies import ReActAgent
 from nanitics.strategies.agents.base import Agent
+from nanitics.tracing import InMemoryEmitter
 from tests.testing_helpers import make_emitter, make_response
 
 

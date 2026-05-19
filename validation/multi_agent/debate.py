@@ -29,10 +29,6 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import (
-    InMemoryEmitter,
-    ReActAgent,
-)
 from nanitics.infrastructure import (
     DebateArgumentEvent,
     DebateCompleteEvent,
@@ -44,6 +40,8 @@ from nanitics.specialized import (
     Debater,
     JudgeResolution,
 )
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

@@ -26,13 +26,20 @@ import os
 import pytest
 from pydantic import BaseModel
 
-from nanitics import InMemoryEmitter, Message, ReActAgent, tool
 from nanitics.infrastructure import (
     AgentCompleteEvent,
     AgentStartEvent,
     LLMResponseEvent,
     ToolInvokeEvent,
     ToolResultEvent,
+)
+from nanitics.strategies import (
+    ReActAgent,
+    tool,
+)
+from nanitics.tracing import (
+    InMemoryEmitter,
+    Message,
 )
 from validation.helpers import (
     assert_trace_contains,

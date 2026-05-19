@@ -35,12 +35,10 @@ import asyncio
 
 import pytest
 
-from nanitics import (
+from nanitics.composition import (
     AgentStep,
     FunctionStep,
-    InMemoryEmitter,
     Parallel,
-    ReActAgent,
     StepResult,
 )
 from nanitics.infrastructure import (
@@ -49,6 +47,8 @@ from nanitics.infrastructure import (
     WorkflowStartEvent,
     WorkflowStepCompleteEvent,
 )
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

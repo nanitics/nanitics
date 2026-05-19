@@ -1,6 +1,10 @@
 """Shared helpers for SDK examples. Not an example itself."""
 
-from nanitics import InMemoryEmitter, LLMResponse, Usage
+from nanitics.infrastructure import LLMResponse
+from nanitics.tracing import (
+    InMemoryEmitter,
+    Usage,
+)
 
 
 def make_emitter(trace_id: str = "example-trace") -> InMemoryEmitter:

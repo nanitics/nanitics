@@ -53,10 +53,6 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import (
-    InMemoryEmitter,
-    ReActAgent,
-)
 from nanitics.infrastructure import (
     MessageBusCompleteEvent,
     MessageBusStartEvent,
@@ -69,6 +65,8 @@ from nanitics.specialized import (
     MessageBus,
     TopicSubscription,
 )
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

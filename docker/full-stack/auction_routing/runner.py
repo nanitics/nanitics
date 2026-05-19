@@ -19,10 +19,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict, Field
 
-from nanitics import (
-    BiddableAgent,
-    ReActAgent,
-)
+from nanitics.composition import BiddableAgent
 from nanitics.composition.multi_agent.bidding import BidGenerator
 from nanitics.infrastructure.llm.instrumented import InstrumentedLLMClient
 from nanitics.infrastructure.llm.protocol import LLMClient, Message
@@ -34,6 +31,7 @@ from nanitics.specialized import (
     HighestConfidence,
     LowestCost,
 )
+from nanitics.strategies import ReActAgent
 
 if TYPE_CHECKING:
     from runners import ShellContext

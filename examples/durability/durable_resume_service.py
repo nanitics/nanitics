@@ -37,20 +37,22 @@ import asyncio
 import json
 
 from examples.helpers import make_emitter
-from nanitics import (
-    ApprovalGate,
-    DurableHumanInputProvider,
+from nanitics.composition import (
     DurableRun,
     FunctionStep,
-    HumanDecision,
-    HumanInputResponse,
     InMemoryCheckpointStore,
-    InMemoryHitlRequestStore,
     ResumeContext,
     ResumeResult,
     ResumeService,
     Sequential,
     SuspendedRun,
+)
+from nanitics.hitl import (
+    ApprovalGate,
+    DurableHumanInputProvider,
+    HumanDecision,
+    HumanInputResponse,
+    InMemoryHitlRequestStore,
 )
 
 _RUN_ID = "run-durable-resume-service"

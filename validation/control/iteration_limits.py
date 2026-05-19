@@ -51,12 +51,16 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import InMemoryEmitter, ReActAgent, tool
 from nanitics.infrastructure import (
     SafetyIterationLimitEvent,
     SafetyToolCallLimitEvent,
     ToolInvokeEvent,
 )
+from nanitics.strategies import (
+    ReActAgent,
+    tool,
+)
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

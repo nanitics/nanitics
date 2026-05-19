@@ -50,11 +50,9 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel
 
-from nanitics import (
+from nanitics.composition import (
     AgentStep,
     FunctionStep,
-    InMemoryEmitter,
-    ReActAgent,
 )
 from nanitics.infrastructure import (
     AgentStartEvent,
@@ -65,6 +63,8 @@ from nanitics.specialized import (
     PipelineContractError,
     Stage,
 )
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

@@ -13,20 +13,20 @@ Related guide: docs/guides/observability.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.evaluation import (
     EvaluationCheck,
-    InMemoryEpisodeStore,
-    InstrumentedLLMClient,
-    MockEmbeddingClient,
-    MockLLMClient,
     ProgrammaticEvaluator,
-    ReActAgent,
 )
 from nanitics.infrastructure import (
     LLMRequestEvent,
     LLMResponseEvent,
+    MockEmbeddingClient,
+    MockLLMClient,
 )
+from nanitics.memory import InMemoryEpisodeStore
 from nanitics.specialized import ReflexionAgent
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InstrumentedLLMClient
 
 
 async def main() -> None:

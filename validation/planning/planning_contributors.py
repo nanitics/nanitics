@@ -50,23 +50,23 @@ Acceptance criteria (adaptive planning revision):
 
 from __future__ import annotations
 
-from nanitics import (
-    AdaptivePlanningContributor,
-    GoalTrackingContributor,
-    InMemoryEmitter,
-    InMemoryPlanStore,
-    Plan,
-    PlanningCapability,
-    PlanStep,
-    ReActAgent,
-)
 from nanitics.infrastructure import (
     GoalStatusChangedEvent,
     LLMRequestEvent,
     PlanCreatedEvent,
     PlanRevisedEvent,
 )
+from nanitics.planning import (
+    AdaptivePlanningContributor,
+    GoalTrackingContributor,
+    InMemoryPlanStore,
+    Plan,
+    PlanningCapability,
+    PlanStep,
+)
 from nanitics.specialized import DecompositionContributor
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

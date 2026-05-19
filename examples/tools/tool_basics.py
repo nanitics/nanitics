@@ -10,22 +10,26 @@ import asyncio
 
 from pydantic import BaseModel, Field
 
-from nanitics import (
-    InMemoryEmitter,
-    ToolCall,
-    ToolContext,
+from nanitics.errors import (
     ToolError,
     ToolExecutionError,
     ToolNotFoundError,
     ToolParameterError,
-    ToolRegistry,
-    ToolResult,
-    ToolSchema,
-    tool,
 )
 from nanitics.infrastructure import (
     ToolInvokeEvent,
     ToolResultEvent,
+    ToolSchema,
+)
+from nanitics.strategies import (
+    ToolContext,
+    ToolRegistry,
+    ToolResult,
+    tool,
+)
+from nanitics.tracing import (
+    InMemoryEmitter,
+    ToolCall,
 )
 
 # --- Section 1: Minimal Tool (@tool decorator) ---

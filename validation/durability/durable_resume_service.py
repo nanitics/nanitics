@@ -41,20 +41,6 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from nanitics import (
-    AgentStep,
-    CheckpointStore,
-    DurableRun,
-    InMemoryCheckpointStore,
-    InMemoryEmitter,
-    ReActAgent,
-    ResumeContext,
-    ResumeResult,
-    ResumeService,
-    Sequential,
-    SuspendedRun,
-    create_ask_human_tool,
-)
 from nanitics.collaboration.durable_provider import DurableHumanInputProvider
 from nanitics.collaboration.postgres_hitl_store import (
     PostgresHitlRequestStore,
@@ -64,6 +50,20 @@ from nanitics.collaboration.protocol import (
     HumanDecision,
     HumanInputResponse,
 )
+from nanitics.composition import (
+    AgentStep,
+    CheckpointStore,
+    DurableRun,
+    InMemoryCheckpointStore,
+    ResumeContext,
+    ResumeResult,
+    ResumeService,
+    Sequential,
+    SuspendedRun,
+)
+from nanitics.hitl import create_ask_human_tool
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     make_llm_client,
     make_postgres_pool,

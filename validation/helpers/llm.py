@@ -10,7 +10,10 @@ from __future__ import annotations
 import os
 from typing import Literal
 
-from nanitics import EmbeddingClient, LLMClient
+from nanitics.infrastructure import (
+    EmbeddingClient,
+    LLMClient,
+)
 
 Provider = Literal["anthropic", "openai", "mistral", "litellm"]
 EmbeddingProvider = Literal["voyage"]
@@ -81,7 +84,7 @@ def make_llm_client(
     resolved_model = model or DEFAULT_MODELS[provider]
 
     if provider == "anthropic":
-        from nanitics import AnthropicLLMClient
+        from nanitics.infrastructure import AnthropicLLMClient
 
         return AnthropicLLMClient(
             model=resolved_model,
@@ -89,7 +92,7 @@ def make_llm_client(
             enable_caching=enable_caching,
         )
     if provider == "openai":
-        from nanitics import OpenAILLMClient
+        from nanitics.infrastructure import OpenAILLMClient
 
         return OpenAILLMClient(model=resolved_model, api_key=api_key)
     if provider == "mistral":
@@ -97,7 +100,7 @@ def make_llm_client(
 
         return MistralLLMClient(model=resolved_model, api_key=api_key)
     # litellm
-    from nanitics import LiteLLMClient
+    from nanitics.infrastructure import LiteLLMClient
 
     return LiteLLMClient(model=resolved_model, api_key=api_key)
 
@@ -125,6 +128,6 @@ def make_embedding_client(
     resolved_model = model or DEFAULT_EMBEDDING_MODELS[provider]
 
     # voyage is the only provider today
-    from nanitics import VoyageEmbeddingClient
+    from nanitics.infrastructure import VoyageEmbeddingClient
 
     return VoyageEmbeddingClient(api_key=api_key, model=resolved_model)

@@ -3,23 +3,27 @@
 import pytest
 from pydantic import ValidationError
 
-from nanitics import (
-    FunctionTool,
-    InMemoryEmitter,
-    InMemoryLongTermStore,
-    LongTermStore,
-    MockLLMClient,
-    ReActAgent,
-    Tool,
-    ToolCall,
-    ToolRegistry,
-    create_long_term_memory_tools,
-)
 from nanitics.infrastructure import (
     LongTermDeleteEvent,
     LongTermListEvent,
     LongTermRetrieveEvent,
     LongTermStoreEvent,
+    MockLLMClient,
+)
+from nanitics.memory import (
+    InMemoryLongTermStore,
+    LongTermStore,
+    create_long_term_memory_tools,
+)
+from nanitics.strategies import (
+    FunctionTool,
+    ReActAgent,
+    Tool,
+    ToolRegistry,
+)
+from nanitics.tracing import (
+    InMemoryEmitter,
+    ToolCall,
 )
 from tests.testing_helpers import make_emitter, make_response
 

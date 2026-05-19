@@ -2,17 +2,16 @@
 
 import pytest
 
-from nanitics import (
-    LLMResponse,
-    MockLLMClient,
-    ReActAgent,
-)
 from nanitics.composition.multi_agent.peer_network import (
     InvocationBudget,
     PeerBudgetExceededError,
     PeerNetwork,
     PeerSpec,
     PeerTool,
+)
+from nanitics.infrastructure import (
+    LLMResponse,
+    MockLLMClient,
 )
 from nanitics.infrastructure.llm.protocol import ToolCall
 from nanitics.infrastructure.observability.events import (
@@ -21,6 +20,7 @@ from nanitics.infrastructure.observability.events import (
     PeerNetworkStartEvent,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies import ReActAgent
 from tests.testing_helpers import make_emitter, make_response, make_usage
 
 

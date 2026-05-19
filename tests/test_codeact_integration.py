@@ -2,12 +2,9 @@
 
 import pytest
 
-from nanitics import (
+from nanitics.infrastructure import (
     LLMResponse,
     MockLLMClient,
-    ToolCall,
-    Usage,
-    tool,
 )
 from nanitics.infrastructure.observability.events import (
     CodeExecutionEvent,
@@ -17,7 +14,12 @@ from nanitics.infrastructure.observability.events import (
 )
 from nanitics.safety.sandbox.docker import DockerSandbox
 from nanitics.safety.sandbox.protocol import SandboxConfig
+from nanitics.strategies import tool
 from nanitics.strategies.agents.codeact import CodeActAgent
+from nanitics.tracing import (
+    ToolCall,
+    Usage,
+)
 from tests.testing_helpers import make_emitter, make_usage
 
 

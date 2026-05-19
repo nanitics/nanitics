@@ -12,17 +12,12 @@ Related guide: docs/guides/human-in-the-loop.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.hitl import (
     CallbackHumanInputProvider,
     HumanDecision,
     HumanInputRequest,
     HumanInputResponse,
     HumanInputType,
-    InMemoryEmitter,
-    MockLLMClient,
-    ReActAgent,
-    ToolCall,
-    ToolRegistry,
     create_ask_human_tool,
     create_hitl_tools,
     create_request_approval_tool,
@@ -30,6 +25,15 @@ from nanitics import (
 from nanitics.infrastructure import (
     HumanInputRequestEvent,
     HumanInputResponseEvent,
+    MockLLMClient,
+)
+from nanitics.strategies import (
+    ReActAgent,
+    ToolRegistry,
+)
+from nanitics.tracing import (
+    InMemoryEmitter,
+    ToolCall,
 )
 
 

@@ -11,18 +11,20 @@ Related guide: docs/guides/multi-agent-foundations.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    AgentTool,
-    ImageContentBlock,
+from nanitics.composition import AgentTool
+from nanitics.infrastructure import (
+    DelegationEvent,
     MockLLMClient,
+)
+from nanitics.strategies import (
     ReActAgent,
     ReasoningAgent,
     Tool,
-    ToolCall,
     tool,
 )
-from nanitics.infrastructure import (
-    DelegationEvent,
+from nanitics.tracing import (
+    ImageContentBlock,
+    ToolCall,
 )
 
 # --- Shared specialist tool ---

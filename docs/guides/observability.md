@@ -98,7 +98,7 @@ The right level depends on the consumer:
 Use `classify_level()` to get the level of any event type, and `is_level_included()` to check containment:
 
 ```python
-from nanitics import classify_level, is_level_included
+from nanitics.tracing import classify_level, is_level_included
 
 classify_level("agent.start")           # "info"
 classify_level("llm.response")          # "debug"
@@ -210,7 +210,7 @@ Key capabilities beyond `TraceStore`:
 
 <!-- verify: skip — illustrative fragment; `trace_store` and `trace_id` are caller-supplied and the `await` runs inside an async context -->
 ```python
-from nanitics import trace_events_from_stored
+from nanitics.tracing import trace_events_from_stored
 
 stored = await trace_store.get_span_tree(trace_id)
 events = trace_events_from_stored(stored)
@@ -251,7 +251,7 @@ You can wire this pipeline manually, or use `TracedExecutor` (see below) which c
 
 <!-- verify: skip — illustrative wiring; `asyncpg_pool`, `my_agent_factory`, `task`, `doc_id` are caller-supplied and the `await` runs inside an async context -->
 ```python
-from nanitics import TracedExecutor, PostgresTraceStore
+from nanitics.tracing import PostgresTraceStore, TracedExecutor
 
 trace_store = PostgresTraceStore(pool=asyncpg_pool)
 executor = TracedExecutor(trace_store)
@@ -297,7 +297,7 @@ Use manual `TraceCollector` wiring when you need control the pipeline doesn't pr
 ### Wiring shape
 
 ```python
-from nanitics import InMemoryEmitter, PostgresTraceStore, TraceCollector
+from nanitics.tracing import InMemoryEmitter, PostgresTraceStore, TraceCollector
 
 # Module-level singletons live for the application lifespan.
 _emitter: InMemoryEmitter | None = None
@@ -388,7 +388,7 @@ The SDK's emission code does not write provider credentials, auth headers, or ra
 For adopter-surface scrubbing, implement the `RedactionHook` protocol:
 
 ```python
-from nanitics import RedactionHook  # runtime-checkable Protocol
+from nanitics.tracing import RedactionHook
 ```
 
 The protocol has one method, `redact(event: TraceEvent) -> TraceEvent`. Wire a hook in at either of two points:
@@ -407,7 +407,7 @@ The SDK intentionally ships no default redactor. Regex lists and PII shapes drif
 ```python
 import re
 
-from nanitics import RedactionHook
+from nanitics.tracing import RedactionHook
 from nanitics.infrastructure.observability import LLMRequestEvent, TraceEvent
 
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")

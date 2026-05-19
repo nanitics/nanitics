@@ -44,11 +44,7 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import (
-    BiddableAgent,
-    InMemoryEmitter,
-    ReActAgent,
-)
+from nanitics.composition import BiddableAgent
 from nanitics.infrastructure import (
     BidAllocatedEvent,
     BiddingCompleteEvent,
@@ -63,6 +59,8 @@ from nanitics.specialized import (
     LowestCost,
     WeightedScore,
 )
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

@@ -26,15 +26,14 @@ import httpx
 import respx
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    MockLLMClient,
-    ReActAgent,
-    ToolCall,
-    ToolParameterError,
+from nanitics.errors import ToolParameterError
+from nanitics.infrastructure import MockLLMClient, ToolResultEvent
+from nanitics.strategies import ReActAgent
+from nanitics.tools import (
     create_file_read_tool,
     create_http_tool,
 )
-from nanitics.infrastructure import ToolResultEvent
+from nanitics.tracing import ToolCall
 
 
 async def main() -> None:

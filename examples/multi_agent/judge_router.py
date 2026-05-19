@@ -14,24 +14,24 @@ import asyncio
 import json
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.composition import (
     DEFAULT_CALIBRATED_JUDGE_PROMPT_TEMPLATE,
     BiddableAgent,
     JudgeRouter,
-    MockLLMClient,
-    ReActAgent,
 )
 from nanitics.infrastructure import (
     JudgeAllocatedEvent,
     JudgeRankingEvent,
     JudgeRoutingCompleteEvent,
     JudgeRoutingStartEvent,
+    MockLLMClient,
 )
 from nanitics.specialized import (
     Bidding,
     FixedBidGenerator,
     HighestConfidence,
 )
+from nanitics.strategies import ReActAgent
 
 
 def _ranking_response(*candidates: dict[str, object]) -> str:

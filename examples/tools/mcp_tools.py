@@ -26,13 +26,14 @@ import anyio
 from mcp.server.fastmcp import FastMCP
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.infrastructure import (
     MCPClient,
     MockLLMClient,
-    ReActAgent,
-    ToolCall,
+    ToolInvokeEvent,
+    ToolResultEvent,
 )
-from nanitics.infrastructure import ToolInvokeEvent, ToolResultEvent
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import ToolCall
 
 
 def _in_memory_transport_factory(server: FastMCP) -> Any:

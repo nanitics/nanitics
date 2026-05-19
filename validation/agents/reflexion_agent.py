@@ -46,13 +46,9 @@ check that would only re-litigate the same deterministic fact.
 
 from __future__ import annotations
 
-from nanitics import (
-    EpisodicMemoryProvider,
+from nanitics.evaluation import (
     EvaluationCheck,
-    InMemoryEmitter,
-    InMemoryEpisodeStore,
     ProgrammaticEvaluator,
-    ReActAgent,
 )
 from nanitics.infrastructure import (
     EpisodeRecallEvent,
@@ -60,7 +56,13 @@ from nanitics.infrastructure import (
     LLMRequestEvent,
     ReflectionGeneratedEvent,
 )
+from nanitics.memory import (
+    EpisodicMemoryProvider,
+    InMemoryEpisodeStore,
+)
 from nanitics.specialized import ReflexionAgent
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_trace_contains,
     make_embedding_client,

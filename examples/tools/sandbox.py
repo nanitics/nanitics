@@ -11,7 +11,7 @@ import asyncio
 
 from pydantic import ValidationError
 
-from nanitics import (
+from nanitics.safety import (
     ExecutionResult,
     MockSandbox,
     SandboxConfig,

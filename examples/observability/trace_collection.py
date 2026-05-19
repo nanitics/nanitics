@@ -12,7 +12,16 @@ Related guide: docs/guides/observability.md
 import asyncio
 from datetime import UTC, datetime, timedelta
 
-from nanitics import (
+from nanitics.infrastructure import (
+    AgentCompleteEvent,
+    AgentStartEvent,
+    LLMResponseEvent,
+    SpanStartEvent,
+    ToolInvokeEvent,
+    ToolResultEvent,
+    classify_level,
+)
+from nanitics.tracing import (
     InMemoryEmitter,
     InMemoryPersistentTraceStore,
     InMemoryTraceStore,
@@ -26,15 +35,6 @@ from nanitics import (
     TraceSummary,
     TraceSummaryStats,
     Usage,
-)
-from nanitics.infrastructure import (
-    AgentCompleteEvent,
-    AgentStartEvent,
-    LLMResponseEvent,
-    SpanStartEvent,
-    ToolInvokeEvent,
-    ToolResultEvent,
-    classify_level,
 )
 
 

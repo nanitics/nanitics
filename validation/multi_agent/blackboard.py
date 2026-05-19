@@ -45,15 +45,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from nanitics import (
+from nanitics.composition import (
     Blackboard,
-    InMemoryEmitter,
-    InMemorySharedMemory,
     MaxRoundsTermination,
     NoNewContributions,
     OpportunisticControl,
     PrioritizedControl,
-    ReActAgent,
     ScheduledControl,
 )
 from nanitics.infrastructure import (
@@ -61,6 +58,9 @@ from nanitics.infrastructure import (
     BlackboardRoundEvent,
     BlackboardStartEvent,
 )
+from nanitics.memory import InMemorySharedMemory
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

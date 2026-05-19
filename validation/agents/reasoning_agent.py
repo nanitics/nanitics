@@ -22,8 +22,9 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel, Field
 
-from nanitics import InMemoryEmitter, ReasoningAgent
 from nanitics.infrastructure import AgentStepEvent, LLMRequestEvent
+from nanitics.strategies import ReasoningAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

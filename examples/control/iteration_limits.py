@@ -10,20 +10,24 @@ Related guide: docs/guides/safety.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.errors import (
     AgentIterationLimitError,
     AgentToolCallLimitError,
-    IterationLimiter,
-    MockLLMClient,
-    ReActAgent,
-    ToolCall,
-    ToolCallLimiter,
-    tool,
 )
 from nanitics.infrastructure import (
+    MockLLMClient,
     SafetyIterationLimitEvent,
     SafetyToolCallLimitEvent,
 )
+from nanitics.safety import (
+    IterationLimiter,
+    ToolCallLimiter,
+)
+from nanitics.strategies import (
+    ReActAgent,
+    tool,
+)
+from nanitics.tracing import ToolCall
 
 
 @tool("get_weather", "Get the current weather for a city")

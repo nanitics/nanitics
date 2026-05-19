@@ -3,21 +3,23 @@ from typing import Literal
 import pytest
 from pydantic import ValidationError
 
-from nanitics import (
-    Message,
-    MockLLMClient,
-    ReActAgent,
-    ReasoningAgent,
-    ToolCall,
-    tool,
-)
 from nanitics.capabilities.context.token_counter import EstimateTokenCounter
 from nanitics.capabilities.context.truncation import TruncationPolicy
 from nanitics.capabilities.memory.context_provider import (
     ContextContent,
     ContextProvider,
 )
+from nanitics.infrastructure import MockLLMClient
+from nanitics.strategies import (
+    ReActAgent,
+    ReasoningAgent,
+    tool,
+)
 from nanitics.strategies.agents.base import _render_context_wrapper
+from nanitics.tracing import (
+    Message,
+    ToolCall,
+)
 from tests.testing_helpers import make_emitter, make_response
 
 

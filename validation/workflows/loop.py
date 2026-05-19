@@ -41,11 +41,9 @@ import re
 
 import pytest
 
-from nanitics import (
+from nanitics.composition import (
     AgentStep,
     FunctionStep,
-    InMemoryEmitter,
-    ReActAgent,
     StepResult,
 )
 from nanitics.infrastructure import (
@@ -54,6 +52,8 @@ from nanitics.infrastructure import (
     WorkflowStepCompleteEvent,
 )
 from nanitics.specialized import Loop
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

@@ -11,16 +11,14 @@ import openai
 import pytest
 from pydantic import BaseModel
 
-from nanitics import (
-    ImageContentBlock,
-    LLMClient,
+from nanitics.errors import (
     LLMContextLengthError,
     LLMProviderError,
     LLMRateLimitError,
     LLMSchemaViolationError,
-    Message,
-    TextContentBlock,
-    ToolCall,
+)
+from nanitics.infrastructure import (
+    LLMClient,
     ToolSchema,
 )
 from nanitics.infrastructure.llm._openai_format import (
@@ -32,6 +30,12 @@ from nanitics.infrastructure.llm._openai_format import (
     _to_openai_tools,
 )
 from nanitics.infrastructure.llm.openai import OpenAILLMClient
+from nanitics.tracing import (
+    ImageContentBlock,
+    Message,
+    TextContentBlock,
+    ToolCall,
+)
 
 # --- Helpers ---
 

@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from self_improver.advisor import MarkdownFormatter, Proposal, analyze
 
-from nanitics import InMemoryEmitter
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import make_llm_client
 
 FIXTURE = Path(__file__).parent / "fixtures" / "smoke_react_agent.json"

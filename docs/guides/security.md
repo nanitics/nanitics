@@ -90,7 +90,7 @@ choosing semantically bad values within the allowed type.
 ```python
 from pydantic import BaseModel, Field
 
-from nanitics import tool
+from nanitics.strategies import tool
 
 
 class GreetArgs(BaseModel):
@@ -109,7 +109,7 @@ asking to write a pathologically large file within the allowed tree.
 ```python
 from pathlib import Path
 
-from nanitics import tool
+from nanitics.strategies import tool
 
 ALLOWED_ROOT = Path("/srv/agent-workspace").resolve()
 
@@ -128,7 +128,7 @@ radius of a prompt that tries to smuggle a long instruction past a
 later stage; it does not prevent a short injection from succeeding.
 
 ```python
-from nanitics import tool
+from nanitics.strategies import tool
 
 MAX_QUERY_CHARS = 500
 
