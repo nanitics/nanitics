@@ -16,7 +16,13 @@ from nanitics import (
     MockLLMClient,
     ReActAgent,
 )
-from nanitics.experimental import (
+from nanitics.infrastructure import (
+    DebateArgumentEvent,
+    DebateCompleteEvent,
+    DebateResolutionEvent,
+    DebateStartEvent,
+)
+from nanitics.specialized import (
     Argument,
     Debate,
     Debater,
@@ -25,12 +31,6 @@ from nanitics.experimental import (
     JudgeResolution,
     LLMJudgeResolution,
     ResolutionStrategy,
-)
-from nanitics.infrastructure import (
-    DebateArgumentEvent,
-    DebateCompleteEvent,
-    DebateResolutionEvent,
-    DebateStartEvent,
 )
 
 

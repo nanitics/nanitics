@@ -43,12 +43,12 @@ from nanitics import (
     tool,
 )
 from nanitics.capabilities.planning.store import InMemoryPlanStore
-from nanitics.experimental import (
+from nanitics.infrastructure.observability.events import AgentStepEvent
+from nanitics.specialized import (
     ReWOOAgent,
     ReWOOPlan,
     ReWOOStep,
 )
-from nanitics.infrastructure.observability.events import AgentStepEvent
 from nanitics.strategies.agents.evaluation import (
     EvaluationContext,
     EvaluationResult,

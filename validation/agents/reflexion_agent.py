@@ -54,13 +54,13 @@ from nanitics import (
     ProgrammaticEvaluator,
     ReActAgent,
 )
-from nanitics.experimental import ReflexionAgent
 from nanitics.infrastructure import (
     EpisodeRecallEvent,
     EvaluationEvent,
     LLMRequestEvent,
     ReflectionGeneratedEvent,
 )
+from nanitics.specialized import ReflexionAgent
 from validation.helpers import (
     assert_trace_contains,
     make_embedding_client,

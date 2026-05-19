@@ -33,7 +33,6 @@ from nanitics import (
     ReActAgent,
     Tool,
 )
-from nanitics.experimental import FixedBidGenerator
 from nanitics.infrastructure.llm.instrumented import InstrumentedLLMClient
 from nanitics.infrastructure.llm.protocol import LLMClient, Message
 from nanitics.infrastructure.observability.emitter import EventEmitter, InMemoryEmitter
@@ -43,6 +42,7 @@ from nanitics.infrastructure.observability.events import (
     JudgeRoutingCompleteEvent,
     JudgeRoutingStartEvent,
 )
+from nanitics.specialized import FixedBidGenerator
 
 from .tools import account_tools, billing_tools, policy_tools, technical_tools
 

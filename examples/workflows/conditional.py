@@ -15,12 +15,12 @@ from nanitics import (
     Sequential,
     WorkflowStep,
 )
-from nanitics.experimental import Conditional
 from nanitics.infrastructure import (
     WorkflowCompleteEvent,
     WorkflowStartEvent,
     WorkflowStepCompleteEvent,
 )
+from nanitics.specialized import Conditional
 
 
 async def main() -> None:

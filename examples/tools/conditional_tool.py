@@ -13,7 +13,7 @@ from nanitics import (
     ToolRegistry,
     tool,
 )
-from nanitics.experimental import ConditionalTool
+from nanitics.specialized import ConditionalTool
 
 
 @tool("search_records", "Search for records by keyword")

@@ -16,14 +16,14 @@ from nanitics import (
     MockLLMClient,
     tool,
 )
-from nanitics.experimental import (
-    ReWOOAgent,
-    ReWOOPlan,
-    ReWOOStep,
-)
 from nanitics.infrastructure import (
     PlanCreatedEvent,
     PlanStepUpdatedEvent,
+)
+from nanitics.specialized import (
+    ReWOOAgent,
+    ReWOOPlan,
+    ReWOOStep,
 )
 
 # --- Shared tools ---

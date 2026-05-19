@@ -62,7 +62,7 @@ The SDK exposes three namespaces:
 
 - **`nanitics`** — recommended core. Primitives and load-bearing compositions for building most agentic systems: the three agent types (`ReActAgent`, `ReasoningAgent`, `CodeActAgent`), all five memory types, core workflows (`Sequential`, `Parallel`, `DAG`), multi-agent foundations (`AgentTool`, `Broadcast`, context transfer), `Blackboard`, `Supervisor`, `JudgeRouter`, HITL and durable suspension, planning, evaluation, context management, error handling, safety, observability, standard LLM and embedding clients, built-in tools.
 - **`nanitics.patterns`** — named compositions over the core primitives. `create_orchestrator`, the `HandoffPayload`/`HandoffStep`/`create_handoff_chain` stack, and other sugar that could be rebuilt from primitives in a few lines but is named for discoverability.
-- **`nanitics.experimental`** — specialized primitives that are structurally distinct but niche. Reach for them deliberately: `ReWOOAgent`, `ReflexionAgent`, `TreeOfThoughtAgent`, `LATSAgent`, the `Loop`/`Conditional`/`MapReduce`/`Pipeline` workflows, the `Bidding`/`Debate`/`Consensus` coordination patterns, `MessageBus`, `PeerNetwork`, `MistralLLMClient`, hierarchical-decomposition planning. Every symbol here is part of the v1.0 surface and supported — `experimental` signals *adoption guidance*, not maturity.
+- **`nanitics.specialized`** — specialized primitives that are structurally distinct but niche. Reach for them deliberately: `ReWOOAgent`, `ReflexionAgent`, `TreeOfThoughtAgent`, `LATSAgent`, the `Loop`/`Conditional`/`MapReduce`/`Pipeline` workflows, the `Bidding`/`Debate`/`Consensus` coordination patterns, `MessageBus`, `PeerNetwork`, `MistralLLMClient`, hierarchical-decomposition planning.
 
 ## LLM providers
 
@@ -73,8 +73,8 @@ Nanitics supports multiple LLM providers:
 | Anthropic | `pip install nanitics`            | `AnthropicLLMClient`                         |
 | OpenAI    | `pip install nanitics`            | `OpenAILLMClient`                            |
 | LiteLLM   | `pip install nanitics[litellm]`   | `LiteLLMClient`                              |
-| Mistral   | `pip install nanitics[mistral]`   | `nanitics.experimental.MistralLLMClient`     |
+| Mistral   | `pip install nanitics[mistral]`   | `nanitics.specialized.MistralLLMClient`      |
 
-Anthropic and OpenAI clients ship by default — no extras needed. For Mistral, the native `MistralLLMClient` lives in `nanitics.experimental`; for most adopters `LiteLLMClient` covers Mistral too.
+Anthropic and OpenAI clients ship by default — no extras needed. For Mistral, the native `MistralLLMClient` lives in `nanitics.specialized`; for most adopters `LiteLLMClient` covers Mistral too.
 
 For testing and development, use `MockLLMClient` — no API keys required.

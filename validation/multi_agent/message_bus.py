@@ -57,17 +57,17 @@ from nanitics import (
     InMemoryEmitter,
     ReActAgent,
 )
-from nanitics.experimental import (
-    BusMessage,
-    MaxMessagesTermination,
-    MessageBus,
-    TopicSubscription,
-)
 from nanitics.infrastructure import (
     MessageBusCompleteEvent,
     MessageBusStartEvent,
     MessageDeliveredEvent,
     MessagePublishedEvent,
+)
+from nanitics.specialized import (
+    BusMessage,
+    MaxMessagesTermination,
+    MessageBus,
+    TopicSubscription,
 )
 from validation.helpers import (
     assert_trace_contains,

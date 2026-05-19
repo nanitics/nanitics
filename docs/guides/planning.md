@@ -2,7 +2,7 @@
 
 > For API details — signatures, fields, constraints — read the docstrings in your editor, in the source tree under [`nanitics/`](../../nanitics/), or browse them at [docs.nanitics.dev](https://docs.nanitics.dev/). `nanitics.__all__` is the authoritative public surface.
 
-> **Namespace:** The linear-planning track — `Plan`, `PlanStep`, `Goal`, `PlanStore`, `UpfrontPlanContributor`, `AdaptivePlanningContributor`, `GoalTrackingContributor`, `PlanAdherenceEvaluator`, `GoalSatisfactionEvaluator`, `PlanningCapability`, `PlanningContextProvider`, `create_planning_tools` — lives in top-level `nanitics`. The hierarchical-decomposition track — `TaskPlan`, `TaskNode`, `DecompositionContributor`, `plan_to_workflow` — lives in `nanitics.experimental`.
+> **Namespace:** The linear-planning track — `Plan`, `PlanStep`, `Goal`, `PlanStore`, `UpfrontPlanContributor`, `AdaptivePlanningContributor`, `GoalTrackingContributor`, `PlanAdherenceEvaluator`, `GoalSatisfactionEvaluator`, `PlanningCapability`, `PlanningContextProvider`, `create_planning_tools` — lives in top-level `nanitics`. The hierarchical-decomposition track — `TaskPlan`, `TaskNode`, `DecompositionContributor`, `plan_to_workflow` — lives in `nanitics.specialized`.
 
 Agents can operate without explicit plans — a ReAct agent naturally sequences actions through its reasoning loop. But for complex, multi-step tasks, explicit planning provides structure: the agent creates a plan, tracks progress through steps, revises when circumstances change, and can be evaluated on whether it completed what it set out to do.
 

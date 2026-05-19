@@ -21,13 +21,13 @@ Compose agents from typed primitives. Trace every decision through the built-in 
 
 ## Features
 
-**Agent strategies** — Built-in strategies for different problem shapes: [ReAct, Reasoning, CodeAct](docs/guides/agent-types.md) in the core surface; Reflexion, ReWOO, LATS, Tree of Thought in `nanitics.experimental`.
+**Agent strategies** — Built-in strategies for different problem shapes: [ReAct, Reasoning, CodeAct](docs/guides/agent-types.md) in the core surface; Reflexion, ReWOO, LATS, Tree of Thought in `nanitics.specialized`.
 
 **Memory** — [Working, episodic, long-term, semantic, and shared memory](docs/guides/memory.md) for persistent agent state.
 
-**Orchestration** — Compose agents into [Sequential, Parallel, and DAG workflows](docs/guides/orchestration.md) in the core surface; Loop, Conditional, MapReduce, and Pipeline in `nanitics.experimental`.
+**Orchestration** — Compose agents into [Sequential, Parallel, and DAG workflows](docs/guides/orchestration.md) in the core surface; Loop, Conditional, MapReduce, and Pipeline in `nanitics.specialized`.
 
-**Multi-agent coordination** — [agent-as-tool, broadcast, blackboard, supervisor, judge router](docs/guides/multi-agent-coordination.md) in the core surface; the orchestrator factory and structured handoff stack in `nanitics.patterns`; bidding, debate, consensus, message bus, and peer network in `nanitics.experimental`.
+**Multi-agent coordination** — [agent-as-tool, broadcast, blackboard, supervisor, judge router](docs/guides/multi-agent-coordination.md) in the core surface; the orchestrator factory and structured handoff stack in `nanitics.patterns`; bidding, debate, consensus, message bus, and peer network in `nanitics.specialized`.
 
 **Evaluation** — [Programmatic and LLM-based evaluators](docs/guides/evaluation.md) for assessing agent output quality.
 
@@ -37,13 +37,13 @@ Compose agents from typed primitives. Trace every decision through the built-in 
 
 **Observability** — [Event-based tracing](docs/guides/observability.md) with the Observatory trace viewer for inspecting agent execution.
 
-**Planning** — [Upfront and adaptive planning](docs/guides/planning.md) with goal tracking and plan adherence evaluation; hierarchical-decomposition planning in `nanitics.experimental`.
+**Planning** — [Upfront and adaptive planning](docs/guides/planning.md) with goal tracking and plan adherence evaluation; hierarchical-decomposition planning in `nanitics.specialized`.
 
 **Safety** — [Iteration limits, cancellation tokens, and sandboxed code execution](docs/guides/safety.md).
 
 ## Public API surface
 
-The SDK exposes three namespaces. `nanitics` is the recommended core — primitives and load-bearing compositions for building most agentic systems. `nanitics.patterns` exposes named compositions over the core (sugar over primitives — `create_orchestrator`, the structured handoff stack). `nanitics.experimental` exposes specialized primitives that are structurally distinct but niche — reach for them deliberately rather than by default. Everything in `experimental` and `patterns` is part of the v1.0 surface and supported; the namespace signals *adoption guidance*, not maturity. `nanitics.__all__` (plus `nanitics.patterns.__all__` and `nanitics.experimental.__all__`) is the authoritative list.
+The SDK exposes three namespaces. `nanitics` is the recommended core — primitives and load-bearing compositions for building most agentic systems. `nanitics.patterns` exposes named compositions over the core (sugar over primitives — `create_orchestrator`, the structured handoff stack). `nanitics.specialized` exposes specialized primitives that are structurally distinct but niche — reach for them deliberately rather than by default. `nanitics.__all__` (plus `nanitics.patterns.__all__` and `nanitics.specialized.__all__`) is the authoritative list.
 
 ## Quick Start
 

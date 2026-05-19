@@ -17,7 +17,7 @@ from nanitics import (
     Parallel,
     Sequential,
 )
-from nanitics.experimental import (
+from nanitics.specialized import (
     TaskNode,
     TaskPlan,
     plan_to_workflow,

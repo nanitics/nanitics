@@ -20,7 +20,13 @@ from nanitics import (
     MockLLMClient,
     ReActAgent,
 )
-from nanitics.experimental import (
+from nanitics.infrastructure import (
+    BidAllocatedEvent,
+    BiddingCompleteEvent,
+    BiddingStartEvent,
+    BidReceivedEvent,
+)
+from nanitics.specialized import (
     DEFAULT_CALIBRATED_BID_PROMPT_TEMPLATE,
     Bid,
     Bidding,
@@ -29,12 +35,6 @@ from nanitics.experimental import (
     LLMBidGenerator,
     LowestCost,
     WeightedScore,
-)
-from nanitics.infrastructure import (
-    BidAllocatedEvent,
-    BiddingCompleteEvent,
-    BiddingStartEvent,
-    BidReceivedEvent,
 )
 
 

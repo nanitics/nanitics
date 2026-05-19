@@ -56,14 +56,14 @@ from nanitics import (
     InMemoryEmitter,
     ReActAgent,
 )
-from nanitics.experimental import (
-    Pipeline,
-    PipelineContractError,
-    Stage,
-)
 from nanitics.infrastructure import (
     AgentStartEvent,
     WorkflowStepCompleteEvent,
+)
+from nanitics.specialized import (
+    Pipeline,
+    PipelineContractError,
+    Stage,
 )
 from validation.helpers import (
     assert_trace_contains,

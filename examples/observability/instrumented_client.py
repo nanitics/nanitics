@@ -22,11 +22,11 @@ from nanitics import (
     ProgrammaticEvaluator,
     ReActAgent,
 )
-from nanitics.experimental import ReflexionAgent
 from nanitics.infrastructure import (
     LLMRequestEvent,
     LLMResponseEvent,
 )
+from nanitics.specialized import ReflexionAgent
 
 
 async def main() -> None:

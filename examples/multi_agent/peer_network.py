@@ -15,14 +15,14 @@ from nanitics import (
     MockLLMClient,
     ToolCall,
 )
-from nanitics.experimental import (
-    PeerNetwork,
-    PeerSpec,
-)
 from nanitics.infrastructure import (
     PeerConsultationEvent,
     PeerNetworkCompleteEvent,
     PeerNetworkStartEvent,
+)
+from nanitics.specialized import (
+    PeerNetwork,
+    PeerSpec,
 )
 
 

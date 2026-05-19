@@ -34,13 +34,13 @@ from nanitics import (
     ToolCall,
     tool,
 )
-from nanitics.experimental import ReflexionAgent
 from nanitics.infrastructure import (
     DelegationEvent,
     EvaluationEvent,
     LLMResponseEvent,
     ReflectionGeneratedEvent,
 )
+from nanitics.specialized import ReflexionAgent
 
 # Delay ranges (seconds) injected into the mock LLM and tool calls so the captured
 # trace shows realistic per-span durations rather than every span clocking 0ms.

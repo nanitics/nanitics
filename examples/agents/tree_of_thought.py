@@ -16,15 +16,15 @@ from nanitics import (
     EvaluationVerdict,
     MockLLMClient,
 )
-from nanitics.experimental import (
-    SearchStrategy,
-    TreeOfThoughtAgent,
-)
 from nanitics.infrastructure import (
     TreeSearchCompleteEvent,
     TreeSearchNodeCreatedEvent,
     TreeSearchNodeEvaluatedEvent,
     TreeSearchNodePrunedEvent,
+)
+from nanitics.specialized import (
+    SearchStrategy,
+    TreeOfThoughtAgent,
 )
 
 # --- Evaluators (teaching OutputEvaluator contract) ---

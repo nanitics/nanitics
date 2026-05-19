@@ -24,7 +24,6 @@ from nanitics import (
     ToolCall,
     tool,
 )
-from nanitics.experimental import LATSAgent
 from nanitics.infrastructure import (
     MCTSBackpropagationEvent,
     MCTSIterationEvent,
@@ -33,6 +32,7 @@ from nanitics.infrastructure import (
     TreeSearchNodeEvaluatedEvent,
     TreeSearchNodePrunedEvent,
 )
+from nanitics.specialized import LATSAgent
 
 # --- Shared evaluator ---
 

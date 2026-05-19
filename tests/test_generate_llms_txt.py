@@ -221,7 +221,7 @@ def test_cli_entrypoint_defaults_resolve_real_project(
 
     Exercises the default-parameter branches (`package=None`, `guides_dir=None`,
     `description=None`) against the real repo. Also verifies that the auto-load
-    path picks up the `nanitics.patterns` and `nanitics.experimental` namespaces
+    path picks up the `nanitics.patterns` and `nanitics.specialized` namespaces
     as `###` subsections under `## API` with anchors that point at their pdoc
     pages.
     """
@@ -234,11 +234,11 @@ def test_cli_entrypoint_defaults_resolve_real_project(
     assert text.startswith("# Nanitics\n")
     assert "## API" in text
     assert "## Guides" in text
-    # `nanitics.patterns` and `nanitics.experimental` are rendered as `###`
+    # `nanitics.patterns` and `nanitics.specialized` are rendered as `###`
     # subsections, and their anchors live at their pdoc pages — not at the
     # core `nanitics.html`.
     assert "### nanitics.patterns" in text
-    assert "### nanitics.experimental" in text
+    assert "### nanitics.specialized" in text
     assert "nanitics/patterns.html#create_orchestrator" in text
     assert "nanitics/experimental.html#ReWOOAgent" in text
 

@@ -18,12 +18,12 @@ from nanitics import (
     ReActAgent,
     StepResult,
 )
-from nanitics.experimental import Loop
 from nanitics.infrastructure import (
     WorkflowCompleteEvent,
     WorkflowStartEvent,
     WorkflowStepCompleteEvent,
 )
+from nanitics.specialized import Loop
 
 
 async def main() -> None:

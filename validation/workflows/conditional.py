@@ -33,12 +33,12 @@ from nanitics import (
     InMemoryEmitter,
     ReActAgent,
 )
-from nanitics.experimental import Conditional
 from nanitics.infrastructure import (
     AgentStartEvent,
     WorkflowStartEvent,
     WorkflowStepCompleteEvent,
 )
+from nanitics.specialized import Conditional
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

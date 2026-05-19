@@ -80,7 +80,6 @@ from nanitics import (
     InMemoryEpisodeStore,
     tool,
 )
-from nanitics.experimental import LATSAgent
 from nanitics.infrastructure import (
     LLMRequestEvent,
     MCTSBackpropagationEvent,
@@ -89,6 +88,7 @@ from nanitics.infrastructure import (
     TreeSearchNodeCreatedEvent,
     TreeSearchNodePrunedEvent,
 )
+from nanitics.specialized import LATSAgent
 from validation.helpers import (
     assert_trace_contains,
     make_embedding_client,

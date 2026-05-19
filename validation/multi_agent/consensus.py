@@ -34,15 +34,15 @@ from nanitics import (
     InMemoryEmitter,
     ReActAgent,
 )
-from nanitics.experimental import (
-    Consensus,
-    DeliberationConfig,
-    MajorityVoting,
-)
 from nanitics.infrastructure import (
     ConsensusAgreementEvent,
     ConsensusCompleteEvent,
     ConsensusVoteEvent,
+)
+from nanitics.specialized import (
+    Consensus,
+    DeliberationConfig,
+    MajorityVoting,
 )
 from validation.helpers import (
     assert_trace_contains,

@@ -49,19 +49,19 @@ from nanitics import (
     InMemoryEmitter,
     ReActAgent,
 )
-from nanitics.experimental import (
+from nanitics.infrastructure import (
+    BidAllocatedEvent,
+    BiddingCompleteEvent,
+    BiddingStartEvent,
+    BidReceivedEvent,
+)
+from nanitics.specialized import (
     Bidding,
     FixedBidGenerator,
     HighestConfidence,
     LLMBidGenerator,
     LowestCost,
     WeightedScore,
-)
-from nanitics.infrastructure import (
-    BidAllocatedEvent,
-    BiddingCompleteEvent,
-    BiddingStartEvent,
-    BidReceivedEvent,
 )
 from validation.helpers import (
     assert_trace_contains,

@@ -24,16 +24,16 @@ from nanitics import (
     ReActAgent,
 )
 from nanitics.composition.multi_agent.bidding import BidGenerator
-from nanitics.experimental import (
+from nanitics.infrastructure.llm.instrumented import InstrumentedLLMClient
+from nanitics.infrastructure.llm.protocol import LLMClient, Message
+from nanitics.infrastructure.observability.emitter import EventEmitter, InMemoryEmitter
+from nanitics.specialized import (
     DEFAULT_CALIBRATED_BID_PROMPT_TEMPLATE,
     Bid,
     Bidding,
     HighestConfidence,
     LowestCost,
 )
-from nanitics.infrastructure.llm.instrumented import InstrumentedLLMClient
-from nanitics.infrastructure.llm.protocol import LLMClient, Message
-from nanitics.infrastructure.observability.emitter import EventEmitter, InMemoryEmitter
 
 if TYPE_CHECKING:
     from runners import ShellContext
