@@ -9,15 +9,18 @@ traceable through the built-in Observatory.
 
 ## Start here
 
-- **[Getting Started](guides/getting-started.md)** — build your first agent in
-  a few minutes.
-- **Source docstrings** — for API details (signatures, fields,
-  constraints), read the docstrings in the source tree under
-  [`nanitics/`](../nanitics/) or in your editor. `nanitics.__all__` is
-  the authoritative public surface.
-- **[Examples](https://github.com/nanitics/nanitics/tree/main/examples)**
-  — runnable scripts covering every SDK component. All use
-  `MockLLMClient` for deterministic, API-key-free execution.
+The fastest path from zero to a running agent:
+
+1. **[Getting Started](guides/getting-started.md)** — your first ReAct agent
+2. **[Core Concepts](guides/core-concepts.md)** — the agent loop, messages, LLM clients
+3. **[Tools](guides/tools.md)** — give the agent something to do
+4. **[Memory](guides/memory.md)** — Working memory; when to reach for the others
+5. **[Human-in-the-Loop](guides/human-in-the-loop.md)** — approval and revision gates
+6. **[Multi-Agent Foundations](guides/multi-agent-foundations.md)** — compose two agents
+
+That's the essential surface. For everything else — orchestration, evaluation, planning, observability, production guides, advanced reasoning strategies — see the [full guides index](guides/README.md).
+
+For API details (signatures, fields, constraints), read the docstrings in your editor, in the source tree under [`nanitics/`](../nanitics/), or at [docs.nanitics.dev](https://docs.nanitics.dev/). `nanitics.__all__` is the authoritative public surface. Runnable [examples](https://github.com/nanitics/nanitics/tree/main/examples) cover every SDK component using `MockLLMClient` — no API key required.
 
 ## Quick start
 

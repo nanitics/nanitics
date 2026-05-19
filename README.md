@@ -21,25 +21,23 @@ Compose agents from typed primitives. Trace every decision through the built-in 
 
 ## Features
 
-**Agent strategies** — Built-in strategies for different problem shapes: [ReAct, Reasoning, CodeAct](docs/guides/agent-types.md) in the core surface; Reflexion, ReWOO, LATS, Tree of Thought in `nanitics.specialized`.
+### Start here
 
-**Memory** — [Working, episodic, long-term, semantic, and shared memory](docs/guides/memory.md) for persistent agent state.
+The minimum you need to build something useful.
 
-**Orchestration** — Compose agents into [Sequential, Parallel, and DAG workflows](docs/guides/orchestration.md) in the core surface; Loop, Conditional, MapReduce, and Pipeline in `nanitics.specialized`.
+- **[ReAct agent](docs/guides/getting-started.md)** — the default reasoning loop. Add a tool, give it a task, get a result.
+- **[Tools](docs/guides/tools.md)** — function tools, MCP tools, and [built-in tools](docs/guides/built-in-tools.md) (web search, HTTP, file read, code execution) with automatic schema generation.
+- **[Working memory](docs/guides/memory.md)** — structured state that survives across steps.
+- **[Human-in-the-Loop](docs/guides/human-in-the-loop.md)** — approval and revision gates, with durable suspension for long-running workflows.
+- **[Multi-agent foundations](docs/guides/multi-agent-foundations.md)** — agent-as-tool, handoff, broadcast: the primitives that compose two agents.
 
-**Multi-agent coordination** — [agent-as-tool, broadcast, blackboard, supervisor, judge router](docs/guides/multi-agent-coordination.md) in the core surface; the orchestrator factory and structured handoff stack in `nanitics.patterns`; bidding, debate, consensus, message bus, and peer network in `nanitics.specialized`.
+### Also in core
 
-**Evaluation** — [Programmatic and LLM-based evaluators](docs/guides/evaluation.md) for assessing agent output quality.
+[Reasoning and CodeAct agents](docs/guides/agent-types.md), the remaining [memory types](docs/guides/memory.md) (episodic, long-term, semantic, shared), [Sequential / Parallel / DAG orchestration](docs/guides/orchestration.md), [orchestrator, supervisor, blackboard, and judge-router coordination](docs/guides/multi-agent-coordination.md), [evaluators](docs/guides/evaluation.md), [planning](docs/guides/planning.md), [event-based tracing with the Observatory](docs/guides/observability.md), and [safety primitives](docs/guides/safety.md).
 
-**Human-in-the-Loop** — [Approval gates, revision gates, and durable HITL](docs/guides/human-in-the-loop.md) with checkpoint suspension for long-running workflows.
+### Advanced patterns
 
-**Tools** — [Function tools, MCP tools, and built-in tools](docs/guides/tools.md) (web search, HTTP, file read, code execution) with automatic schema generation.
-
-**Observability** — [Event-based tracing](docs/guides/observability.md) with the Observatory trace viewer for inspecting agent execution.
-
-**Planning** — [Upfront and adaptive planning](docs/guides/planning.md) with goal tracking and plan adherence evaluation; hierarchical-decomposition planning in `nanitics.specialized`.
-
-**Safety** — [Iteration limits, cancellation tokens, and sandboxed code execution](docs/guides/safety.md).
+Specialized primitives in `nanitics.specialized` — Reflexion, ReWOO, LATS, Tree of Thought, bidding, debate, consensus, message bus, peer network, hierarchical planning, and more workflow shapes. Reach for them deliberately. See the [Advanced Patterns index](docs/guides/advanced-patterns.md).
 
 ## Public API surface
 
@@ -122,18 +120,16 @@ See the [examples README](examples/README.md) for a complete index.
 
 ## Documentation
 
-Primary entry points:
+The [full guides index](docs/guides/README.md) organizes everything in four tiers — **Start here**, **Build on it**, **Ship it**, and **Advanced patterns**. The fastest entry points:
 
 | Guide | Description |
 |-------|-------------|
 | [Getting Started](docs/guides/getting-started.md) | Build your first agent |
 | [Core Concepts](docs/guides/core-concepts.md) | The agent loop, tools, prompts, LLM clients |
-| [Agent Types](docs/guides/agent-types.md) | Agent strategies and when to use each |
-| [Multi-Agent Coordination](docs/guides/multi-agent-coordination.md) | Coordination patterns for multi-agent systems |
+| [Multi-Agent Foundations](docs/guides/multi-agent-foundations.md) | Agent-as-tool, handoff, broadcast |
+| [Advanced Patterns](docs/guides/advanced-patterns.md) | Specialized strategies and coordination shapes |
 | [Deployment](docs/guides/deployment.md) | Full-stack compose, take-to-own-infra, resource and shutdown patterns |
 | [API Reference](https://docs.nanitics.dev/) | Generated from source docstrings — signatures, fields, constraints |
-
-For the complete catalogue — Memory, Orchestration, Evaluation, HITL, Tools, Planning, Context Management, Error Handling, Safety, Security, Observability, Building Applications, Architecture, SDK Internals, Diagnosing Agent Issues, Testing, Streaming, Production, Built-in Tools, Local LLMs — see the [full guides index](docs/guides/README.md).
 
 ## Project
 
