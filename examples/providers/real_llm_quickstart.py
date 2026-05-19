@@ -33,20 +33,20 @@ async def main() -> None:
 
     # Import heavy dependencies only after the guard — keeps the skip path fast
     # (no anthropic SDK import cost for CI runs that don't carry a key).
-    from nanitics import (
-        AnthropicLLMClient,
-        InMemoryEmitter,
-        ReActAgent,
-        tool,
-    )
     from nanitics.infrastructure import (
         AgentCompleteEvent,
         AgentStartEvent,
+        AnthropicLLMClient,
         LLMRequestEvent,
         LLMResponseEvent,
         ToolInvokeEvent,
         ToolResultEvent,
     )
+    from nanitics.strategies import (
+        ReActAgent,
+        tool,
+    )
+    from nanitics.tracing import InMemoryEmitter
 
     # --- Section 1: Minimal Agent With a Real Tool Call ---
     print("--- Section 1: Minimal Agent With a Real Tool Call ---")

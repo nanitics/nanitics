@@ -40,10 +40,10 @@ import uuid
 
 import pytest
 
-from nanitics import (
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import (
     InMemoryEmitter,
     PostgresTraceStore,
-    ReActAgent,
     TraceCollector,
 )
 from validation.helpers import (

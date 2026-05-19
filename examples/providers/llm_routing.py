@@ -11,19 +11,17 @@ Related guide: docs/guides/core-concepts.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response, make_usage
-from nanitics import (
+from nanitics.infrastructure import (
     CostBudgetRouting,
-    Message,
     MockLLMClient,
+    ModelRoutingEvent,
     RoutingContext,
     RoutingLLMClient,
     RoutingStrategy,
     RuleBasedRouting,
     ToolSchema,
 )
-from nanitics.infrastructure import (
-    ModelRoutingEvent,
-)
+from nanitics.tracing import Message
 
 
 async def main() -> None:

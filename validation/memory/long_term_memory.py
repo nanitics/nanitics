@@ -30,13 +30,13 @@ Acceptance criteria — negative case (missing key):
 
 from __future__ import annotations
 
-from nanitics import (
-    InMemoryEmitter,
+from nanitics.infrastructure import LongTermRetrieveEvent, ToolInvokeEvent
+from nanitics.memory import (
     InMemoryLongTermStore,
-    ReActAgent,
     create_long_term_memory_tools,
 )
-from nanitics.infrastructure import LongTermRetrieveEvent, ToolInvokeEvent
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

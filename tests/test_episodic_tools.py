@@ -1,6 +1,5 @@
 """Tests for episodic memory tools: factory, execution, event emission, namespace isolation."""
 
-from nanitics import Tool, ToolCall, ToolRegistry
 from nanitics.capabilities.memory.episodic import Episode, InMemoryEpisodeStore, OutcomeType
 from nanitics.capabilities.memory.episodic_tools import create_episodic_memory_tools
 from nanitics.infrastructure.embeddings import MockEmbeddingClient
@@ -10,7 +9,12 @@ from nanitics.infrastructure.observability.events import (
     EpisodeRecallEvent,
     EpisodeRecordEvent,
 )
+from nanitics.strategies import (
+    Tool,
+    ToolRegistry,
+)
 from nanitics.strategies.tools.function_tool import FunctionTool
+from nanitics.tracing import ToolCall
 from tests.testing_helpers import make_emitter
 
 

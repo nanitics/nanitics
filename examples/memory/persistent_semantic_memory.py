@@ -14,10 +14,8 @@ Related guide: docs/guides/memory.md
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-from nanitics import (
-    MockEmbeddingClient,
-    get_semantic_store_schema_sql,
-)
+from nanitics.infrastructure import MockEmbeddingClient
+from nanitics.memory import get_semantic_store_schema_sql
 
 
 async def main() -> None:
@@ -63,7 +61,7 @@ async def main() -> None:
     try:
         import asyncpg as _asyncpg  # noqa: F401  # isort: skip
 
-        from nanitics import PostgresSemanticStore
+        from nanitics.memory import PostgresSemanticStore
 
         mock_pool = MagicMock()
         embedding_client = MockEmbeddingClient(dimension=1024)
@@ -208,7 +206,7 @@ async def main() -> None:
     print("\n--- Section 6: Runnable Demo (Mocked Pool) ---")
 
     if has_asyncpg:
-        from nanitics import PostgresSemanticStore as PGStore
+        from nanitics.memory import PostgresSemanticStore as PGStore
 
         embedding_client = MockEmbeddingClient(dimension=4)
 

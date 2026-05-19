@@ -41,21 +41,23 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import (
+from nanitics.collaboration.protocol import HumanInputRequest
+from nanitics.hitl import (
     ApprovalWrappedTool,
     CallbackHumanInputProvider,
     HumanDecision,
     HumanInputResponse,
-    InMemoryEmitter,
-    ReActAgent,
-    tool,
 )
-from nanitics.collaboration.protocol import HumanInputRequest
 from nanitics.infrastructure import (
     HumanInputRequestEvent,
     HumanInputResponseEvent,
     ToolInvokeEvent,
 )
+from nanitics.strategies import (
+    ReActAgent,
+    tool,
+)
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

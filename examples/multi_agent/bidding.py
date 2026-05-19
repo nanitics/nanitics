@@ -15,16 +15,13 @@ import asyncio
 import json
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    BiddableAgent,
-    MockLLMClient,
-    ReActAgent,
-)
+from nanitics.composition import BiddableAgent
 from nanitics.infrastructure import (
     BidAllocatedEvent,
     BiddingCompleteEvent,
     BiddingStartEvent,
     BidReceivedEvent,
+    MockLLMClient,
 )
 from nanitics.specialized import (
     DEFAULT_CALIBRATED_BID_PROMPT_TEMPLATE,
@@ -36,6 +33,7 @@ from nanitics.specialized import (
     LowestCost,
     WeightedScore,
 )
+from nanitics.strategies import ReActAgent
 
 
 async def main() -> None:

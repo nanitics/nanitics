@@ -3,9 +3,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from nanitics import (
-    MockLLMClient,
-)
+from nanitics.infrastructure import MockLLMClient
 from nanitics.infrastructure.observability.events import (
     TreeSearchCompleteEvent,
     TreeSearchNodeCreatedEvent,

@@ -152,7 +152,7 @@ What the caller writes:
 
 <!-- verify: skip — illustrative sketch combining suspend-side and resume-side fragments (typically different processes); `workflow`, `hitl_store`, `checkpoint_store`, `build_workflow`, `task`, `run_id`, `response`, `ship_payload_to_external_system` are caller-supplied and the top-level `await`s run inside an async context -->
 ```python
-from nanitics import DurableRun, ResumeContext, ResumeService, SuspendedRun
+from nanitics.composition import DurableRun, ResumeContext, ResumeService, SuspendedRun
 
 # Suspend side
 durable = DurableRun(workflow, hitl_store=hitl_store, checkpoint_store=checkpoint_store)

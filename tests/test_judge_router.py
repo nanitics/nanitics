@@ -6,11 +6,6 @@ import json
 
 import pytest
 
-from nanitics import (
-    InMemoryEmitter,
-    MockLLMClient,
-    ReActAgent,
-)
 from nanitics.composition.multi_agent.bidding import (
     DEFAULT_CALIBRATED_JUDGE_PROMPT_TEMPLATE,
     BiddableAgent,
@@ -21,6 +16,7 @@ from nanitics.composition.multi_agent.judge_router import (
     JudgeRouterResult,
     RankedCandidate,
 )
+from nanitics.infrastructure import MockLLMClient
 from nanitics.infrastructure.observability.events import (
     JudgeAllocatedEvent,
     JudgeRankingEvent,
@@ -29,6 +25,8 @@ from nanitics.infrastructure.observability.events import (
     LLMRequestEvent,
     LLMResponseEvent,
 )
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from tests.testing_helpers import make_emitter, make_response
 
 

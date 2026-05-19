@@ -11,19 +11,21 @@ Related guide: docs/guides/memory.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    InMemoryEmitter,
-    InMemoryLongTermStore,
-    MockLLMClient,
-    ReActAgent,
-    ToolCall,
-    create_long_term_memory_tools,
-)
 from nanitics.infrastructure import (
     LongTermDeleteEvent,
     LongTermListEvent,
     LongTermRetrieveEvent,
     LongTermStoreEvent,
+    MockLLMClient,
+)
+from nanitics.memory import (
+    InMemoryLongTermStore,
+    create_long_term_memory_tools,
+)
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import (
+    InMemoryEmitter,
+    ToolCall,
 )
 
 

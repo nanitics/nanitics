@@ -22,7 +22,8 @@ from typing import Literal, get_args
 from pydantic import BaseModel, Field
 
 from examples.helpers import make_emitter, make_response
-from nanitics import MockLLMClient, ReasoningAgent
+from nanitics.infrastructure import MockLLMClient
+from nanitics.strategies import ReasoningAgent
 
 # --- Closed-vocabulary `Literal` typology (the C12 shape) ---
 

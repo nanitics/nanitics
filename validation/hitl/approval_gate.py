@@ -31,16 +31,16 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import (
+from nanitics.collaboration.protocol import HumanInputRequest
+from nanitics.hitl import (
     ApprovalGate,
     CallbackHumanInputProvider,
     HumanDecision,
     HumanInputResponse,
-    InMemoryEmitter,
-    ReActAgent,
 )
-from nanitics.collaboration.protocol import HumanInputRequest
 from nanitics.infrastructure import HumanInputRequestEvent, HumanInputResponseEvent
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

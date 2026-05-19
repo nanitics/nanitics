@@ -48,16 +48,16 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import (
+from nanitics.evaluation import (
     CompositeEvaluator,
     EvaluationCheck,
     EvaluationContext,
     EvaluationVerdict,
-    InMemoryEmitter,
     LLMEvaluator,
     ProgrammaticEvaluator,
 )
 from nanitics.infrastructure import LLMRequestEvent, LLMResponseEvent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import make_llm_client, run_with_retry
 
 _ANALYSIS_CRITERIA = (

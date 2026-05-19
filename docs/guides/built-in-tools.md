@@ -44,7 +44,8 @@ Misuse fails closed — missing or empty allow-lists raise `ValueError` at const
 Each tool's `ToolResult.metadata` is a dict that round-trips through a frozen Pydantic model — `WebSearchResult`, `HttpResponse`, `FileReadResult`, or `CodeExecutionResult`. Application code validates the shape in one line:
 
 ```python
-from nanitics import HttpResponse, ToolResult
+from nanitics.strategies import ToolResult
+from nanitics.tools import HttpResponse
 
 def render(result: ToolResult) -> str:
     parsed = HttpResponse.model_validate(result.metadata)

@@ -13,18 +13,22 @@ from pathlib import Path
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from nanitics import (
-    InMemoryPersistentTraceStore,
+from nanitics.infrastructure import (
     LLMClient,
     LLMResponse,
     MockLLMClient,
+)
+from nanitics.observatory import create_observatory_router
+from nanitics.strategies import (
     ReActAgent,
+    tool,
+)
+from nanitics.tracing import (
+    InMemoryPersistentTraceStore,
     ToolCall,
     TracedExecutor,
     Usage,
-    tool,
 )
-from nanitics.observatory import create_observatory_router
 
 UI_DIR = Path("/srv/observatory-ui")
 
@@ -61,7 +65,7 @@ def _make_llm_client() -> LLMClient:
     """Return a real Anthropic client when an API key is set, else a scripted mock."""
     key = os.environ.get("ANTHROPIC_API_KEY")
     if key:
-        from nanitics import AnthropicLLMClient
+        from nanitics.infrastructure import AnthropicLLMClient
 
         return AnthropicLLMClient(api_key=key, model="claude-haiku-4-5-20251001")
     return _scripted_mock_client()

@@ -32,12 +32,10 @@ from typing import Any
 
 import pytest
 
-from nanitics import (
+from nanitics.composition import (
     DEFAULT_CALIBRATED_JUDGE_PROMPT_TEMPLATE,
     BiddableAgent,
-    InMemoryEmitter,
     JudgeRouter,
-    ReActAgent,
 )
 from nanitics.infrastructure import (
     JudgeAllocatedEvent,
@@ -47,6 +45,8 @@ from nanitics.infrastructure import (
     LLMRequestEvent,
 )
 from nanitics.specialized import FixedBidGenerator
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

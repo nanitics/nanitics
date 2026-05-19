@@ -1,13 +1,11 @@
 import pytest
 from pydantic import ValidationError
 
-from nanitics import (
+from nanitics.capabilities.memory.episodic import InMemoryEpisodeStore
+from nanitics.infrastructure import (
     MockEmbeddingClient,
     MockLLMClient,
-    ToolCall,
-    tool,
 )
-from nanitics.capabilities.memory.episodic import InMemoryEpisodeStore
 from nanitics.infrastructure.observability.events import (
     LLMRequestEvent,
     LLMResponseEvent,
@@ -18,12 +16,14 @@ from nanitics.infrastructure.observability.events import (
     TreeSearchNodePrunedEvent,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies import tool
 from nanitics.strategies.agents.evaluation import (
     EvaluationContext,
     EvaluationResult,
     EvaluationVerdict,
 )
 from nanitics.strategies.agents.lats import ActionNode, LATSAgent
+from nanitics.tracing import ToolCall
 from tests.testing_helpers import make_emitter, make_response
 
 # ──────────────────────────────────────────────────────────
@@ -2051,7 +2051,7 @@ class TestLATSInternals:
 
 class TestLATSUpdateToolState:
     def test_update_tool_state_delegates_to_registry(self) -> None:
-        from nanitics import ToolContext
+        from nanitics.strategies import ToolContext
 
         captured_state: list[dict] = []
 
@@ -2078,7 +2078,7 @@ class TestLATSUpdateToolState:
 
 class TestLATSRunId:
     async def test_run_id_kwarg_populates_tool_context(self) -> None:
-        from nanitics import ToolContext
+        from nanitics.strategies import ToolContext
 
         captured: list[ToolContext | None] = []
 

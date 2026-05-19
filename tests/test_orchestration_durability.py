@@ -879,7 +879,7 @@ class TestMapReduceSuspension:
         assert result.output == [10, 30]
 
     async def test_resume_with_cancelled_token(self) -> None:
-        from nanitics import CancellationToken
+        from nanitics.safety import CancellationToken
 
         store = InMemoryCheckpointStore()
         emitter = make_emitter()

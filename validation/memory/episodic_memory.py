@@ -19,16 +19,16 @@ Acceptance criteria:
 
 from __future__ import annotations
 
-from nanitics import (
+from nanitics.infrastructure import EpisodeRecallEvent
+from nanitics.memory import (
     Episode,
     EpisodicMemoryContributor,
     EpisodicMemoryProvider,
-    InMemoryEmitter,
     InMemoryEpisodeStore,
     OutcomeType,
-    ReActAgent,
 )
-from nanitics.infrastructure import EpisodeRecallEvent
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

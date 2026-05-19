@@ -11,20 +11,22 @@ Related guide: docs/guides/agent-types.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.evaluation import (
     EvaluationCheck,
-    InMemoryEpisodeStore,
-    MockEmbeddingClient,
-    MockLLMClient,
-    OutcomeType,
     ProgrammaticEvaluator,
-    ReActAgent,
 )
 from nanitics.infrastructure import (
     EvaluationEvent,
+    MockEmbeddingClient,
+    MockLLMClient,
     ReflectionGeneratedEvent,
 )
+from nanitics.memory import (
+    InMemoryEpisodeStore,
+    OutcomeType,
+)
 from nanitics.specialized import ReflexionAgent
+from nanitics.strategies import ReActAgent
 
 
 async def main() -> None:

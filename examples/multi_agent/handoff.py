@@ -12,16 +12,10 @@ Related guide: docs/guides/multi-agent-foundations.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    AgentResult,
-    Message,
-    MockLLMClient,
-    RawOutputTransfer,
-    ReActAgent,
-    Usage,
-)
+from nanitics.composition import RawOutputTransfer
 from nanitics.infrastructure import (
     HandoffEvent,
+    MockLLMClient,
 )
 from nanitics.patterns import (
     HandoffPayload,
@@ -30,6 +24,14 @@ from nanitics.patterns import (
     create_handoff_chain,
     handoff_receiver_instructions,
     handoff_sender_instructions,
+)
+from nanitics.strategies import (
+    AgentResult,
+    ReActAgent,
+)
+from nanitics.tracing import (
+    Message,
+    Usage,
 )
 
 

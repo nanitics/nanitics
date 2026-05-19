@@ -55,18 +55,18 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import (
-    InMemoryEmitter,
-    InMemoryPersistentTraceStore,
-    ReActAgent,
-    TraceCollector,
-)
 from nanitics.infrastructure import LLMRequestEvent, LLMResponseEvent
 from nanitics.infrastructure.observability.events import AgentStepEvent, Usage
 from nanitics.observatory import ObservatoryService
 from nanitics.observatory.models import (
     RunResponse,
     TraceSummaryResponse,
+)
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import (
+    InMemoryEmitter,
+    InMemoryPersistentTraceStore,
+    TraceCollector,
 )
 from validation.helpers import (
     make_llm_client,

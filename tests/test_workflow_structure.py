@@ -1,6 +1,5 @@
 """Tests for WorkflowStructureEvent emission from all workflow types."""
 
-from nanitics import InMemoryEmitter
 from nanitics.composition.orchestration.adapters import WorkflowStep
 from nanitics.composition.orchestration.conditional import Conditional
 from nanitics.composition.orchestration.dag import DAG, DAGNode
@@ -13,6 +12,7 @@ from nanitics.infrastructure.observability.events import (
     WorkflowStepCompleteEvent,
     WorkflowStructureEvent,
 )
+from nanitics.tracing import InMemoryEmitter
 from tests.testing_helpers import make_emitter, make_step
 
 # ── Helpers ────────────────────────────────────────────────

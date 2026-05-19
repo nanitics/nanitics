@@ -10,17 +10,19 @@ Related guide: docs/guides/memory.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.infrastructure import MockLLMClient
+from nanitics.memory import (
     ContextContent,
     InMemoryWorkingMemory,
-    MockLLMClient,
-    ReActAgent,
-    SystemPromptContributor,
-    ToolCall,
     WorkingMemoryContributor,
     WorkingMemoryProvider,
+)
+from nanitics.strategies import (
+    ReActAgent,
+    SystemPromptContributor,
     tool,
 )
+from nanitics.tracing import ToolCall
 
 # --- Tool used in Section 4 ---
 

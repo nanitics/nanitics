@@ -10,14 +10,11 @@ Related guide: docs/guides/context-management.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.context import (
     ContextManager,
     ContextUsage,
     EstimateTokenCounter,
-    Message,
-    MockLLMClient,
     SummarizationPolicy,
-    ToolCall,
     TruncationPolicy,
     count_message_tokens,
     default_message_grouper,
@@ -25,6 +22,11 @@ from nanitics import (
 from nanitics.infrastructure import (
     ContextSummarizationEvent,
     ContextTruncationEvent,
+    MockLLMClient,
+)
+from nanitics.tracing import (
+    Message,
+    ToolCall,
 )
 
 

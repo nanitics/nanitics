@@ -2,7 +2,6 @@
 
 import pytest
 
-from nanitics import Tool, ToolCall, ToolRegistry
 from nanitics.collaboration.protocol import (
     CallbackHumanInputProvider,
     HumanDecision,
@@ -20,7 +19,12 @@ from nanitics.infrastructure.observability.events import (
     HumanInputRequestEvent,
     HumanInputResponseEvent,
 )
+from nanitics.strategies import (
+    Tool,
+    ToolRegistry,
+)
 from nanitics.strategies.tools.function_tool import FunctionTool
+from nanitics.tracing import ToolCall
 from tests.testing_helpers import make_emitter
 
 

@@ -10,21 +10,21 @@ Related guide: docs/guides/getting-started.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    MockLLMClient,
-    ReActAgent,
-    ToolCall,
-    tool,
-)
 from nanitics.infrastructure import (
     AgentCompleteEvent,
     AgentStartEvent,
     AgentStepEvent,
     LLMRequestEvent,
     LLMResponseEvent,
+    MockLLMClient,
     ToolInvokeEvent,
     ToolResultEvent,
 )
+from nanitics.strategies import (
+    ReActAgent,
+    tool,
+)
+from nanitics.tracing import ToolCall
 
 # --- Shared tools ---
 

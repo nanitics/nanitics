@@ -19,7 +19,11 @@ the null-safety note on each class.
 
 from __future__ import annotations
 
-from nanitics import EvaluationContext, EvaluationResult, EvaluationVerdict
+from nanitics.evaluation import (
+    EvaluationContext,
+    EvaluationResult,
+    EvaluationVerdict,
+)
 
 
 class DepthPrioritizedEvaluator:

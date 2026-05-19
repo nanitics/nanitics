@@ -1,12 +1,10 @@
-from nanitics import (
-    InMemoryEmitter,
-    MockEmbeddingClient,
-    MockLLMClient,
-    ReasoningAgent,
-)
 from nanitics.capabilities.memory.episodic import (
     InMemoryEpisodeStore,
     OutcomeType,
+)
+from nanitics.infrastructure import (
+    MockEmbeddingClient,
+    MockLLMClient,
 )
 from nanitics.infrastructure.observability.events import (
     AgentCompleteEvent,
@@ -18,12 +16,14 @@ from nanitics.infrastructure.observability.events import (
 )
 from nanitics.safety.cancellation import CancellationToken
 from nanitics.specialized import ReflexionAgent
+from nanitics.strategies import ReasoningAgent
 from nanitics.strategies.agents.evaluation import (
     EvaluationContext,
     EvaluationResult,
     EvaluationVerdict,
     OutputEvaluator,
 )
+from nanitics.tracing import InMemoryEmitter
 from tests.testing_helpers import make_emitter, make_response, make_usage
 
 
@@ -871,7 +871,15 @@ class TestEvaluatorError:
 class TestReflectionToolNames:
     async def test_reflection_includes_tool_names_from_inner_agent(self) -> None:
         """When inner agent uses tools, reflection prompt includes tool names."""
-        from nanitics import LLMResponse, ReActAgent, ToolCall, Usage, tool
+        from nanitics.infrastructure import LLMResponse
+        from nanitics.strategies import (
+            ReActAgent,
+            tool,
+        )
+        from nanitics.tracing import (
+            ToolCall,
+            Usage,
+        )
 
         @tool(name="calculator", description="Calculate math")
         async def calc_tool(expression: str) -> str:

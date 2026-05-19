@@ -1,20 +1,20 @@
 """Tests for safety event emission (iteration limit and cancellation)."""
 
-from nanitics import (
-    CancellationToken,
-    ExecutionResult,
+from nanitics.infrastructure import (
     LLMResponse,
     MockLLMClient,
-    MockSandbox,
-    ToolCall,
-    tool,
-)
-from nanitics.infrastructure import (
     SafetyCancellationEvent,
     SafetyIterationLimitEvent,
 )
+from nanitics.safety import (
+    CancellationToken,
+    ExecutionResult,
+    MockSandbox,
+)
+from nanitics.strategies import tool
 from nanitics.strategies.agents.codeact import CodeActAgent
 from nanitics.strategies.agents.react import ReActAgent
+from nanitics.tracing import ToolCall
 from tests.testing_helpers import make_emitter, make_response, make_usage
 
 

@@ -1,9 +1,3 @@
-from nanitics import (
-    MockLLMClient,
-    ReActAgent,
-    ToolCall,
-    tool,
-)
 from nanitics.capabilities.memory.context_provider import (
     ContextContent,
     ContextProvider,
@@ -14,14 +8,20 @@ from nanitics.capabilities.memory.working_memory import (
     WorkingMemoryContributor,
     WorkingMemoryProvider,
 )
+from nanitics.infrastructure import MockLLMClient
 from nanitics.infrastructure.observability.events import (
     WorkingMemoryReadEvent,
     WorkingMemoryUpdateEvent,
+)
+from nanitics.strategies import (
+    ReActAgent,
+    tool,
 )
 from nanitics.strategies.agents.parsing import (
     parse_working_memory_update,
     strip_working_memory_block,
 )
+from nanitics.tracing import ToolCall
 from tests.testing_helpers import make_emitter, make_response
 
 # ──────────────────────────────────────────────────────────

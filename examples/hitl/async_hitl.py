@@ -20,7 +20,7 @@ Related example: examples/hitl/approval_gate.py (in-process HITL with ApprovalGa
 import asyncio
 
 from examples.helpers import make_emitter
-from nanitics import (
+from nanitics.hitl import (
     ApprovalGate,
     AsyncHumanInputProvider,
     HumanDecision,

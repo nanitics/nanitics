@@ -1,21 +1,12 @@
 import pytest
 from pydantic import BaseModel
 
-from nanitics import (
-    CancellationToken,
-    InMemoryEmitter,
-    Message,
-    MockLLMClient,
-    ReActAgent,
-    ReasoningAgent,
-    ToolCall,
-    ToolContext,
+from nanitics.capabilities.errors.handler import ErrorHandler
+from nanitics.errors import (
     ToolExecutionError,
     ToolParameterError,
-    tool,
 )
-from nanitics.capabilities.errors.handler import ErrorHandler
-from nanitics.infrastructure import AgentErrorEvent, AgentStartEvent, LLMRequestEvent
+from nanitics.infrastructure import AgentErrorEvent, AgentStartEvent, LLMRequestEvent, MockLLMClient
 from nanitics.infrastructure.errors import LLMRateLimitError, ToolNotFoundError
 from nanitics.infrastructure.observability.events import (
     ErrorCorrectionEvent,
@@ -23,7 +14,19 @@ from nanitics.infrastructure.observability.events import (
     ErrorRetryEvent,
     SafetyToolCallLimitEvent,
 )
+from nanitics.safety import CancellationToken
+from nanitics.strategies import (
+    ReActAgent,
+    ReasoningAgent,
+    ToolContext,
+    tool,
+)
 from nanitics.strategies.tools import ToolRegistry
+from nanitics.tracing import (
+    InMemoryEmitter,
+    Message,
+    ToolCall,
+)
 
 
 @tool(name="add", description="Add two numbers")
@@ -362,7 +365,7 @@ class TestReasoningAgent:
 
     async def test_non_nanitics_error_emits_error_with_message_metadata(self) -> None:
         """Non-NaniticsError produces error event with message-only metadata."""
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
 
         client = MockLLMClient([])
 
@@ -385,7 +388,7 @@ class TestReasoningAgent:
 
     async def test_truncation_triggers_revision_with_evaluator(self) -> None:
         """Truncated response triggers revision when evaluator present."""
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class _AcceptEval:
@@ -414,7 +417,7 @@ class TestReasoningAgent:
 
     async def test_truncation_during_revision_loop(self) -> None:
         """Truncation during revision loop (after evaluator REVISE) triggers truncation handling."""
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         call_count = 0
@@ -462,7 +465,7 @@ class TestReasoningAgent:
         ``reasoning_text`` values and whose ``artifact`` fields match the
         scripted ``parsed.model_dump()``.
         """
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from nanitics.infrastructure.observability.events import AgentStepEvent
         from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
@@ -542,7 +545,7 @@ class TestReasoningAgent:
     async def test_per_iteration_emission_without_reasoning_text(self) -> None:
         """ReasoningAgent with ``reasoning_text=None`` emits ``thought=None``
         but still emits the artifact from ``parsed``."""
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from nanitics.infrastructure.observability.events import AgentStepEvent
 
         class Answer(BaseModel):
@@ -1001,7 +1004,7 @@ class TestReActAgent:
 
     async def test_thought_carries_reasoning_text_on_tool_use_step(self) -> None:
         """Tool-use step emits ``thought == response.reasoning_text`` (not content)."""
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from nanitics.infrastructure.observability.events import AgentStepEvent
 
         tool_call = ToolCall(id="tc1", name="add", arguments={"a": 2, "b": 3})
@@ -1038,7 +1041,7 @@ class TestReActAgent:
         """Final content step emits ``thought == response.reasoning_text`` and
         ``observation == response.content`` — on the terminal no-tool path
         the agent's 'observation' is the final answer it produced."""
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from nanitics.infrastructure.observability.events import AgentStepEvent
 
         responses = [
@@ -1078,7 +1081,7 @@ class TestReActAgent:
         (max_iterations=1, tools=[]) with reasoning_text=None, the single
         emitted AgentStepEvent must populate observation from content so the
         event is not all-None."""
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from nanitics.infrastructure.observability.events import AgentStepEvent
 
         responses = [
@@ -1116,7 +1119,7 @@ class TestReActAgent:
         """When the model returns both reasoning_text (Anthropic thinking
         block) and content (final answer), thought and observation carry
         semantically distinct pieces — they are not the same string."""
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from nanitics.infrastructure.observability.events import AgentStepEvent
 
         responses = [
@@ -1832,7 +1835,7 @@ class TestReActStructuredOutput:
     async def test_react_structured_final_step_carries_artifact(self) -> None:
         """Structured final step emits ``artifact == parsed.model_dump()`` and
         ``thought == response.reasoning_text``."""
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from nanitics.infrastructure.observability.events import AgentStepEvent
 
         responses = [
@@ -2103,7 +2106,7 @@ class TestReActStructuredOutput:
 
     async def test_react_truncation_triggers_revision(self) -> None:
         """Truncated response (max_tokens) triggers revision loop in ReAct."""
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class _AcceptEval:
@@ -2133,7 +2136,7 @@ class TestReActStructuredOutput:
 
     async def test_react_truncation_exceeds_max_revisions(self) -> None:
         """Repeated truncation beyond max_revisions → evaluation_failed."""
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class _AcceptEval:
@@ -2224,7 +2227,7 @@ class TestReActStructuredOutputEvaluation:
         """Truncated structured response → revision loop."""
         from pydantic import BaseModel
 
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class Answer(BaseModel):
@@ -2278,7 +2281,7 @@ class TestReActStructuredOutputEvaluation:
         """Truncation during structured revision loop."""
         from pydantic import BaseModel
 
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class Answer(BaseModel):
@@ -2421,7 +2424,7 @@ class TestReActStructuredOutputEvaluation:
         """REVISE re-enters the tool loop and agent can call tools during revision."""
         from pydantic import BaseModel
 
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class Answer(BaseModel):
@@ -2494,7 +2497,7 @@ class TestReActStructuredOutputEvaluation:
         """REVISE re-enters tool loop; agent produces text only (no tools) then structured output."""
         from pydantic import BaseModel
 
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class Answer(BaseModel):
@@ -2560,7 +2563,7 @@ class TestReActStructuredOutputEvaluation:
         """revision_count carries across tool-loop/structured-output cycles; max_revisions=2 means 2 total."""
         from pydantic import BaseModel
 
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class Answer(BaseModel):
@@ -2628,7 +2631,7 @@ class TestReActStructuredOutputEvaluation:
         """Iteration budget is consumed during revision tool loops; exhaustion yields iteration_limit."""
         from pydantic import BaseModel
 
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class Answer(BaseModel):
@@ -2689,7 +2692,7 @@ class TestReActStructuredOutputEvaluation:
         """EvaluationEvent and EvaluationRevisionEvent emitted for each cycle with correct attempt numbers."""
         from pydantic import BaseModel
 
-        from nanitics import LLMResponse
+        from nanitics.infrastructure import LLMResponse
         from nanitics.infrastructure.observability.events import EvaluationEvent, EvaluationRevisionEvent
         from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 

@@ -32,22 +32,23 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from nanitics import (
-    CodeActAgent,
+from nanitics.capabilities.planning.store import InMemoryPlanStore
+from nanitics.infrastructure import (
     LLMResponse,
     MockLLMClient,
-    MockSandbox,
-    ReActAgent,
-    ReasoningAgent,
-    ToolCall,
-    tool,
 )
-from nanitics.capabilities.planning.store import InMemoryPlanStore
 from nanitics.infrastructure.observability.events import AgentStepEvent
+from nanitics.safety import MockSandbox
 from nanitics.specialized import (
     ReWOOAgent,
     ReWOOPlan,
     ReWOOStep,
+)
+from nanitics.strategies import (
+    CodeActAgent,
+    ReActAgent,
+    ReasoningAgent,
+    tool,
 )
 from nanitics.strategies.agents.evaluation import (
     EvaluationContext,
@@ -61,6 +62,7 @@ from nanitics.strategies.agents.tree_of_thought import (
     _Candidate,
     _GenerationResponse,
 )
+from nanitics.tracing import ToolCall
 from tests.testing_helpers import make_emitter, make_usage
 
 # ──────────────────────────────────────────────────────────────────────────────

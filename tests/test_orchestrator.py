@@ -1,25 +1,25 @@
 import pytest
 from pydantic import BaseModel
 
-from nanitics import (
-    InMemoryEmitter,
-    MockLLMClient,
-    ReActAgent,
-    ToolCall,
-)
 from nanitics.composition.multi_agent.agent_tool import AgentTool
 from nanitics.composition.multi_agent.orchestrator import (
     create_orchestrator,
     orchestrator_prompt_section,
 )
+from nanitics.infrastructure import MockLLMClient
 from nanitics.infrastructure.observability.events import DelegationEvent, EvaluationEvent
 from nanitics.patterns import FinalOutputStrategy
+from nanitics.strategies import ReActAgent
 from nanitics.strategies.agents.evaluation import (
     EvaluationContext,
     EvaluationResult,
     EvaluationVerdict,
 )
 from nanitics.strategies.agents.reasoning import ReasoningAgent
+from nanitics.tracing import (
+    InMemoryEmitter,
+    ToolCall,
+)
 from tests.testing_helpers import make_emitter, make_response
 
 

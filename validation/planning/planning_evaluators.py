@@ -34,21 +34,23 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import (
+from nanitics.evaluation import (
     EvaluationContext,
     EvaluationVerdict,
+)
+from nanitics.planning import (
     Goal,
     GoalSatisfactionEvaluator,
     GoalStatus,
-    InMemoryEmitter,
     InMemoryPlanStore,
     Plan,
     PlanAdherenceEvaluator,
     PlanningCapability,
     PlanStep,
-    ReActAgent,
     StepStatus,
 )
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import make_llm_client, run_with_retry
 
 

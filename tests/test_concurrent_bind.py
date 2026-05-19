@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import InMemoryEmitter, ReActAgent, ToolCall, tool
 from nanitics.composition.orchestration.adapters import AgentStep
 from nanitics.composition.orchestration.mapreduce import MapReduce
 from nanitics.composition.orchestration.parallel import Parallel
@@ -21,6 +20,14 @@ from nanitics.infrastructure.observability.events import (
     AgentStartEvent,
     LLMRequestEvent,
     ToolInvokeEvent,
+)
+from nanitics.strategies import (
+    ReActAgent,
+    tool,
+)
+from nanitics.tracing import (
+    InMemoryEmitter,
+    ToolCall,
 )
 from tests.testing_helpers import make_response, make_usage
 

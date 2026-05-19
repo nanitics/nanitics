@@ -1,14 +1,8 @@
 """Tests for semantic memory tools: factory, execution, event emission, namespace isolation."""
 
-from nanitics import (
-    MockLLMClient,
-    ReActAgent,
-    Tool,
-    ToolCall,
-    ToolRegistry,
-)
 from nanitics.capabilities.memory.semantic import InMemorySemanticStore
 from nanitics.capabilities.memory.semantic_tools import create_semantic_memory_tools
+from nanitics.infrastructure import MockLLMClient
 from nanitics.infrastructure.embeddings import MockEmbeddingClient
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter
 from nanitics.infrastructure.observability.events import (
@@ -16,7 +10,13 @@ from nanitics.infrastructure.observability.events import (
     SemanticSearchEvent,
     SemanticStoreEvent,
 )
+from nanitics.strategies import (
+    ReActAgent,
+    Tool,
+    ToolRegistry,
+)
 from nanitics.strategies.tools.function_tool import FunctionTool
+from nanitics.tracing import ToolCall
 from tests.testing_helpers import make_emitter, make_response
 
 

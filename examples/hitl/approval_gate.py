@@ -10,7 +10,7 @@ Related guide: docs/guides/human-in-the-loop.md
 import asyncio
 
 from examples.helpers import make_emitter
-from nanitics import (
+from nanitics.hitl import (
     ApprovalGate,
     CallbackHumanInputProvider,
     HumanDecision,

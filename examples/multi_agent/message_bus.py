@@ -11,16 +11,12 @@ Related guide: docs/guides/multi-agent-foundations.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    MockLLMClient,
-    ReActAgent,
-    ToolCall,
-)
 from nanitics.infrastructure import (
     MessageBusCompleteEvent,
     MessageBusStartEvent,
     MessageDeliveredEvent,
     MessagePublishedEvent,
+    MockLLMClient,
 )
 from nanitics.specialized import (
     BusMessage,
@@ -29,6 +25,8 @@ from nanitics.specialized import (
     MessageBusResult,
     TopicSubscription,
 )
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import ToolCall
 
 
 async def main() -> None:

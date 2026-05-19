@@ -3,11 +3,6 @@
 import pytest
 from pydantic import ValidationError
 
-from nanitics import (
-    InMemoryEmitter,
-    MockLLMClient,
-    ReActAgent,
-)
 from nanitics.composition.multi_agent.consensus import (
     AggregationStrategy,
     BestOfN,
@@ -21,12 +16,15 @@ from nanitics.composition.multi_agent.consensus import (
     _default_agreement,
     _format_peer_responses,
 )
+from nanitics.infrastructure import MockLLMClient
 from nanitics.infrastructure.observability.events import (
     ConsensusAgreementEvent,
     ConsensusCompleteEvent,
     ConsensusStartEvent,
     ConsensusVoteEvent,
 )
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from tests.testing_helpers import make_emitter, make_response
 
 

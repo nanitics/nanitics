@@ -16,23 +16,23 @@ Related guide: docs/guides/agent-types.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.evaluation import (
     EvaluationContext,
     EvaluationResult,
     EvaluationVerdict,
-    MockLLMClient,
-    ToolCall,
-    tool,
 )
 from nanitics.infrastructure import (
     MCTSBackpropagationEvent,
     MCTSIterationEvent,
+    MockLLMClient,
     TreeSearchCompleteEvent,
     TreeSearchNodeCreatedEvent,
     TreeSearchNodeEvaluatedEvent,
     TreeSearchNodePrunedEvent,
 )
 from nanitics.specialized import LATSAgent
+from nanitics.strategies import tool
+from nanitics.tracing import ToolCall
 
 # --- Shared evaluator ---
 

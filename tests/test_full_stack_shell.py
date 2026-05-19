@@ -25,11 +25,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from nanitics import (
+from nanitics.infrastructure import (
     AnthropicLLMClient,
-    InMemoryPersistentTraceStore,
     OpenAILLMClient,
 )
+from nanitics.tracing import InMemoryPersistentTraceStore
 
 # ---------------------------------------------------------------------------
 # Module loading — docker/full-stack/ is not a package, so load by path.

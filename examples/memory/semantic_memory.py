@@ -14,24 +14,28 @@ import asyncio
 import math
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    ContextContent,
-    InMemoryEmitter,
-    InMemorySemanticStore,
-    Message,
+from nanitics.infrastructure import (
     MockEmbeddingClient,
     MockLLMClient,
-    ReActAgent,
+    SemanticSearchEvent,
+    SemanticStoreEvent,
+)
+from nanitics.memory import (
+    ContextContent,
+    InMemorySemanticStore,
     SearchResult,
     SemanticMemoryContributor,
     SemanticMemoryProvider,
-    SystemPromptContributor,
-    ToolCall,
     create_semantic_memory_tools,
 )
-from nanitics.infrastructure import (
-    SemanticSearchEvent,
-    SemanticStoreEvent,
+from nanitics.strategies import (
+    ReActAgent,
+    SystemPromptContributor,
+)
+from nanitics.tracing import (
+    InMemoryEmitter,
+    Message,
+    ToolCall,
 )
 
 

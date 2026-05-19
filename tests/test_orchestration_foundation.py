@@ -4,18 +4,12 @@ from typing import Any
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from nanitics import (
-    CancellationToken,
-    InMemoryEmitter,
-    MockLLMClient,
-    ReActAgent,
-    ReasoningAgent,
-)
 from nanitics.composition.durability.models import SuspensionInfo
 from nanitics.composition.durability.suspension import SuspendExecution
 from nanitics.composition.orchestration.adapters import AgentStep, FunctionStep
 from nanitics.composition.orchestration.protocol import Step, StepResult
 from nanitics.composition.orchestration.workflow import Workflow
+from nanitics.infrastructure import MockLLMClient
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter as ConcreteInMemoryEmitter
 from nanitics.infrastructure.observability.events import (
     RunCompleteEvent,
@@ -30,6 +24,12 @@ from nanitics.infrastructure.observability.events import (
     WorkflowStructureEvent,
 )
 from nanitics.infrastructure.observability.storage import InMemoryPersistentTraceStore
+from nanitics.safety import CancellationToken
+from nanitics.strategies import (
+    ReActAgent,
+    ReasoningAgent,
+)
+from nanitics.tracing import InMemoryEmitter
 from tests.testing_helpers import make_emitter, make_response
 
 # ── Helpers ────────────────────────────────────────────────

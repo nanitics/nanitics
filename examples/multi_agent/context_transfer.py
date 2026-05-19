@@ -12,15 +12,17 @@ Related guide: docs/guides/multi-agent-foundations.md
 import asyncio
 
 from examples.helpers import make_response
-from nanitics import (
-    AgentResult,
+from nanitics.composition import (
     CustomTransfer,
-    Message,
-    MockLLMClient,
     RawOutputTransfer,
     SummaryTransfer,
-    ToolCall,
     TrajectoryTransfer,
+)
+from nanitics.infrastructure import MockLLMClient
+from nanitics.strategies import AgentResult
+from nanitics.tracing import (
+    Message,
+    ToolCall,
     Usage,
 )
 

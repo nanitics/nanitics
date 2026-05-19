@@ -15,34 +15,40 @@ import asyncio
 import re
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    AdaptivePlanningContributor,
+from nanitics.evaluation import (
     EvaluationContext,
     EvaluationVerdict,
-    GoalTrackingContributor,
-    InMemoryPlanStore,
-    LLMResponse,
-    Message,
-    MockLLMClient,
-    Plan,
-    PlanAdherenceEvaluator,
-    PlanningCapability,
-    PlanStatus,
-    PlanStep,
-    ReActAgent,
-    StepStatus,
-    SystemPromptBuilder,
-    ToolCall,
-    UpfrontPlanContributor,
-    create_planning_tools,
 )
 from nanitics.infrastructure import (
+    LLMResponse,
+    MockLLMClient,
     # Events
     PlanCreatedEvent,
     PlanRevisedEvent,
     PlanStepUpdatedEvent,
 )
+from nanitics.planning import (
+    AdaptivePlanningContributor,
+    GoalTrackingContributor,
+    InMemoryPlanStore,
+    Plan,
+    PlanAdherenceEvaluator,
+    PlanningCapability,
+    PlanStatus,
+    PlanStep,
+    StepStatus,
+    UpfrontPlanContributor,
+    create_planning_tools,
+)
 from nanitics.specialized import DecompositionContributor
+from nanitics.strategies import (
+    ReActAgent,
+    SystemPromptBuilder,
+)
+from nanitics.tracing import (
+    Message,
+    ToolCall,
+)
 
 
 async def main() -> None:

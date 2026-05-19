@@ -15,7 +15,6 @@ from typing import Any
 
 import pytest
 
-from nanitics import trace_events_from_stored
 from nanitics.infrastructure.observability.events import (
     AgentCompleteEvent,
     AgentStartEvent,
@@ -36,6 +35,7 @@ from nanitics.infrastructure.observability.storage import (
     MalformedStoredEventError,
     StoredTraceEvent,
 )
+from nanitics.tracing import trace_events_from_stored
 
 _TRACE_ID = "trace-round-trip"
 _SPAN_ID = "span-root"
@@ -336,11 +336,12 @@ class TestMalformedPayload:
 
 
 class TestTopLevelImport:
-    def test_trace_events_from_stored_is_top_level_exported(self) -> None:
-        # Smoke check — the helper must be reachable from the top-level
-        # package as part of the public re-export contract.
-        import nanitics
+    def test_trace_events_from_stored_is_subpackage_exported(self) -> None:
+        # Smoke check — the helper must be reachable from its subpackage
+        # path as part of the public re-export contract.
+        import nanitics.errors
+        import nanitics.tracing
 
-        assert hasattr(nanitics, "trace_events_from_stored")
-        assert "trace_events_from_stored" in nanitics.__all__
-        assert "MalformedStoredEventError" in nanitics.__all__
+        assert hasattr(nanitics.tracing, "trace_events_from_stored")
+        assert "trace_events_from_stored" in nanitics.tracing.__all__
+        assert "MalformedStoredEventError" in nanitics.errors.__all__

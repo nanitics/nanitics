@@ -24,7 +24,11 @@ if TYPE_CHECKING:
     import asyncpg
     from fastapi import FastAPI
 
-    from nanitics import LLMClient, PersistentTraceStore, TracedExecutor
+    from nanitics.infrastructure import LLMClient
+    from nanitics.tracing import (
+        PersistentTraceStore,
+        TracedExecutor,
+    )
 
 
 @dataclass(frozen=True)

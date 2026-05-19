@@ -34,19 +34,19 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import (
+from nanitics.collaboration.protocol import HumanInputRequest
+from nanitics.hitl import (
     CallbackHumanInputProvider,
     HumanDecision,
     HumanInputResponse,
-    InMemoryEmitter,
-    ReActAgent,
     create_hitl_tools,
 )
-from nanitics.collaboration.protocol import HumanInputRequest
 from nanitics.infrastructure import (
     HumanInputRequestEvent,
     HumanInputResponseEvent,
 )
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

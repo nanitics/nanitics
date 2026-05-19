@@ -8,16 +8,14 @@ import anthropic
 import pytest
 from pydantic import BaseModel
 
-from nanitics import (
-    ImageContentBlock,
-    LLMClient,
+from nanitics.errors import (
     LLMContextLengthError,
     LLMProviderError,
     LLMRateLimitError,
     LLMSchemaViolationError,
-    Message,
-    TextContentBlock,
-    ToolCall,
+)
+from nanitics.infrastructure import (
+    LLMClient,
     ToolSchema,
 )
 from nanitics.infrastructure.llm.anthropic import (
@@ -26,6 +24,12 @@ from nanitics.infrastructure.llm.anthropic import (
     _from_anthropic_response,
     _to_anthropic_messages,
     _to_anthropic_tools,
+)
+from nanitics.tracing import (
+    ImageContentBlock,
+    Message,
+    TextContentBlock,
+    ToolCall,
 )
 
 # --- Helpers ---

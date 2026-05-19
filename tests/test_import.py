@@ -14,12 +14,10 @@ def test_all_exports_importable(name: str) -> None:
 
 
 def test_import_context_management_types() -> None:
-    from nanitics import (
-        ContextContribution,
+    from nanitics.context import (
         ContextManager,
         ContextUsage,
         EstimateTokenCounter,
-        RemovedMessageInfo,
         SummarizationPolicy,
         TokenCounter,
         TruncationPolicy,
@@ -28,6 +26,10 @@ def test_import_context_management_types() -> None:
         ContextAssemblyEvent,
         ContextSummarizationEvent,
         ContextTruncationEvent,
+    )
+    from nanitics.tracing import (
+        ContextContribution,
+        RemovedMessageInfo,
     )
 
     assert ContextManager is not None
@@ -44,7 +46,7 @@ def test_import_context_management_types() -> None:
 
 
 def test_import_embedding_types() -> None:
-    from nanitics import (
+    from nanitics.infrastructure import (
         EmbeddingClient,
         MockEmbeddingClient,
     )
@@ -54,16 +56,16 @@ def test_import_embedding_types() -> None:
 
 
 def test_import_semantic_memory_types() -> None:
-    from nanitics import (
-        InMemorySemanticStore,
-        SearchResult,
-        SemanticStore,
-        create_semantic_memory_tools,
-    )
     from nanitics.infrastructure import (
         SemanticDeleteEvent,
         SemanticSearchEvent,
         SemanticStoreEvent,
+    )
+    from nanitics.memory import (
+        InMemorySemanticStore,
+        SearchResult,
+        SemanticStore,
+        create_semantic_memory_tools,
     )
 
     assert SemanticStore is not None

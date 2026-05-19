@@ -37,15 +37,15 @@ Acceptance criteria — namespace scenario:
 
 from __future__ import annotations
 
-from nanitics import (
-    InMemoryEmitter,
+from nanitics.infrastructure import SemanticSearchEvent, SemanticStoreEvent
+from nanitics.memory import (
     InMemorySemanticStore,
-    ReActAgent,
     SemanticMemoryContributor,
     SemanticMemoryProvider,
     create_semantic_memory_tools,
 )
-from nanitics.infrastructure import SemanticSearchEvent, SemanticStoreEvent
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

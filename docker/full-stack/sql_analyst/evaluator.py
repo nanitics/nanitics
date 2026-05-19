@@ -21,7 +21,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from nanitics import EvaluationContext, EvaluationResult, EvaluationVerdict
+from nanitics.evaluation import (
+    EvaluationContext,
+    EvaluationResult,
+    EvaluationVerdict,
+)
 from sql_analyst.questions import SampleQuestion
 
 _EVALUATOR_NAME = "sql_analyst_ground_truth"

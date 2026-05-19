@@ -14,7 +14,9 @@ Use a static list when the conversation shape is fixed — the agent will call t
 
 <!-- verify: skip — illustrative, top-level await requires pytest async context -->
 ```python
-from nanitics import MockLLMClient, ReActAgent, InMemoryEmitter
+from nanitics.infrastructure import MockLLMClient
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from examples.helpers import make_response
 
 llm = MockLLMClient(responses=[

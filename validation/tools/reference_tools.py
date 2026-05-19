@@ -78,17 +78,17 @@ from pathlib import Path
 
 import pytest
 
-from nanitics import (
-    DockerSandbox,
-    InMemoryEmitter,
-    ReActAgent,
+from nanitics.infrastructure import ToolInvokeEvent, ToolResultEvent
+from nanitics.infrastructure.errors import ToolParameterError
+from nanitics.safety import DockerSandbox
+from nanitics.strategies import ReActAgent
+from nanitics.tools import (
     create_code_execution_tool,
     create_file_read_tool,
     create_http_tool,
     create_web_search_tool,
 )
-from nanitics.infrastructure import ToolInvokeEvent, ToolResultEvent
-from nanitics.infrastructure.errors import ToolParameterError
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

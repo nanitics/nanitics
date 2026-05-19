@@ -35,14 +35,16 @@ from typing import TYPE_CHECKING, Any
 from fastapi import APIRouter, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from nanitics import (
+from nanitics.infrastructure import (
     AnthropicLLMClient,
     LLMClient,
-    ReActAgent,
-    tool,
-    trace_events_from_stored,
 )
 from nanitics.infrastructure.observability.emitter import EventEmitter
+from nanitics.strategies import (
+    ReActAgent,
+    tool,
+)
+from nanitics.tracing import trace_events_from_stored
 from self_improver.advisor import analyze as advisor_analyze
 from self_improver.advisor.analyze import AdvisorReport
 

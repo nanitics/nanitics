@@ -25,14 +25,14 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import (
+from nanitics.composition import (
     AgentStep,
-    InMemoryEmitter,
-    ReActAgent,
     StepResult,
 )
 from nanitics.infrastructure import WorkflowStepCompleteEvent
 from nanitics.specialized import MapReduce
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_result_satisfies,
     make_llm_client,

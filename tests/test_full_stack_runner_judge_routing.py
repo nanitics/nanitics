@@ -27,18 +27,20 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 
-from nanitics import (
-    BiddableAgent,
-    InMemoryPersistentTraceStore,
+from nanitics.composition import BiddableAgent
+from nanitics.infrastructure import (
     LLMResponse,
     MockLLMClient,
-    ReActAgent,
-    TracedExecutor,
-    Usage,
 )
 from nanitics.infrastructure.errors import ToolParameterError
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter
 from nanitics.specialized import FixedBidGenerator
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import (
+    InMemoryPersistentTraceStore,
+    TracedExecutor,
+    Usage,
+)
 
 # ── Path setup — make ``judge_routing`` importable as a package ──
 

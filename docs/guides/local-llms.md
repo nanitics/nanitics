@@ -7,7 +7,7 @@ Any OpenAI-compatible server works with `OpenAILLMClient` — set `base_url` to 
 Ollama exposes an OpenAI-compatible endpoint at `http://localhost:11434/v1`. Pull a model with `ollama pull llama3.2` before running.
 
 ```python
-from nanitics import OpenAILLMClient
+from nanitics.infrastructure import OpenAILLMClient
 
 llm = OpenAILLMClient(
     model="llama3.2",
@@ -21,7 +21,7 @@ llm = OpenAILLMClient(
 vLLM exposes an OpenAI-compatible server via `python -m vllm.entrypoints.openai.api_server --model <hf-id>`. The default port is `8000`.
 
 ```python
-from nanitics import OpenAILLMClient
+from nanitics.infrastructure import OpenAILLMClient
 
 llm = OpenAILLMClient(
     model="meta-llama/Llama-3.1-8B-Instruct",
@@ -35,7 +35,7 @@ llm = OpenAILLMClient(
 LM Studio's Local Server tab exposes an OpenAI-compatible endpoint at `http://localhost:1234/v1`. Start the server from the app before running.
 
 ```python
-from nanitics import OpenAILLMClient
+from nanitics.infrastructure import OpenAILLMClient
 
 llm = OpenAILLMClient(
     model="llama-3.2-3b-instruct",

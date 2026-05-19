@@ -1,14 +1,16 @@
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from nanitics import (
+from nanitics.errors import LLMSchemaViolationError
+from nanitics.infrastructure import (
     LLMClient,
     LLMResponse,
-    LLMSchemaViolationError,
-    Message,
     MockLLMClient,
-    ToolCall,
     ToolSchema,
+)
+from nanitics.tracing import (
+    Message,
+    ToolCall,
     Usage,
 )
 

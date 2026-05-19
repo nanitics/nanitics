@@ -1,13 +1,15 @@
 """Tests for LLM token streaming (on_token callback and LLMTokenEvent)."""
 
-from nanitics import (
+from nanitics.infrastructure import (
+    LLMTokenEvent,
     MockLLMClient,
-    ReActAgent,
     RoutingLLMClient,
     RuleBasedRouting,
+)
+from nanitics.strategies import (
+    ReActAgent,
     tool,
 )
-from nanitics.infrastructure import LLMTokenEvent
 from tests.testing_helpers import make_emitter, make_response
 
 

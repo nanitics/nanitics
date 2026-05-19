@@ -10,12 +10,9 @@ Related guide: docs/guides/multi-agent-foundations.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response, make_usage
-from nanitics import (
+from nanitics.infrastructure import (
     LLMResponse,
     MockLLMClient,
-    ToolCall,
-)
-from nanitics.infrastructure import (
     PeerConsultationEvent,
     PeerNetworkCompleteEvent,
     PeerNetworkStartEvent,
@@ -24,6 +21,7 @@ from nanitics.specialized import (
     PeerNetwork,
     PeerSpec,
 )
+from nanitics.tracing import ToolCall
 
 
 async def main() -> None:

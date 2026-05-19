@@ -23,13 +23,10 @@ import httpx
 import respx
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    MockLLMClient,
-    ReActAgent,
-    ToolCall,
-    create_web_search_tool,
-)
-from nanitics.infrastructure import ToolInvokeEvent, ToolResultEvent
+from nanitics.infrastructure import MockLLMClient, ToolInvokeEvent, ToolResultEvent
+from nanitics.strategies import ReActAgent
+from nanitics.tools import create_web_search_tool
+from nanitics.tracing import ToolCall
 
 TAVILY_URL = "https://api.tavily.com/search"
 BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"

@@ -12,22 +12,22 @@ import asyncio
 import json
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.evaluation import (
     CompositeEvaluator,
     EvaluationCheck,
     EvaluationContext,
     EvaluationResult,
     EvaluationVerdict,
     LLMEvaluator,
-    MockLLMClient,
     OutputEvaluator,
     ProgrammaticEvaluator,
-    ReActAgent,
 )
 from nanitics.infrastructure import (
     EvaluationEvent,
     EvaluationRevisionEvent,
+    MockLLMClient,
 )
+from nanitics.strategies import ReActAgent
 
 
 async def main() -> None:

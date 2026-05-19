@@ -11,11 +11,6 @@ import asyncio
 
 from pydantic import TypeAdapter
 
-from nanitics import (
-    InMemoryEmitter,
-    TraceEvent,
-    Usage,
-)
 from nanitics.infrastructure import (
     AgentCompleteEvent,
     AgentStartEvent,
@@ -29,6 +24,11 @@ from nanitics.infrastructure import (
     ToolResultEvent,
     classify_level,
     is_level_included,
+)
+from nanitics.tracing import (
+    InMemoryEmitter,
+    TraceEvent,
+    Usage,
 )
 
 

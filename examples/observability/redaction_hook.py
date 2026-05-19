@@ -12,18 +12,18 @@ Related guide: docs/guides/observability.md#trace-surface-hygiene
 import asyncio
 import re
 
-from nanitics import (
+from nanitics.infrastructure.observability import (
+    AgentCompleteEvent,
+    AgentStartEvent,
+    LLMRequestEvent,
+)
+from nanitics.tracing import (
     InMemoryEmitter,
     InMemoryPersistentTraceStore,
     RedactionHook,
     TraceCollector,
     TracedExecutor,
     TraceEvent,
-)
-from nanitics.infrastructure.observability import (
-    AgentCompleteEvent,
-    AgentStartEvent,
-    LLMRequestEvent,
 )
 
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")

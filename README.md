@@ -59,15 +59,9 @@ Create a ReAct agent with a tool, driven by a scripted `MockLLMClient` so the sn
 
 ```python
 import asyncio
-from nanitics import (
-    InMemoryEmitter,
-    LLMResponse,
-    MockLLMClient,
-    ReActAgent,
-    ToolCall,
-    Usage,
-    tool,
-)
+from nanitics.infrastructure import LLMResponse, MockLLMClient
+from nanitics.strategies import ReActAgent, tool
+from nanitics.tracing import InMemoryEmitter, ToolCall, Usage
 
 @tool("greet", "Greet someone by name")
 async def greet(name: str) -> str:

@@ -12,7 +12,10 @@ import random
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
-from nanitics import LLMProviderError, LLMRateLimitError
+from nanitics.errors import (
+    LLMProviderError,
+    LLMRateLimitError,
+)
 
 _BASE_DELAY_SECONDS = 1.0
 _MAX_DELAY_SECONDS = 10.0

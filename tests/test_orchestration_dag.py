@@ -2,7 +2,6 @@ import asyncio
 
 import pytest
 
-from nanitics import CancellationToken
 from nanitics.composition.durability.models import RunCheckpoint, SuspensionInfo
 from nanitics.composition.durability.store import InMemoryCheckpointStore
 from nanitics.composition.durability.suspension import SuspendExecution
@@ -16,6 +15,7 @@ from nanitics.infrastructure.observability.events import (
     WorkflowStartEvent,
     WorkflowStepCompleteEvent,
 )
+from nanitics.safety import CancellationToken
 from tests.testing_helpers import make_emitter, make_step
 
 # ── Helpers ────────────────────────────────────────────────

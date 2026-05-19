@@ -12,11 +12,9 @@ import asyncio
 from pydantic import BaseModel, Field
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.evaluation import (
     EvaluationCheck,
-    MockLLMClient,
     ProgrammaticEvaluator,
-    ReasoningAgent,
 )
 from nanitics.infrastructure import (
     AgentCompleteEvent,
@@ -26,9 +24,11 @@ from nanitics.infrastructure import (
     EvaluationRevisionEvent,
     LLMRequestEvent,
     LLMResponseEvent,
+    MockLLMClient,
     SpanEndEvent,
     SpanStartEvent,
 )
+from nanitics.strategies import ReasoningAgent
 
 
 async def main() -> None:

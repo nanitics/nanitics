@@ -59,20 +59,24 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import (
-    ContextContent,
-    ContextManager,
-    ContextProvider,
-    InMemoryEmitter,
-    Message,
-    ReActAgent,
-    TruncationPolicy,
-)
 from nanitics.capabilities.context.grouping import (
     default_message_grouper,
     flatten_groups,
 )
+from nanitics.context import (
+    ContextManager,
+    TruncationPolicy,
+)
 from nanitics.infrastructure import LLMRequestEvent
+from nanitics.memory import (
+    ContextContent,
+    ContextProvider,
+)
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import (
+    InMemoryEmitter,
+    Message,
+)
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

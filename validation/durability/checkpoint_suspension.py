@@ -36,12 +36,10 @@ from __future__ import annotations
 
 import pytest
 
-from nanitics import (
+from nanitics.composition import (
     CheckpointStore,
     FunctionStep,
     InMemoryCheckpointStore,
-    InMemoryEmitter,
-    Message,
     RunCheckpoint,
     Sequential,
     SuspendExecution,
@@ -52,6 +50,10 @@ from nanitics.infrastructure import (
     ExecutionResumedEvent,
     ExecutionSuspendedEvent,
     WorkflowStepCompleteEvent,
+)
+from nanitics.tracing import (
+    InMemoryEmitter,
+    Message,
 )
 from validation.helpers import (
     assert_trace_contains,

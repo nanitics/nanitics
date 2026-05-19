@@ -75,11 +75,6 @@ and is not LATS-distinguishing.
 
 from __future__ import annotations
 
-from nanitics import (
-    InMemoryEmitter,
-    InMemoryEpisodeStore,
-    tool,
-)
 from nanitics.infrastructure import (
     LLMRequestEvent,
     MCTSBackpropagationEvent,
@@ -88,7 +83,10 @@ from nanitics.infrastructure import (
     TreeSearchNodeCreatedEvent,
     TreeSearchNodePrunedEvent,
 )
+from nanitics.memory import InMemoryEpisodeStore
 from nanitics.specialized import LATSAgent
+from nanitics.strategies import tool
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_trace_contains,
     make_embedding_client,

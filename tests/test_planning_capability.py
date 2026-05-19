@@ -1,6 +1,5 @@
 """Tests for PlanningCapability: auto-wiring of planning tools, context provider, and evaluator."""
 
-from nanitics import ToolCall, ToolRegistry
 from nanitics.capabilities.evaluation.protocol import (
     EvaluationContext,
     EvaluationVerdict,
@@ -8,6 +7,8 @@ from nanitics.capabilities.evaluation.protocol import (
 from nanitics.capabilities.planning.capability import PlanningCapability
 from nanitics.capabilities.planning.models import Plan, PlanStep, StepStatus
 from nanitics.capabilities.planning.store import InMemoryPlanStore
+from nanitics.strategies import ToolRegistry
+from nanitics.tracing import ToolCall
 from tests.testing_helpers import make_emitter
 
 

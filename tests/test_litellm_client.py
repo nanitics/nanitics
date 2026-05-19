@@ -11,18 +11,22 @@ import litellm
 import pytest
 from pydantic import BaseModel
 
-from nanitics import (
-    LLMClient,
+from nanitics.errors import (
     LLMContextLengthError,
     LLMProviderError,
     LLMRateLimitError,
     LLMSchemaViolationError,
-    Message,
-    ToolCall,
+)
+from nanitics.infrastructure import (
+    LLMClient,
     ToolSchema,
 )
 from nanitics.infrastructure.llm._openai_format import STRUCTURED_OUTPUT_TOOL_NAME
 from nanitics.infrastructure.llm.litellm import LiteLLMClient
+from nanitics.tracing import (
+    Message,
+    ToolCall,
+)
 
 # --- Helpers ---
 

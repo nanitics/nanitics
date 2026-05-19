@@ -54,7 +54,9 @@ A typical run goes through these states: `running → complete | error | suspend
 Use `TracedExecutor` to manage run lifecycle with persistent traces. It handles ID generation, run registration, emitter creation, real-time event persistence via `TraceCollector`, and status finalization — the application only provides a callback:
 
 ```python
-from nanitics import TracedExecutor, PostgresTraceStore, ReActAgent, AnthropicLLMClient
+from nanitics.infrastructure import AnthropicLLMClient
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import PostgresTraceStore, TracedExecutor
 
 trace_store = PostgresTraceStore(pool=asyncpg_pool)
 executor = TracedExecutor(trace_store)
@@ -105,7 +107,7 @@ Track active runs with their event queues and metadata:
 ```python
 import asyncio
 from dataclasses import dataclass, field
-from nanitics import TraceEvent
+from nanitics.tracing import TraceEvent
 
 @dataclass
 class RunContext:
@@ -120,7 +122,7 @@ class RunContext:
 Register an event listener on the emitter that forwards events to the queue:
 
 ```python
-from nanitics import InMemoryEmitter
+from nanitics.tracing import InMemoryEmitter
 
 emitter = InMemoryEmitter(trace_id="...")
 ctx = RunContext(run_id="...")
@@ -265,7 +267,7 @@ If you need more control (custom emitter configuration, multiple collectors, non
 
 <!-- verify: skip — illustrative wiring sketch; `asyncpg_pool`, `run_id`, `sse_queue`, `emitter` are caller-supplied and the trailing `await` runs inside an async context -->
 ```python
-from nanitics import TraceCollector, PostgresTraceStore
+from nanitics.tracing import PostgresTraceStore, TraceCollector
 
 trace_store = PostgresTraceStore(pool=asyncpg_pool)
 
@@ -310,7 +312,7 @@ The SDK provides in-memory implementations of all stores. For production, implem
 Checkpoints enable durable execution — the agent can suspend (for HITL, timeouts, etc.) and resume later, even after process restart. Here's the pattern:
 
 ```python
-from nanitics import RunCheckpoint, SuspensionInfo
+from nanitics.composition import RunCheckpoint, SuspensionInfo
 
 class PostgresCheckpointStore:
     def __init__(self, pool) -> None:
@@ -392,7 +394,7 @@ For runs where the process stays alive during human interaction:
 
 ```python
 import asyncio
-from nanitics import HumanInputRequest, HumanInputResponse
+from nanitics.hitl import HumanInputRequest, HumanInputResponse
 
 class ApiHumanInputProvider:
     """Suspends on an asyncio.Future until the API resolves it."""
@@ -421,7 +423,7 @@ class ApiHumanInputProvider:
 For runs that may suspend and resume across process restarts, use `DurableHumanInputProvider` with a database-backed request store:
 
 ```python
-from nanitics import DurableHumanInputProvider
+from nanitics.hitl import DurableHumanInputProvider
 
 # The store persists HITL requests and responses to the database
 hitl_store = PostgresHitlRequestStore(pool, run_id)
@@ -431,7 +433,8 @@ provider = DurableHumanInputProvider(hitl_store)
 When the agent requests input, `DurableHumanInputProvider` saves the request to the store and raises `SuspendExecution`. The agent's state is checkpointed. On the resume side, use `ResumeService` — it owns the load-checkpoint / validate-response / save-response / re-execute cycle so your API layer doesn't have to:
 
 ```python
-from nanitics import DurableRun, HumanInputResponse, ResumeContext, ResumeService
+from nanitics.composition import DurableRun, ResumeContext, ResumeService
+from nanitics.hitl import HumanInputResponse
 
 def factory(ctx: ResumeContext) -> DurableRun:
     workflow = build_workflow(ctx.run_id, ctx.hitl_store, ctx.checkpoint_store)
@@ -461,7 +464,7 @@ async def resume_run(run_id: str, response: HumanInputResponse):
 > **Important:** `SuspendExecution` inherits from `BaseException`, not `Exception`. This is intentional — it must propagate through tool execution and agent loops without being caught by `except Exception` handlers. `TracedExecutor` handles this automatically (marking the run as `suspended`). If you write your own run lifecycle handler, catch `SuspendExecution` *before* `Exception`:
 >
 > ```python
-> from nanitics import SuspendExecution
+> from nanitics.composition import SuspendExecution
 >
 > try:
 >     result = await coro
@@ -477,7 +480,7 @@ async def resume_run(run_id: str, response: HumanInputResponse):
 
 ```python
 from fastapi import APIRouter
-from nanitics import HumanDecision, HumanInputResponse
+from nanitics.hitl import HumanDecision, HumanInputResponse
 from datetime import datetime, UTC
 
 router = APIRouter()

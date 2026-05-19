@@ -62,8 +62,13 @@ Requires the Docker daemon. ``@requires_docker`` skips cleanly when not present.
 
 from __future__ import annotations
 
-from nanitics import CodeActAgent, DockerSandbox, InMemoryEmitter, tool
 from nanitics.infrastructure import CodeExecutionEvent, CodeExecutionResultEvent, ToolInvokeEvent
+from nanitics.safety import DockerSandbox
+from nanitics.strategies import (
+    CodeActAgent,
+    tool,
+)
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

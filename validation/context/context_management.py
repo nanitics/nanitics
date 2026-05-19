@@ -51,15 +51,17 @@ Acceptance criteria — summarization scenario:
 
 from __future__ import annotations
 
-from nanitics import (
+from nanitics.context import (
     ContextManager,
-    InMemoryEmitter,
-    Message,
-    ReActAgent,
     SummarizationPolicy,
     TruncationPolicy,
 )
 from nanitics.infrastructure import ContextSummarizationEvent, ContextTruncationEvent
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import (
+    InMemoryEmitter,
+    Message,
+)
 from validation.helpers import (
     assert_result_satisfies,
     assert_trace_contains,

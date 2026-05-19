@@ -2,13 +2,6 @@
 
 import pytest
 
-from nanitics import (
-    InMemoryEmitter,
-    LLMResponse,
-    MockLLMClient,
-    ReActAgent,
-    ReasoningAgent,
-)
 from nanitics.capabilities.memory.shared import InMemorySharedMemory, SharedMemory
 from nanitics.capabilities.memory.shared_tools import create_shared_memory_tools
 from nanitics.composition.multi_agent.blackboard import (
@@ -25,12 +18,21 @@ from nanitics.composition.multi_agent.blackboard import (
     ScheduledControl,
     TerminationCondition,
 )
+from nanitics.infrastructure import (
+    LLMResponse,
+    MockLLMClient,
+)
 from nanitics.infrastructure.observability.events import (
     BlackboardCompleteEvent,
     BlackboardRoundEvent,
     BlackboardStartEvent,
     SharedMemoryWriteEvent,
 )
+from nanitics.strategies import (
+    ReActAgent,
+    ReasoningAgent,
+)
+from nanitics.tracing import InMemoryEmitter
 from tests.testing_helpers import make_emitter, make_response, make_usage
 
 

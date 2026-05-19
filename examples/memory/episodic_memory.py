@@ -11,27 +11,31 @@ Related guide: docs/guides/memory.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
+from nanitics.infrastructure import (
+    EpisodeRecallEvent,
+    EpisodeRecordEvent,
+    MockEmbeddingClient,
+    MockLLMClient,
+)
+from nanitics.memory import (
     ContextContent,
     Episode,
     EpisodicMemoryContributor,
     EpisodicMemoryProvider,
     InMemoryEpisodeStore,
-    Message,
-    MockEmbeddingClient,
-    MockLLMClient,
     OutcomeType,
-    ReActAgent,
     RecallFilters,
     RecallResult,
-    SystemPromptContributor,
-    ToolCall,
     create_episodic_memory_tools,
     extract_episode,
 )
-from nanitics.infrastructure import (
-    EpisodeRecallEvent,
-    EpisodeRecordEvent,
+from nanitics.strategies import (
+    ReActAgent,
+    SystemPromptContributor,
+)
+from nanitics.tracing import (
+    Message,
+    ToolCall,
 )
 
 

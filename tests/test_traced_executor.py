@@ -7,15 +7,15 @@ import uuid
 
 import pytest
 
-from nanitics import (
-    EventEmitter,
-    InMemoryPersistentTraceStore,
-    MockLLMClient,
-    ReasoningAgent,
-    TracedExecutor,
-)
 from nanitics.composition.durability.models import SuspensionInfo
 from nanitics.composition.durability.suspension import SuspendExecution
+from nanitics.infrastructure import MockLLMClient
+from nanitics.strategies import ReasoningAgent
+from nanitics.tracing import (
+    EventEmitter,
+    InMemoryPersistentTraceStore,
+    TracedExecutor,
+)
 from tests.testing_helpers import make_response
 
 

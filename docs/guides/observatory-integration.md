@@ -103,16 +103,9 @@ from pathlib import Path
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from nanitics import (
-    InMemoryPersistentTraceStore,
-    LLMResponse,
-    MockLLMClient,
-    ReActAgent,
-    ToolCall,
-    TracedExecutor,
-    Usage,
-    tool,
-)
+from nanitics.infrastructure import LLMResponse, MockLLMClient
+from nanitics.strategies import ReActAgent, tool
+from nanitics.tracing import InMemoryPersistentTraceStore, ToolCall, TracedExecutor, Usage
 from nanitics.observatory import create_observatory_router
 
 UI_DIR = Path("/srv/observatory-ui")  # where you copied observatory/dist-embed

@@ -53,7 +53,10 @@ from sql_analyst.questions import (
 )
 from sql_analyst.tool import build_run_sql_tool
 
-from nanitics import EvaluationContext, EvaluationVerdict
+from nanitics.evaluation import (
+    EvaluationContext,
+    EvaluationVerdict,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -877,10 +880,12 @@ import json
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from nanitics import (
-    InMemoryPersistentTraceStore,
+from nanitics.infrastructure import (
     LLMResponse,
     MockLLMClient,
+)
+from nanitics.tracing import (
+    InMemoryPersistentTraceStore,
     ToolCall,
     TracedExecutor,
     Usage,
@@ -1381,7 +1386,7 @@ class TestSqlAnalystHelpers:
         source."""
         from sql_analyst.runner import _opt_in_caching
 
-        from nanitics import AnthropicLLMClient
+        from nanitics.infrastructure import AnthropicLLMClient
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
         monkeypatch.setenv("NANITICS_LLM_MODEL", "claude-haiku-4-5-20251001")
@@ -1401,7 +1406,7 @@ class TestSqlAnalystHelpers:
         """If ``ANTHROPIC_API_KEY`` is not in env, pass through unchanged."""
         from sql_analyst.runner import _opt_in_caching
 
-        from nanitics import AnthropicLLMClient
+        from nanitics.infrastructure import AnthropicLLMClient
 
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.setenv("NANITICS_LLM_MODEL", "claude-haiku-4-5-20251001")
@@ -1510,9 +1515,9 @@ class TestSqlAnalystHelpers:
 
 
 def _fake_agent_result() -> Any:
-    from nanitics import Usage
     from nanitics.infrastructure.llm.protocol import Message
     from nanitics.strategies.agents.base import AgentResult
+    from nanitics.tracing import Usage
 
     return AgentResult(
         output="unused",

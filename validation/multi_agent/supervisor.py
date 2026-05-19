@@ -35,16 +35,18 @@ Acceptance criteria (max-retry exhaustion):
 
 from __future__ import annotations
 
-from nanitics import (
-    AgentResult,
-    InMemoryEmitter,
+from nanitics.composition import (
     PredicateTrigger,
-    ReActAgent,
     SupervisionAction,
     SupervisionDecision,
     Supervisor,
 )
 from nanitics.infrastructure import SupervisionEvent
+from nanitics.strategies import (
+    AgentResult,
+    ReActAgent,
+)
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

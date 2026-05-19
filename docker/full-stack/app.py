@@ -26,8 +26,13 @@ from fastapi.responses import JSONResponse
 from llm_provider import build_llm_client
 from runners import REGISTRATIONS, ShellContext
 
-from nanitics import LLMClient, PersistentTraceStore, PostgresTraceStore, TracedExecutor
+from nanitics.infrastructure import LLMClient
 from nanitics.observatory import create_observatory_router
+from nanitics.tracing import (
+    PersistentTraceStore,
+    PostgresTraceStore,
+    TracedExecutor,
+)
 
 UI_DIR = Path("/srv/observatory-ui")
 _READINESS_PROBE_TIMEOUT_SECONDS = 2.0

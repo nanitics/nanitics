@@ -34,17 +34,19 @@ from __future__ import annotations
 
 import json
 
-from nanitics import (
+from nanitics.composition import (
     AgentStep,
-    InMemoryEmitter,
-    InMemorySharedMemory,
-    ReActAgent,
     Sequential,
+)
+from nanitics.infrastructure import LLMRequestEvent, SharedMemoryWriteEvent
+from nanitics.memory import (
+    InMemorySharedMemory,
     SharedMemoryContributor,
     SharedMemoryProvider,
     create_shared_memory_tools,
 )
-from nanitics.infrastructure import LLMRequestEvent, SharedMemoryWriteEvent
+from nanitics.strategies import ReActAgent
+from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

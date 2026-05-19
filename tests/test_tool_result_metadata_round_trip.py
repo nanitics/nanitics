@@ -26,16 +26,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from nanitics import (
-    ExecutionResult,
-    Message,
-    MockLLMClient,
-    MockSandbox,
-    ReActAgent,
-    ToolCall,
-    ToolResult,
-    tool,
-)
 from nanitics.collaboration.approval_wrapped import ApprovalWrappedTool
 from nanitics.collaboration.durable_provider import DurableHumanInputProvider
 from nanitics.collaboration.hitl_store import InMemoryHitlRequestStore
@@ -53,7 +43,17 @@ from nanitics.composition.durability.resume import (
 from nanitics.composition.durability.store import InMemoryCheckpointStore
 from nanitics.composition.orchestration.adapters import AgentStep
 from nanitics.composition.orchestration.sequential import Sequential
+from nanitics.infrastructure import MockLLMClient
 from nanitics.infrastructure.llm.anthropic import _to_anthropic_messages
+from nanitics.safety import (
+    ExecutionResult,
+    MockSandbox,
+)
+from nanitics.strategies import (
+    ReActAgent,
+    ToolResult,
+    tool,
+)
 from nanitics.strategies.agents.codeact import CodeActAgent
 from nanitics.strategies.agents.evaluation import (
     EvaluationContext,
@@ -61,6 +61,10 @@ from nanitics.strategies.agents.evaluation import (
     EvaluationVerdict,
 )
 from nanitics.strategies.agents.lats import ActionNode, LATSAgent
+from nanitics.tracing import (
+    Message,
+    ToolCall,
+)
 from tests.testing_helpers import make_emitter, make_response
 
 # ── Fixture tools ────────────────────────────────────────────
@@ -479,7 +483,8 @@ class TestCodeActMetadataPin:
         Phase that decides to project ``ExecutionResult`` fields into
         metadata makes a deliberate change.
         """
-        from nanitics import LLMResponse, Usage
+        from nanitics.infrastructure import LLMResponse
+        from nanitics.tracing import Usage
 
         # Single iteration: code → exec result → final answer.
         code_response = LLMResponse(

@@ -12,15 +12,12 @@ Related guide: docs/guides/multi-agent-coordination.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    MockLLMClient,
-    ReActAgent,
-)
 from nanitics.infrastructure import (
     ConsensusAgreementEvent,
     ConsensusCompleteEvent,
     ConsensusStartEvent,
     ConsensusVoteEvent,
+    MockLLMClient,
 )
 from nanitics.specialized import (
     BestOfN,
@@ -29,6 +26,7 @@ from nanitics.specialized import (
     MajorityVoting,
     WeightedVoting,
 )
+from nanitics.strategies import ReActAgent
 
 
 async def main() -> None:

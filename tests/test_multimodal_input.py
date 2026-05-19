@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from nanitics import (
-    ImageContentBlock,
-    MockLLMClient,
+from nanitics.infrastructure import AgentStartEvent, LLMRequestEvent, MockLLMClient
+from nanitics.strategies import (
     ReActAgent,
     ReasoningAgent,
-    TextContentBlock,
     tool,
 )
-from nanitics.infrastructure import AgentStartEvent, LLMRequestEvent
 from nanitics.strategies.agents.base import _input_to_text
+from nanitics.tracing import (
+    ImageContentBlock,
+    TextContentBlock,
+)
 from tests.testing_helpers import make_emitter, make_response
 
 # ──────────────────────────────────────────────────────────

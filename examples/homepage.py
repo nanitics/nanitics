@@ -20,27 +20,31 @@ import random
 from typing import Any
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    AgentResult,
-    AgentTool,
+from nanitics.composition import AgentTool
+from nanitics.evaluation import (
     EvaluationCheck,
-    InMemoryEmitter,
-    InMemoryEpisodeStore,
-    LLMResponse,
-    MockEmbeddingClient,
-    MockLLMClient,
     ProgrammaticEvaluator,
-    ReActAgent,
-    ToolCall,
-    tool,
 )
 from nanitics.infrastructure import (
     DelegationEvent,
     EvaluationEvent,
+    LLMResponse,
     LLMResponseEvent,
+    MockEmbeddingClient,
+    MockLLMClient,
     ReflectionGeneratedEvent,
 )
+from nanitics.memory import InMemoryEpisodeStore
 from nanitics.specialized import ReflexionAgent
+from nanitics.strategies import (
+    AgentResult,
+    ReActAgent,
+    tool,
+)
+from nanitics.tracing import (
+    InMemoryEmitter,
+    ToolCall,
+)
 
 # Delay ranges (seconds) injected into the mock LLM and tool calls so the captured
 # trace shows realistic per-span durations rather than every span clocking 0ms.

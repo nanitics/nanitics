@@ -13,21 +13,21 @@ Related guide: docs/guides/multi-agent-coordination.md
 import asyncio
 
 from examples.helpers import make_emitter, make_response
-from nanitics import (
-    AgentTool,
-    MockLLMClient,
-    ReActAgent,
-    ReasoningAgent,
-    ToolCall,
-)
+from nanitics.composition import AgentTool
 from nanitics.infrastructure import (
     DelegationEvent,
+    MockLLMClient,
 )
 from nanitics.patterns import (
     FinalOutputStrategy,
     create_orchestrator,
     orchestrator_prompt_section,
 )
+from nanitics.strategies import (
+    ReActAgent,
+    ReasoningAgent,
+)
+from nanitics.tracing import ToolCall
 
 
 async def main() -> None:
