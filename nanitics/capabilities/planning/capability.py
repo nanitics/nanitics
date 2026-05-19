@@ -15,9 +15,9 @@ from nanitics.capabilities.planning.evaluators import (
 )
 from nanitics.capabilities.planning.store import PlanStore
 from nanitics.capabilities.planning.tools import create_planning_tools
-from nanitics.core.agents.context import ContextContent, ContextProvider
-from nanitics.core.tools.function_tool import FunctionTool
 from nanitics.infrastructure.llm.protocol import Message
+from nanitics.strategies.agents.context import ContextContent, ContextProvider
+from nanitics.strategies.tools.function_tool import FunctionTool
 
 
 class _BoundPlanningContextProvider:

@@ -8,7 +8,7 @@ Eleven tools across four specialties:
 - policy: ``lookup_policy``, ``cite_clause``
 
 Every tool validates its inputs through a Pydantic model
-(:class:`~nanitics.core.tools.function_tool.FunctionTool` does the
+(:class:`~nanitics.strategies.tools.function_tool.FunctionTool` does the
 validation plumbing). Unknown ids and missing matches raise
 ``ValueError`` — tools surface failures rather than masking them with
 empty results, so the agent sees a real error message and can adjust.

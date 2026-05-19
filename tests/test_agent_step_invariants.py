@@ -43,24 +43,24 @@ from nanitics import (
     tool,
 )
 from nanitics.capabilities.planning.store import InMemoryPlanStore
-from nanitics.core.agents.evaluation import (
-    EvaluationContext,
-    EvaluationResult,
-    EvaluationVerdict,
-)
-from nanitics.core.agents.lats import LATSAgent
-from nanitics.core.agents.tree_of_thought import (
-    SearchStrategy,
-    TreeOfThoughtAgent,
-    _Candidate,
-    _GenerationResponse,
-)
 from nanitics.experimental import (
     ReWOOAgent,
     ReWOOPlan,
     ReWOOStep,
 )
 from nanitics.infrastructure.observability.events import AgentStepEvent
+from nanitics.strategies.agents.evaluation import (
+    EvaluationContext,
+    EvaluationResult,
+    EvaluationVerdict,
+)
+from nanitics.strategies.agents.lats import LATSAgent
+from nanitics.strategies.agents.tree_of_thought import (
+    SearchStrategy,
+    TreeOfThoughtAgent,
+    _Candidate,
+    _GenerationResponse,
+)
 from tests.testing_helpers import make_emitter, make_usage
 
 # ──────────────────────────────────────────────────────────────────────────────

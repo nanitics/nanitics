@@ -26,12 +26,12 @@ import httpx
 import pytest
 import respx
 
-from nanitics.core.tools.protocol import Tool, ToolResult
 from nanitics.infrastructure.errors import (
     ToolExecutionError,
     ToolParameterError,
     ToolTimeoutError,
 )
+from nanitics.strategies.tools.protocol import Tool, ToolResult
 from nanitics.tools.web_search import create_web_search_tool
 
 # --- Fixtures and helpers ---------------------------------------------------

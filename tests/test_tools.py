@@ -7,8 +7,6 @@ from uuid import uuid4
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from nanitics.core.tools import FunctionTool, Tool, ToolRegistry, ToolResult, tool
-from nanitics.core.tools.function_tool import _model_from_function
 from nanitics.infrastructure.errors import (
     ToolExecutionError,
     ToolNotFoundError,
@@ -21,6 +19,8 @@ from nanitics.infrastructure.observability.events import (
     ToolInvokeEvent,
     ToolResultEvent,
 )
+from nanitics.strategies.tools import FunctionTool, Tool, ToolRegistry, ToolResult, tool
+from nanitics.strategies.tools.function_tool import _model_from_function
 
 # --- ToolResult ---
 

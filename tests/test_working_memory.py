@@ -14,13 +14,13 @@ from nanitics.capabilities.memory.working_memory import (
     WorkingMemoryContributor,
     WorkingMemoryProvider,
 )
-from nanitics.core.agents.parsing import (
-    parse_working_memory_update,
-    strip_working_memory_block,
-)
 from nanitics.infrastructure.observability.events import (
     WorkingMemoryReadEvent,
     WorkingMemoryUpdateEvent,
+)
+from nanitics.strategies.agents.parsing import (
+    parse_working_memory_update,
+    strip_working_memory_block,
 )
 from tests.testing_helpers import make_emitter, make_response
 

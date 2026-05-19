@@ -6,10 +6,6 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from nanitics.core.agents.base import Agent, AgentInput, AgentResult, _input_to_text
-from nanitics.core.agents.context import ContextManagement, ContextProvider
-from nanitics.core.agents.evaluation import EvaluationVerdict, OutputEvaluator
-from nanitics.core.prompts.builder import SystemPromptContributor
 from nanitics.infrastructure.llm.protocol import LLMClient, Message
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
@@ -20,6 +16,10 @@ from nanitics.infrastructure.observability.events import (
     Usage,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.base import Agent, AgentInput, AgentResult, _input_to_text
+from nanitics.strategies.agents.context import ContextManagement, ContextProvider
+from nanitics.strategies.agents.evaluation import EvaluationVerdict, OutputEvaluator
+from nanitics.strategies.prompts.builder import SystemPromptContributor
 
 
 class SearchStrategy(StrEnum):

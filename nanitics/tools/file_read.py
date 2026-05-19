@@ -1,6 +1,6 @@
 """``create_file_read_tool`` — a curated file-read reference tool.
 
-The factory returns a :class:`~nanitics.core.tools.protocol.Tool`-conforming
+The factory returns a :class:`~nanitics.strategies.tools.protocol.Tool`-conforming
 object that reads files under an explicit ``allowed_paths`` allow-list.
 Paths are resolved via :meth:`pathlib.Path.resolve` (following symlinks and
 collapsing ``..`` segments) and compared against the resolved allow-list
@@ -25,12 +25,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from nanitics.core.tools.function_tool import FunctionTool
-from nanitics.core.tools.protocol import Tool, ToolResult
 from nanitics.infrastructure.errors import (
     ToolExecutionError,
     ToolParameterError,
 )
+from nanitics.strategies.tools.function_tool import FunctionTool
+from nanitics.strategies.tools.protocol import Tool, ToolResult
 from nanitics.tools._result_models import FileReadResult
 
 _DEFAULT_MAX_BYTES = 1_048_576  # 1 MiB
@@ -85,8 +85,8 @@ def create_file_read_tool(
 ) -> Tool:
     """Create a file-read tool gated by an explicit path allow-list.
 
-    The returned object satisfies :class:`~nanitics.core.tools.protocol.Tool`
-    and can be registered in :class:`~nanitics.core.ToolRegistry` alongside
+    The returned object satisfies :class:`~nanitics.strategies.tools.protocol.Tool`
+    and can be registered in :class:`~nanitics.strategies.ToolRegistry` alongside
     any other tool.  The tool emits
     :class:`~nanitics.events.ToolInvokeEvent` and
     :class:`~nanitics.events.ToolResultEvent` through the registry's

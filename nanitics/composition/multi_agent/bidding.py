@@ -8,7 +8,6 @@ from typing import Any, Protocol, cast, runtime_checkable
 from pydantic import BaseModel, ConfigDict
 
 from nanitics.composition.multi_agent.broadcast import AgentFailure
-from nanitics.core.agents.base import Agent
 from nanitics.infrastructure.llm.instrumented import InstrumentedLLMClient
 from nanitics.infrastructure.llm.protocol import LLMClient, Message
 from nanitics.infrastructure.observability.emitter import EventEmitter
@@ -19,6 +18,7 @@ from nanitics.infrastructure.observability.events import (
     BidReceivedEvent,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.base import Agent
 
 # --- Calibration anchors ---
 

@@ -1,4 +1,4 @@
-from nanitics.core.agents.context import ContextContent, ContextProvider
+from nanitics.strategies.agents.context import ContextContent, ContextProvider
 
 __all__ = [
     "ContextContent",

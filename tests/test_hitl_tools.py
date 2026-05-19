@@ -14,13 +14,13 @@ from nanitics.collaboration.tools import (
     create_hitl_tools,
     create_request_approval_tool,
 )
-from nanitics.core.tools.function_tool import FunctionTool
 from nanitics.infrastructure.errors import ToolExecutionError
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter
 from nanitics.infrastructure.observability.events import (
     HumanInputRequestEvent,
     HumanInputResponseEvent,
 )
+from nanitics.strategies.tools.function_tool import FunctionTool
 from tests.testing_helpers import make_emitter
 
 

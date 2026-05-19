@@ -1,6 +1,6 @@
 """``create_code_execution_tool`` — adapter for the ``Sandbox`` protocol.
 
-The factory returns a :class:`~nanitics.core.tools.protocol.Tool`-conforming
+The factory returns a :class:`~nanitics.strategies.tools.protocol.Tool`-conforming
 object that dispatches ``execute(code=...)`` through any object satisfying
 the existing :class:`~nanitics.safety.sandbox.protocol.Sandbox` protocol
 (e.g. :class:`~nanitics.safety.sandbox.docker.DockerSandbox` or
@@ -28,10 +28,10 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from nanitics.core.tools.function_tool import FunctionTool
-from nanitics.core.tools.protocol import Tool, ToolResult
 from nanitics.infrastructure.errors import ToolExecutionError
 from nanitics.safety.sandbox.protocol import ExecutionResult, Sandbox
+from nanitics.strategies.tools.function_tool import FunctionTool
+from nanitics.strategies.tools.protocol import Tool, ToolResult
 from nanitics.tools._result_models import CodeExecutionResult
 
 # Guardrail against pathologically long prompts; the sandbox itself enforces
@@ -70,8 +70,8 @@ def create_code_execution_tool(
 ) -> Tool:
     """Create a code-execution tool backed by the given sandbox.
 
-    The returned object satisfies :class:`~nanitics.core.tools.protocol.Tool`
-    and can be registered in :class:`~nanitics.core.ToolRegistry` alongside
+    The returned object satisfies :class:`~nanitics.strategies.tools.protocol.Tool`
+    and can be registered in :class:`~nanitics.strategies.ToolRegistry` alongside
     any other tool.  The tool emits
     :class:`~nanitics.events.ToolInvokeEvent` and
     :class:`~nanitics.events.ToolResultEvent` through the registry's

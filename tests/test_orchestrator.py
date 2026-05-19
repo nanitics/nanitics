@@ -12,14 +12,14 @@ from nanitics.composition.multi_agent.orchestrator import (
     create_orchestrator,
     orchestrator_prompt_section,
 )
-from nanitics.core.agents.evaluation import (
+from nanitics.infrastructure.observability.events import DelegationEvent, EvaluationEvent
+from nanitics.patterns import FinalOutputStrategy
+from nanitics.strategies.agents.evaluation import (
     EvaluationContext,
     EvaluationResult,
     EvaluationVerdict,
 )
-from nanitics.core.agents.reasoning import ReasoningAgent
-from nanitics.infrastructure.observability.events import DelegationEvent, EvaluationEvent
-from nanitics.patterns import FinalOutputStrategy
+from nanitics.strategies.agents.reasoning import ReasoningAgent
 from tests.testing_helpers import make_emitter, make_response
 
 

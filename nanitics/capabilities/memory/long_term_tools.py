@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from nanitics.capabilities.memory.long_term import LongTermStore
-from nanitics.core.tools.context import ToolContext
-from nanitics.core.tools.function_tool import FunctionTool, tool
 from nanitics.infrastructure.observability.events import (
     LongTermDeleteEvent,
     LongTermListEvent,
     LongTermRetrieveEvent,
     LongTermStoreEvent,
 )
+from nanitics.strategies.tools.context import ToolContext
+from nanitics.strategies.tools.function_tool import FunctionTool, tool
 
 
 def create_long_term_memory_tools(

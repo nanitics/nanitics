@@ -8,7 +8,7 @@ from nanitics.capabilities.planning.contributors import (
     GoalTrackingContributor,
     UpfrontPlanContributor,
 )
-from nanitics.core.prompts.builder import SystemPromptContributor
+from nanitics.strategies.prompts.builder import SystemPromptContributor
 
 ALL_CONTRIBUTORS: list[type[SystemPromptContributor]] = [
     AdaptivePlanningContributor,

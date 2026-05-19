@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from nanitics.core.agents.codeact import (
+from nanitics.infrastructure.llm.protocol import ToolSchema
+from nanitics.strategies.agents.codeact import (
     generate_tool_documentation,
     generate_tool_stubs,
 )
-from nanitics.infrastructure.llm.protocol import ToolSchema
 
 
 def _make_schema(

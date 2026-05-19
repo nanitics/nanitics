@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from nanitics.infrastructure.observability.emitter import EventEmitter
 
 if TYPE_CHECKING:
-    from nanitics.core.agents.base import Agent, AgentInput, AgentResult
+    from nanitics.strategies.agents.base import Agent, AgentInput, AgentResult
 
 
 @dataclass(frozen=True)

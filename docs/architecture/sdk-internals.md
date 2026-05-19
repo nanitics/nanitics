@@ -149,10 +149,10 @@ These rules enforce the layer model and prevent circular dependencies.
 
 - `nanitics.infrastructure` imports nothing from `nanitics` (except stdlib and third-party).
 - `nanitics.safety` imports from `nanitics.infrastructure` only.
-- `nanitics.core` imports from `nanitics.infrastructure` and `nanitics.safety`. Core defines extension contracts (protocols) that upper layers implement.
-- `nanitics.capabilities` imports from `nanitics.infrastructure`, `nanitics.safety`, and `nanitics.core`. Capabilities implement Core's extension contracts (`ContextManagement`, `ErrorHandling`, `OutputEvaluator`, etc.).
-- `nanitics.composition` imports from layers below it (infrastructure, safety, core, capabilities).
-- `nanitics.collaboration` imports from layers below it (infrastructure, safety, core, capabilities, composition).
+- `nanitics.strategies` imports from `nanitics.infrastructure` and `nanitics.safety`. Strategies define extension contracts (protocols) that upper layers implement.
+- `nanitics.capabilities` imports from `nanitics.infrastructure`, `nanitics.safety`, and `nanitics.strategies`. Capabilities implement the strategies' extension contracts (`ContextManagement`, `ErrorHandling`, `OutputEvaluator`, etc.).
+- `nanitics.composition` imports from layers below it (infrastructure, safety, strategies, capabilities).
+- `nanitics.collaboration` imports from layers below it (infrastructure, safety, strategies, capabilities, composition).
 
 ### Public API
 

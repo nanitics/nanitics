@@ -2,16 +2,16 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from nanitics.core.agents.context import ContextManagement, ContextProvider
-from nanitics.core.agents.evaluation import (
+from nanitics.infrastructure.llm.protocol import LLMClient, Message
+from nanitics.infrastructure.observability.emitter import EventEmitter
+from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.context import ContextManagement, ContextProvider
+from nanitics.strategies.agents.evaluation import (
     EvaluationResult,
     EvaluationVerdict,
     OutputEvaluator,
 )
-from nanitics.core.prompts.builder import SystemPromptContributor
-from nanitics.infrastructure.llm.protocol import LLMClient, Message
-from nanitics.infrastructure.observability.emitter import EventEmitter
-from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.prompts.builder import SystemPromptContributor
 
 from .base import Agent, AgentInput, AgentResult
 from .errors import ErrorHandling

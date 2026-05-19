@@ -5,20 +5,20 @@ from enum import StrEnum
 from pydantic import BaseModel
 
 from nanitics.composition.multi_agent.agent_tool import AgentTool
-from nanitics.core.agents.base import AgentInput, AgentResult
-from nanitics.core.agents.context import ContextManagement, ContextProvider
-from nanitics.core.agents.errors import ErrorHandling
-from nanitics.core.agents.evaluation import (
-    EvaluationContext,
-    EvaluationVerdict,
-    OutputEvaluator,
-)
-from nanitics.core.agents.react import ReActAgent
-from nanitics.core.prompts.builder import SystemPromptBuilder
 from nanitics.infrastructure.llm.protocol import LLMClient, Message
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import EvaluationEvent
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.base import AgentInput, AgentResult
+from nanitics.strategies.agents.context import ContextManagement, ContextProvider
+from nanitics.strategies.agents.errors import ErrorHandling
+from nanitics.strategies.agents.evaluation import (
+    EvaluationContext,
+    EvaluationVerdict,
+    OutputEvaluator,
+)
+from nanitics.strategies.agents.react import ReActAgent
+from nanitics.strategies.prompts.builder import SystemPromptBuilder
 
 
 class FinalOutputStrategy(StrEnum):

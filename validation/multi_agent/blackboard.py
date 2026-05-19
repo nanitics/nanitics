@@ -66,7 +66,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from nanitics.composition.multi_agent.blackboard import BlackboardState
-    from nanitics.core.agents.base import Agent
+    from nanitics.strategies.agents.base import Agent
 from validation.helpers import (
     assert_trace_contains,
     make_llm_client,

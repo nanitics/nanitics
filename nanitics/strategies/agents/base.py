@@ -10,18 +10,12 @@ from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict, Field
 
 from nanitics.capabilities.errors.handler import ErrorHandler
-from nanitics.core.agents.bound import BoundAgent, RunContext
-from nanitics.core.agents.context import ContextContent, ContextManagement, ContextProvider
-from nanitics.core.agents.errors import ErrorHandling
+from nanitics.strategies.agents.bound import BoundAgent, RunContext
+from nanitics.strategies.agents.context import ContextContent, ContextManagement, ContextProvider
+from nanitics.strategies.agents.errors import ErrorHandling
 
 if TYPE_CHECKING:
-    from nanitics.core.tools import Tool
-from nanitics.core.agents.evaluation import (
-    EvaluationContext,
-    EvaluationResult,
-    OutputEvaluator,
-)
-from nanitics.core.prompts.builder import SystemPromptBuilder, SystemPromptContributor
+    from nanitics.strategies.tools import Tool
 from nanitics.infrastructure.errors import LLMSchemaViolationError, NaniticsError
 from nanitics.infrastructure.llm.protocol import (
     ContentBlock,
@@ -54,6 +48,12 @@ from nanitics.infrastructure.observability.events import (
     Usage,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.evaluation import (
+    EvaluationContext,
+    EvaluationResult,
+    OutputEvaluator,
+)
+from nanitics.strategies.prompts.builder import SystemPromptBuilder, SystemPromptContributor
 
 AgentInput = str | list[ContentBlock]
 

@@ -9,10 +9,6 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from nanitics.core.agents.base import Agent, AgentResult
-from nanitics.core.agents.context import ContextContent
-from nanitics.core.tools.context import ToolContext
-from nanitics.core.tools.function_tool import FunctionTool, tool
 from nanitics.infrastructure.llm.protocol import Message
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
@@ -22,6 +18,10 @@ from nanitics.infrastructure.observability.events import (
     MessagePublishedEvent,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.base import Agent, AgentResult
+from nanitics.strategies.agents.context import ContextContent
+from nanitics.strategies.tools.context import ToolContext
+from nanitics.strategies.tools.function_tool import FunctionTool, tool
 
 # --- Data Models ---
 

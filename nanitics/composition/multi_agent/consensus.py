@@ -7,7 +7,6 @@ from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict
 
-from nanitics.core.agents.base import Agent
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
     ConsensusAgreementEvent,
@@ -16,6 +15,7 @@ from nanitics.infrastructure.observability.events import (
     ConsensusVoteEvent,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.base import Agent
 
 # --- Models ---
 

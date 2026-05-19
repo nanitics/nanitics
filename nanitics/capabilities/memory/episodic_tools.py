@@ -6,13 +6,13 @@ from nanitics.capabilities.memory.episodic import (
     OutcomeType,
     RecallFilters,
 )
-from nanitics.core.tools.context import ToolContext
-from nanitics.core.tools.function_tool import FunctionTool, tool
 from nanitics.infrastructure.observability.events import (
     EpisodeForgetEvent,
     EpisodeRecallEvent,
     EpisodeRecordEvent,
 )
+from nanitics.strategies.tools.context import ToolContext
+from nanitics.strategies.tools.function_tool import FunctionTool, tool
 
 _OUTCOME_MAP = {
     "success": OutcomeType.SUCCESS,

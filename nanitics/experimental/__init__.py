@@ -91,7 +91,8 @@ from nanitics.composition import (
     create_bus_tools,
     plan_to_workflow,
 )
-from nanitics.core import (
+from nanitics.infrastructure import MistralLLMClient
+from nanitics.strategies import (
     ActionNode,
     ConditionalTool,
     LATSAgent,
@@ -103,7 +104,6 @@ from nanitics.core import (
     ThoughtNode,
     TreeOfThoughtAgent,
 )
-from nanitics.infrastructure import MistralLLMClient
 
 __all__ = [
     "DEFAULT_CALIBRATED_BID_PROMPT_TEMPLATE",

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from nanitics.capabilities.memory.shared import SharedMemory
-from nanitics.core.tools.context import ToolContext
-from nanitics.core.tools.function_tool import FunctionTool, tool
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
     SharedMemoryReadEvent,
@@ -10,6 +8,8 @@ from nanitics.infrastructure.observability.events import (
     SharedMemorySupersededEvent,
     SharedMemoryWriteEvent,
 )
+from nanitics.strategies.tools.context import ToolContext
+from nanitics.strategies.tools.function_tool import FunctionTool, tool
 
 
 def create_shared_memory_tools(

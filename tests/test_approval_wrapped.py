@@ -11,9 +11,6 @@ from nanitics.collaboration.protocol import (
     HumanDecision,
     HumanInputResponse,
 )
-from nanitics.core.tools import ToolRegistry
-from nanitics.core.tools.function_tool import tool
-from nanitics.core.tools.protocol import ToolResult
 from nanitics.infrastructure.errors import ToolExecutionError
 from nanitics.infrastructure.llm.protocol import ToolCall
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter
@@ -23,6 +20,9 @@ from nanitics.infrastructure.observability.events import (
     ToolInvokeEvent,
     ToolResultEvent,
 )
+from nanitics.strategies.tools import ToolRegistry
+from nanitics.strategies.tools.function_tool import tool
+from nanitics.strategies.tools.protocol import ToolResult
 from tests.testing_helpers import make_emitter
 
 

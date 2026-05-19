@@ -8,10 +8,10 @@ from nanitics.composition.multi_agent.context_transfer import (
 )
 from nanitics.composition.orchestration.protocol import Step, StepResult
 from nanitics.composition.orchestration.sequential import Sequential
-from nanitics.core.agents.base import Agent
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import HandoffEvent
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.base import Agent
 
 
 class HandoffStep:

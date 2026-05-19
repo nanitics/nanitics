@@ -15,7 +15,7 @@ from .protocol import ToolResult
 
 
 class FunctionTool:
-    """Wraps an async function as a :class:`~nanitics.core.tools.protocol.Tool`.
+    """Wraps an async function as a :class:`~nanitics.strategies.tools.protocol.Tool`.
 
     Handles parameter schema generation (from a Pydantic model or raw JSON
     Schema), parameter validation, ``ToolContext`` injection, and result

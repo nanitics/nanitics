@@ -1511,8 +1511,8 @@ class TestSqlAnalystHelpers:
 
 def _fake_agent_result() -> Any:
     from nanitics import Usage
-    from nanitics.core.agents.base import AgentResult
     from nanitics.infrastructure.llm.protocol import Message
+    from nanitics.strategies.agents.base import AgentResult
 
     return AgentResult(
         output="unused",
@@ -1532,7 +1532,7 @@ class TestRunSqlToolContextIntegration:
     async def test_tool_state_records_last_metadata(self) -> None:
         from sql_analyst.tool import LAST_TOOL_METADATA_STATE_KEY
 
-        from nanitics.core.tools.context import ToolContext, _current_tool_context
+        from nanitics.strategies.tools.context import ToolContext, _current_tool_context
 
         connection = _FakeConnection(records=[{"n": 1}])
         factory = _connector_factory_for(connection)

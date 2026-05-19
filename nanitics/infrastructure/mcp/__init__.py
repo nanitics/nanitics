@@ -2,7 +2,7 @@
 
 This subpackage exposes an MCP *client* that connects to any MCP-compatible
 server over stdio or SSE transport and surfaces its tools as ordinary
-Nanitics :class:`~nanitics.core.tools.protocol.Tool` instances.  Tools
+Nanitics :class:`~nanitics.strategies.tools.protocol.Tool` instances.  Tools
 returned by :meth:`MCPClient.list_tools` satisfy the structural ``Tool``
 protocol and dispatch through ``ToolRegistry`` identically to in-process
 tools.

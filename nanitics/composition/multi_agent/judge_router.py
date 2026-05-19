@@ -21,7 +21,6 @@ from nanitics.composition.multi_agent.bidding import (
     BiddableAgent,
     _validate_judge_prompt_template,
 )
-from nanitics.core.agents.base import Agent
 from nanitics.infrastructure.llm.instrumented import InstrumentedLLMClient
 from nanitics.infrastructure.llm.protocol import LLMClient, Message
 from nanitics.infrastructure.observability.emitter import EventEmitter
@@ -32,6 +31,7 @@ from nanitics.infrastructure.observability.events import (
     JudgeRoutingStartEvent,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.base import Agent
 
 # --- Models ---
 

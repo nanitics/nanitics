@@ -3,7 +3,6 @@
 from nanitics import Tool, ToolCall, ToolRegistry
 from nanitics.capabilities.memory.episodic import Episode, InMemoryEpisodeStore, OutcomeType
 from nanitics.capabilities.memory.episodic_tools import create_episodic_memory_tools
-from nanitics.core.tools.function_tool import FunctionTool
 from nanitics.infrastructure.embeddings import MockEmbeddingClient
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter
 from nanitics.infrastructure.observability.events import (
@@ -11,6 +10,7 @@ from nanitics.infrastructure.observability.events import (
     EpisodeRecallEvent,
     EpisodeRecordEvent,
 )
+from nanitics.strategies.tools.function_tool import FunctionTool
 from tests.testing_helpers import make_emitter
 
 

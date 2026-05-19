@@ -14,7 +14,7 @@ class ToolContext:
 
     Tools receive a ``ToolContext`` instance when they declare a parameter
     with the ``ToolContext`` type annotation.  The context is set
-    automatically by :class:`~nanitics.core.tools.registry.ToolRegistry`
+    automatically by :class:`~nanitics.strategies.tools.registry.ToolRegistry`
     during dispatch and is not visible in the tool schema the LLM sees.
 
     Attributes:

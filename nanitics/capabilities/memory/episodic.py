@@ -16,7 +16,7 @@ from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import EpisodeRecallEvent
 
 if TYPE_CHECKING:
-    from nanitics.core.agents.base import AgentInput, AgentResult
+    from nanitics.strategies.agents.base import AgentInput, AgentResult
 
 
 class OutcomeType(StrEnum):

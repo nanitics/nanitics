@@ -1,4 +1,4 @@
-from nanitics.core.agents.evaluation import (
+from nanitics.strategies.agents.evaluation import (
     EvaluationCheck,
     EvaluationContext,
     EvaluationResult,

@@ -1,8 +1,8 @@
 """``create_web_search_tool`` — a curated web-search reference tool.
 
-The factory returns a :class:`~nanitics.core.tools.protocol.Tool`-conforming
-object that dispatches through :class:`~nanitics.core.ToolRegistry`
-identically to a :class:`~nanitics.core.FunctionTool` — no new registry, no
+The factory returns a :class:`~nanitics.strategies.tools.protocol.Tool`-conforming
+object that dispatches through :class:`~nanitics.strategies.ToolRegistry`
+identically to a :class:`~nanitics.strategies.FunctionTool` — no new registry, no
 new event types.  Two backends are supported: Tavily (``provider="tavily"``,
 default) and Brave (``provider="brave"``).  A fresh
 :class:`httpx.AsyncClient` is constructed per call; the tool does not share
@@ -20,12 +20,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from nanitics.core.tools.function_tool import FunctionTool
-from nanitics.core.tools.protocol import Tool, ToolResult
 from nanitics.infrastructure.errors import (
     ToolExecutionError,
     ToolTimeoutError,
 )
+from nanitics.strategies.tools.function_tool import FunctionTool
+from nanitics.strategies.tools.protocol import Tool, ToolResult
 from nanitics.tools._result_models import WebSearchResult, WebSearchResultItem
 
 try:
@@ -228,8 +228,8 @@ def create_web_search_tool(
 ) -> Tool:
     """Create a web-search tool backed by Tavily or Brave.
 
-    The returned object satisfies :class:`~nanitics.core.tools.protocol.Tool`
-    and can be registered in :class:`~nanitics.core.ToolRegistry` alongside
+    The returned object satisfies :class:`~nanitics.strategies.tools.protocol.Tool`
+    and can be registered in :class:`~nanitics.strategies.ToolRegistry` alongside
     any other tool.  The tool emits :class:`~nanitics.events.ToolInvokeEvent`
     and :class:`~nanitics.events.ToolResultEvent` through the registry's
     standard dispatch path.

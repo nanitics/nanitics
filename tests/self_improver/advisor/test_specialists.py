@@ -28,10 +28,10 @@ from self_improver.advisor.proposal import (
 )
 from self_improver.advisor.rubric import Rubric
 
-from nanitics.core.agents.reasoning import ReasoningAgent
 from nanitics.infrastructure.llm.mock import MockLLMClient
 from nanitics.infrastructure.llm.protocol import LLMResponse
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter
+from nanitics.strategies.agents.reasoning import ReasoningAgent
 from tests.testing_helpers import make_usage
 
 

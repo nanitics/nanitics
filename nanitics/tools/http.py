@@ -1,6 +1,6 @@
 """``create_http_tool`` — a curated HTTP request reference tool.
 
-The factory returns a :class:`~nanitics.core.tools.protocol.Tool`-conforming
+The factory returns a :class:`~nanitics.strategies.tools.protocol.Tool`-conforming
 object that issues HTTP requests through :mod:`httpx`.  Requests are gated
 by an explicit domain allow-list (or the ``allow_any_domain=True`` escape
 hatch), response bodies are bounded by ``max_response_bytes`` (default
@@ -25,13 +25,13 @@ from urllib.parse import urljoin, urlparse
 
 from pydantic import BaseModel, Field
 
-from nanitics.core.tools.function_tool import FunctionTool
-from nanitics.core.tools.protocol import Tool, ToolResult
 from nanitics.infrastructure.errors import (
     ToolExecutionError,
     ToolParameterError,
     ToolTimeoutError,
 )
+from nanitics.strategies.tools.function_tool import FunctionTool
+from nanitics.strategies.tools.protocol import Tool, ToolResult
 from nanitics.tools._result_models import HttpResponse
 
 try:
@@ -109,8 +109,8 @@ def create_http_tool(
 ) -> Tool:
     """Create an HTTP-request tool with an explicit domain allow-list.
 
-    The returned object satisfies :class:`~nanitics.core.tools.protocol.Tool`
-    and can be registered in :class:`~nanitics.core.ToolRegistry` alongside
+    The returned object satisfies :class:`~nanitics.strategies.tools.protocol.Tool`
+    and can be registered in :class:`~nanitics.strategies.ToolRegistry` alongside
     any other tool.  The tool constructs a fresh
     :class:`httpx.AsyncClient` per call and follows redirects manually so
     every hop is validated against the allow-list.

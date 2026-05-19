@@ -3,13 +3,13 @@ from unittest.mock import AsyncMock, Mock
 
 from nanitics.composition.multi_agent.agent_tool import AgentTool
 from nanitics.composition.multi_agent.orchestrator import create_orchestrator
-from nanitics.core.agents.base import AgentResult
-from nanitics.core.agents.reasoning import ReasoningAgent
 from nanitics.infrastructure.llm.mock import MockLLMClient
 from nanitics.infrastructure.llm.protocol import LLMResponse, ToolCall
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter
 from nanitics.infrastructure.observability.events import Usage
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.base import AgentResult
+from nanitics.strategies.agents.reasoning import ReasoningAgent
 
 
 def _make_usage() -> Usage:
@@ -214,7 +214,7 @@ class TestOrchestratorCancellationPropagation:
     async def test_cancelled_token_stops_delegate_agent(self):
         token = CancellationToken()
         emitter = _make_emitter()
-        from nanitics.core.agents.react import ReActAgent
+        from nanitics.strategies.agents.react import ReActAgent
 
         # ReActAgent checks _is_cancelled at the start of each loop iteration
         delegate = ReActAgent(

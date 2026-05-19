@@ -8,12 +8,12 @@ from nanitics import (
     Usage,
     tool,
 )
-from nanitics.core.agents.codeact import CodeActAgent
 from nanitics.infrastructure import AgentStartEvent, AgentStepEvent
 from nanitics.infrastructure.observability.events import (
     CodeExecutionEvent,
     CodeExecutionResultEvent,
 )
+from nanitics.strategies.agents.codeact import CodeActAgent
 from tests.testing_helpers import make_emitter, make_usage
 
 _tc_counter = 0

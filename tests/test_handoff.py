@@ -14,8 +14,8 @@ from nanitics.composition.multi_agent.handoff_protocol import (
 )
 from nanitics.composition.orchestration.protocol import Step, StepResult
 from nanitics.composition.orchestration.sequential import Sequential
-from nanitics.core.agents.base import Agent
 from nanitics.infrastructure.observability.events import HandoffEvent
+from nanitics.strategies.agents.base import Agent
 from tests.testing_helpers import make_emitter, make_response
 
 

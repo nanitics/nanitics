@@ -9,11 +9,6 @@ from nanitics import (
     tool,
 )
 from nanitics.capabilities.planning.store import InMemoryPlanStore
-from nanitics.core.agents.evaluation import (
-    EvaluationContext,
-    EvaluationResult,
-    EvaluationVerdict,
-)
 from nanitics.experimental import (
     ReWOOAgent,
     ReWOOPlan,
@@ -25,6 +20,11 @@ from nanitics.infrastructure.observability.events import (
     PlanStepUpdatedEvent,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.evaluation import (
+    EvaluationContext,
+    EvaluationResult,
+    EvaluationVerdict,
+)
 from tests.testing_helpers import make_emitter, make_response
 
 
@@ -153,13 +153,13 @@ class TestReWOOPlan:
 
 class TestVariableSubstitution:
     def test_simple_substitution(self) -> None:
-        from nanitics.core.agents.rewoo import _substitute_variables
+        from nanitics.strategies.agents.rewoo import _substitute_variables
 
         result = _substitute_variables({"text": "#1"}, {1: "hello world"})
         assert result["text"] == "hello world"
 
     def test_embedded_substitution(self) -> None:
-        from nanitics.core.agents.rewoo import _substitute_variables
+        from nanitics.strategies.agents.rewoo import _substitute_variables
 
         result = _substitute_variables(
             {"query": "search for #1 and #2"},
@@ -168,19 +168,19 @@ class TestVariableSubstitution:
         assert result["query"] == "search for cats and dogs"
 
     def test_missing_reference(self) -> None:
-        from nanitics.core.agents.rewoo import _substitute_variables
+        from nanitics.strategies.agents.rewoo import _substitute_variables
 
         result = _substitute_variables({"text": "#99"}, {})
         assert result["text"] == "[Step #99 failed or not available]"
 
     def test_no_references(self) -> None:
-        from nanitics.core.agents.rewoo import _substitute_variables
+        from nanitics.strategies.agents.rewoo import _substitute_variables
 
         result = _substitute_variables({"query": "plain text"}, {1: "unused"})
         assert result["query"] == "plain text"
 
     def test_multiple_keys(self) -> None:
-        from nanitics.core.agents.rewoo import _substitute_variables
+        from nanitics.strategies.agents.rewoo import _substitute_variables
 
         result = _substitute_variables(
             {"a": "#1", "b": "#2"},
@@ -190,7 +190,7 @@ class TestVariableSubstitution:
         assert result["b"] == "second"
 
     def test_non_string_values_pass_through(self) -> None:
-        from nanitics.core.agents.rewoo import _substitute_variables
+        from nanitics.strategies.agents.rewoo import _substitute_variables
 
         result = _substitute_variables(
             {"count": 5, "enabled": True, "query": "#1"},
@@ -201,7 +201,7 @@ class TestVariableSubstitution:
         assert result["query"] == "hello"
 
     def test_mixed_types_with_references(self) -> None:
-        from nanitics.core.agents.rewoo import _substitute_variables
+        from nanitics.strategies.agents.rewoo import _substitute_variables
 
         result = _substitute_variables(
             {"text": "summarize #1", "limit": 10, "tags": None},
@@ -219,7 +219,7 @@ class TestVariableSubstitution:
 
 class TestBuildExecutionLevels:
     def test_independent_steps_same_level(self) -> None:
-        from nanitics.core.agents.rewoo import _build_execution_levels
+        from nanitics.strategies.agents.rewoo import _build_execution_levels
 
         steps = [
             ReWOOStep(step_number=1, description="a", tool_name="search", arguments={}, depends_on=[]),
@@ -230,7 +230,7 @@ class TestBuildExecutionLevels:
         assert len(levels[0]) == 2
 
     def test_linear_chain(self) -> None:
-        from nanitics.core.agents.rewoo import _build_execution_levels
+        from nanitics.strategies.agents.rewoo import _build_execution_levels
 
         steps = [
             ReWOOStep(step_number=1, description="a", tool_name="search", arguments={}, depends_on=[]),
@@ -244,7 +244,7 @@ class TestBuildExecutionLevels:
         assert [s.step_number for s in levels[2]] == [3]
 
     def test_diamond_dependency(self) -> None:
-        from nanitics.core.agents.rewoo import _build_execution_levels
+        from nanitics.strategies.agents.rewoo import _build_execution_levels
 
         steps = [
             ReWOOStep(step_number=1, description="a", tool_name="search", arguments={}, depends_on=[]),
@@ -259,7 +259,7 @@ class TestBuildExecutionLevels:
         assert [s.step_number for s in levels[2]] == [4]
 
     def test_circular_dependency_raises(self) -> None:
-        from nanitics.core.agents.rewoo import _build_execution_levels
+        from nanitics.strategies.agents.rewoo import _build_execution_levels
 
         steps = [
             ReWOOStep(step_number=1, description="a", tool_name="search", arguments={}, depends_on=[2]),

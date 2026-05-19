@@ -20,9 +20,9 @@ from mcp.types import (
     Tool,
 )
 
-from nanitics.core.tools.protocol import ToolResult
 from nanitics.infrastructure.errors import ToolExecutionError
 from nanitics.infrastructure.llm.protocol import ToolSchema
+from nanitics.strategies.tools.protocol import ToolResult
 
 _DEFAULT_EMPTY_PARAMETERS: dict[str, Any] = {"type": "object", "properties": {}}
 _ERROR_WITH_NO_MESSAGE = "MCP server reported tool error with no message"

@@ -7,7 +7,6 @@ from typing import Any, Protocol, cast, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict
 
-from nanitics.core.agents.base import Agent
 from nanitics.infrastructure.llm.protocol import LLMClient, Message
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
@@ -16,6 +15,7 @@ from nanitics.infrastructure.observability.events import (
     BroadcastStartEvent,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.base import Agent
 
 # --- Models ---
 

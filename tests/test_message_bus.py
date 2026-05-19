@@ -740,7 +740,7 @@ class TestMessageBusSubscriberFailure:
 
     async def test_agent_with_existing_context_providers(self) -> None:
         """MessageBus appends history provider to agent's existing context providers."""
-        from nanitics.core.agents.context import ContextContent
+        from nanitics.strategies.agents.context import ContextContent
 
         class DummyProvider:
             async def provide(self, messages: list) -> ContextContent | None:

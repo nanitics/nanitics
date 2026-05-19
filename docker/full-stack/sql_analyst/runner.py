@@ -39,7 +39,7 @@ from nanitics import (
     SupervisionDecision,
     Supervisor,
 )
-from nanitics.core.agents.base import AgentResult
+from nanitics.strategies.agents.base import AgentResult
 from sql_analyst.bootstrap import ensure_analyst_schema
 from sql_analyst.evaluator import GroundTruthEvaluator
 from sql_analyst.questions import QUESTIONS, SampleQuestion

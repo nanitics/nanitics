@@ -18,13 +18,13 @@ from nanitics.composition.multi_agent.broadcast import (
     ResponseStrategy,
     SelectBest,
 )
-from nanitics.core.agents.base import Agent
 from nanitics.infrastructure.observability.events import (
     BroadcastCompleteEvent,
     BroadcastResponseEvent,
     BroadcastStartEvent,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.base import Agent
 from tests.testing_helpers import make_emitter, make_response
 
 

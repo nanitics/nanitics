@@ -28,10 +28,6 @@ from mcp.types import (
     Tool as MCPUpstreamTool,
 )
 
-from nanitics.core.agents.react import ReActAgent
-from nanitics.core.tools.protocol import Tool as ToolProtocol
-from nanitics.core.tools.protocol import ToolResult
-from nanitics.core.tools.registry import ToolRegistry
 from nanitics.infrastructure.errors import (
     LLMProviderError,
     ToolExecutionError,
@@ -51,6 +47,10 @@ from nanitics.infrastructure.observability.events import (
     ToolResultEvent,
     Usage,
 )
+from nanitics.strategies.agents.react import ReActAgent
+from nanitics.strategies.tools.protocol import Tool as ToolProtocol
+from nanitics.strategies.tools.protocol import ToolResult
+from nanitics.strategies.tools.registry import ToolRegistry
 
 # ---------------------------------------------------------------------------
 # Session stub — lets us exercise MCPTool without a real session.

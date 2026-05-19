@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from nanitics.capabilities.memory.semantic import SemanticStore
-from nanitics.core.tools.context import ToolContext
-from nanitics.core.tools.function_tool import FunctionTool, tool
 from nanitics.infrastructure.observability.events import (
     SemanticDeleteEvent,
     SemanticSearchEvent,
     SemanticStoreEvent,
 )
+from nanitics.strategies.tools.context import ToolContext
+from nanitics.strategies.tools.function_tool import FunctionTool, tool
 
 
 def create_semantic_memory_tools(
