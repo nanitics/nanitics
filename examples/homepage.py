@@ -1,10 +1,10 @@
-"""Three-layer composition — ``researcher`` → ``grounded`` → ``coordinator``.
+"""Two-layer composition — ``researcher`` → ``reviewer``.
 
-``researcher`` is a ``ReActAgent`` with a ``search`` tool. ``grounded`` wraps it in
-a ``ReflexionAgent`` that self-evaluates with retry. ``coordinator`` is a
-``ReActAgent`` that delegates to ``grounded`` via ``AgentTool``. Each layer maps to
-one differentiated capability: tool-using agent, self-evaluation with retry,
-agent-as-tool composition.
+``researcher`` is a ``ReActAgent`` with a ``search`` tool. ``reviewer`` is a
+``ReActAgent`` that wraps the researcher in an ``AgentTool`` and composes the
+final answer from the delegated result. The composition uses only the core
+surface — no specialized strategies, no evaluators — to mirror the Start here
+path on the website (Tools, Memory, Multi-Agent Foundations).
 
 The visible portion of this file (delimited by the ``HOMEPAGE VISIBLE`` start/end
 comment markers below) is fetched at build time by the website and rendered
@@ -21,21 +21,12 @@ from typing import Any
 
 from examples.helpers import make_emitter, make_response
 from nanitics.composition import AgentTool
-from nanitics.evaluation import (
-    EvaluationCheck,
-    ProgrammaticEvaluator,
-)
 from nanitics.infrastructure import (
     DelegationEvent,
-    EvaluationEvent,
     LLMResponse,
     LLMResponseEvent,
-    MockEmbeddingClient,
     MockLLMClient,
-    ReflectionGeneratedEvent,
 )
-from nanitics.memory import InMemoryEpisodeStore
-from nanitics.specialized import ReflexionAgent
 from nanitics.strategies import (
     AgentResult,
     ReActAgent,
@@ -59,27 +50,19 @@ async def _jittered_sleep(low: float, high: float) -> None:
 
 
 # Static mock corpus served by the search tool. Stable IDs R-1, R-2, R-3 let the
-# inner researcher cite hits as [R-1], [R-2], etc. — what the bracket-counting
-# evaluator predicate inspects on the visible homepage snippet.
-_SEARCH_CORPUS: dict[str, list[tuple[str, str]]] = {
-    "current retry policy": [
-        ("R-1", "Q3 baseline: exponential backoff with up to 5 attempts."),
-    ],
-    "retry policy changes in Q4": [
-        ("R-1", "Q3 baseline: exponential backoff with up to 5 attempts."),
-        ("R-2", "Q4 change: backoff is now jittered; max attempts lowered from 5 to 3."),
-        ("R-3", "Q4 change: retried POSTs require an idempotency-key header."),
-    ],
-}
+# researcher cite hits as [R-1], [R-2], etc. The corpus is returned in full for
+# any query so the example is deterministic without query-routing logic.
+_SEARCH_CORPUS: list[tuple[str, str]] = [
+    ("R-1", "Q3 baseline: exponential backoff with up to 5 attempts."),
+    ("R-2", "Q4 change: backoff is now jittered; max attempts lowered from 5 to 3."),
+    ("R-3", "Q4 change: retried POSTs require an idempotency-key header."),
+]
 
 
 @tool("search", "Search engineering notes for retry-policy records.")
 async def search(query: str) -> str:
     await _jittered_sleep(*_TOOL_DELAY_RANGE)
-    hits = _SEARCH_CORPUS.get(query, [])
-    if not hits:
-        return "No results."
-    return "\n".join(f"[{rid}] {snippet}" for rid, snippet in hits)
+    return "\n".join(f"[{rid}] {snippet}" for rid, snippet in _SEARCH_CORPUS)
 
 
 class _DelayedMockLLMClient:
@@ -100,49 +83,41 @@ class _DelayedMockLLMClient:
         return await self._inner.generate(**kwargs)
 
 
-# Scripted mocks: 4 researcher responses (search → cite [R-1] → refine → cite [R-1] [R-2]),
-# 1 reflection response between attempts, 2 coordinator responses (delegate → final answer).
+# Scripted mocks: 2 researcher responses (search → cite [R-1] [R-2]), 2 reviewer
+# responses (delegate → final composed answer). Four LLM responses total on the
+# shared timeline.
 _RESEARCHER_RESPONSES = [
     make_response(
-        "I'll start by looking up the current retry policy.",
-        tool_calls=[ToolCall(id="r-tc-1", name="search", arguments={"query": "current retry policy"})],
-        stop_reason="tool_use",
-    ),
-    make_response(
-        "Based on the search, the current policy is the Q3 baseline: exponential backoff with up to 5 attempts [R-1]."
-    ),
-    make_response(
-        "Refining the search to surface the Q4 change records specifically.",
-        tool_calls=[ToolCall(id="r-tc-2", name="search", arguments={"query": "retry policy changes in Q4"})],
-        stop_reason="tool_use",
-    ),
-    make_response(
-        "Comparing the Q3 baseline [R-1] with the Q4 records: backoff is now jittered and max attempts "
-        "dropped from 5 to 3 [R-2]."
-    ),
-]
-_REFLECTION_RESPONSES = [
-    make_response(
-        "The first attempt described the Q3 baseline but never named the Q4 changes, even though the "
-        "question asks what *changed*. The next attempt should refine the search to find Q4-specific "
-        "records and cite both the baseline and the change."
-    ),
-]
-_COORDINATOR_RESPONSES = [
-    make_response(
-        "I'll delegate this to the grounded researcher to investigate.",
+        "I'll search the engineering notes for retry-policy records.",
         tool_calls=[
             ToolCall(
-                id="c-tc-1",
-                name="grounded",
+                id="r-tc-1",
+                name="search",
+                arguments={"query": "retry policy changes last quarter"},
+            )
+        ],
+        stop_reason="tool_use",
+    ),
+    make_response(
+        "Two changes landed last quarter: backoff is now jittered, and the maximum number of retry "
+        "attempts dropped from 5 to 3 [R-1] [R-2]."
+    ),
+]
+_REVIEWER_RESPONSES = [
+    make_response(
+        "I'll delegate this to the researcher.",
+        tool_calls=[
+            ToolCall(
+                id="rev-tc-1",
+                name="researcher",
                 arguments={"task": "What changed in our retry policy last quarter?"},
             )
         ],
         stop_reason="tool_use",
     ),
     make_response(
-        "Two changes landed last quarter: backoff is now jittered, and max retry attempts dropped "
-        "from 5 to 3 [R-1] [R-2]."
+        "Two changes landed last quarter: jittered backoff, and the maximum retry attempts dropped from "
+        "5 to 3 [R-1] [R-2]."
     ),
 ]
 
@@ -151,21 +126,9 @@ async def main(emitter: InMemoryEmitter | None = None) -> tuple[AgentResult, InM
     if emitter is None:
         emitter = make_emitter("homepage")
     researcher_llm = _DelayedMockLLMClient(MockLLMClient(responses=_RESEARCHER_RESPONSES))
-    reflection_llm = _DelayedMockLLMClient(MockLLMClient(responses=_REFLECTION_RESPONSES))
-    coordinator_llm = _DelayedMockLLMClient(MockLLMClient(responses=_COORDINATOR_RESPONSES))
-    # Production evaluators would parse structured output rather than count brackets;
-    # the bracket-count predicate keeps the homepage snippet legible at one glance.
+    reviewer_llm = _DelayedMockLLMClient(MockLLMClient(responses=_REVIEWER_RESPONSES))
 
     # --- HOMEPAGE VISIBLE START ---
-    evaluator = ProgrammaticEvaluator(
-        checks=[
-            EvaluationCheck(
-                name="cites_two_sources",
-                check=lambda out: out.count("[") >= 2,
-                feedback="Cite at least two sources from search().",
-            )
-        ],
-    )
     researcher = ReActAgent(
         name="researcher",
         llm_client=researcher_llm,
@@ -173,61 +136,43 @@ async def main(emitter: InMemoryEmitter | None = None) -> tuple[AgentResult, InM
         system_prompt="Research the question using search() and cite results as [R-N].",
         tools=[search],
     )
-    grounded = ReflexionAgent(
-        name="grounded",
-        llm_client=reflection_llm,
+    reviewer = ReActAgent(
+        name="reviewer",
+        llm_client=reviewer_llm,
         emitter=emitter,
-        system_prompt="Reflect on the previous attempt and prescribe a corrected approach.",
-        inner_agent=researcher,
-        evaluator=evaluator,
-        episode_store=InMemoryEpisodeStore(embedding_client=MockEmbeddingClient()),
-    )
-    coordinator = ReActAgent(
-        name="coordinator",
-        llm_client=coordinator_llm,
-        emitter=emitter,
-        system_prompt="Delegate research to the grounded researcher, then synthesise the final answer.",
+        system_prompt="Delegate research to the specialist, then compose the final answer.",
         tools=[
             AgentTool(
-                agent=grounded,
+                agent=researcher,
                 emitter=emitter,
-                caller_name="coordinator",
-                description="Delegate research questions to the grounded researcher.",
+                caller_name="reviewer",
+                description="Delegate research to the specialist researcher.",
             )
         ],
     )
-    result = await coordinator.run("What changed in our retry policy last quarter?")
+    result = await reviewer.run("What changed in our retry policy last quarter?")
     # --- HOMEPAGE VISIBLE END ---
 
-    # --- Trace-shape invariants this Phase pins. CI-grade pinning is Phase 2.2. ---
+    # --- Trace-shape invariants. Full coverage in tests/test_homepage_trace_shape.py. ---
     assert result.termination_reason == "complete"
-    assert isinstance(result.output, str) and result.output, "coordinator final answer is non-empty"
-
-    eval_events = [e for e in emitter.events if isinstance(e, EvaluationEvent)]
-    assert len(eval_events) == 2, f"Expected 2 EvaluationEvents, got {len(eval_events)}"
-    assert (eval_events[0].verdict, eval_events[1].verdict) == ("revise", "accept")
-
-    reflection_events = [e for e in emitter.events if isinstance(e, ReflectionGeneratedEvent)]
-    assert len(reflection_events) == 1, f"Expected 1 ReflectionGeneratedEvent, got {len(reflection_events)}"
+    assert isinstance(result.output, str) and result.output, "reviewer final answer is non-empty"
 
     delegation_events = [e for e in emitter.events if isinstance(e, DelegationEvent)]
     assert len(delegation_events) == 1
-    assert delegation_events[0].caller_agent == "coordinator"
-    assert delegation_events[0].delegate_agent == "grounded"
+    assert delegation_events[0].caller_agent == "reviewer"
+    assert delegation_events[0].delegate_agent == "researcher"
     assert delegation_events[0].task == "What changed in our retry policy last quarter?"
 
     llm_responses = [e for e in emitter.events if isinstance(e, LLMResponseEvent)]
-    assert len(llm_responses) == 7, (
-        f"Expected 7 LLMResponseEvents (4 researcher + 1 reflection + 2 coordinator), got {len(llm_responses)}"
+    assert len(llm_responses) == 4, (
+        f"Expected 4 LLMResponseEvents (2 researcher + 2 reviewer), got {len(llm_responses)}"
     )
 
-    print("--- Homepage example: composing ReActAgent + ReflexionAgent + AgentTool ---")
-    print(f"  Coordinator final answer: {result.output}")
-    print(f"  Evaluator verdicts: {[e.verdict for e in eval_events]}")
-    print(f"  Reflections generated: {len(reflection_events)}")
-    print(f"  Delegations recorded: {delegation_events[0].caller_agent} → {delegation_events[0].delegate_agent}")
+    print("--- Homepage example: composing ReActAgent + AgentTool ---")
+    print(f"  Reviewer final answer: {result.output}")
+    print(f"  Delegation recorded: {delegation_events[0].caller_agent} → {delegation_events[0].delegate_agent}")
     print(f"  LLM responses on shared timeline: {len(llm_responses)}")
-    print("✓ Trace shape: attempt 1 (revise) → reflect → attempt 2 (accept) → coordinator final answer")
+    print("✓ Trace shape: reviewer delegates → researcher searches → researcher drafts → reviewer composes")
 
     return result, emitter
 

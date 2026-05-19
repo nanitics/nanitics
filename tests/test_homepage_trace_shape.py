@@ -22,10 +22,8 @@ from nanitics.infrastructure import (
     AgentCompleteEvent,
     AgentStartEvent,
     DelegationEvent,
-    EvaluationEvent,
     LLMRequestEvent,
     LLMResponseEvent,
-    ReflectionGeneratedEvent,
     ToolInvokeEvent,
     ToolResultEvent,
 )
@@ -41,23 +39,24 @@ _KNOWN_PROVIDER_KEYS = (
 async def test_trace_event_sequence() -> None:
     """Run the homepage example and assert every trace-shape invariant.
 
-    The full set of invariants lives in ``technical-spec.md`` §1 of Phase
-    2.2. Each assertion below maps to one row of that table.
+    The trace exercises the two-layer agent-as-tool composition: ``reviewer``
+    delegates to ``researcher``, which calls the ``search`` tool once and
+    drafts a cited answer, then ``reviewer`` composes the final response.
     """
     result, emitter = await homepage.main()
     events = emitter.events
 
-    # --- §1.1 Termination ---
-    assert result.termination_reason == "complete"  # T1
-    assert isinstance(result.output, str) and len(result.output) > 0  # T2
+    # --- Termination ---
+    assert result.termination_reason == "complete"
+    assert isinstance(result.output, str) and len(result.output) > 0
 
-    # --- §1.2 LLM request/response counts ---
+    # --- LLM request/response counts: 2 researcher + 2 reviewer ---
     llm_requests = [e for e in events if isinstance(e, LLMRequestEvent)]
     llm_responses = [e for e in events if isinstance(e, LLMResponseEvent)]
-    assert len(llm_responses) == 7  # L1 (4 researcher + 1 reflection + 2 coordinator)
-    assert len(llm_requests) == len(llm_responses) == 7  # L2
+    assert len(llm_responses) == 4
+    assert len(llm_requests) == len(llm_responses) == 4
 
-    # --- §1.3 Agent start/complete pairs (per named agent) ---
+    # --- Agent start/complete pairs ---
     starts_by_name: dict[str, list[AgentStartEvent]] = {}
     completes_by_name: dict[str, list[AgentCompleteEvent]] = {}
     for event in events:
@@ -66,67 +65,40 @@ async def test_trace_event_sequence() -> None:
         elif isinstance(event, AgentCompleteEvent):
             completes_by_name.setdefault(event.agent_name, []).append(event)
 
-    assert len(starts_by_name.get("coordinator", [])) == 1  # A1
-    assert len(completes_by_name.get("coordinator", [])) == 1  # A1
-    assert len(starts_by_name.get("grounded", [])) == 1  # A2
-    assert len(completes_by_name.get("grounded", [])) == 1  # A2
-    assert len(starts_by_name.get("researcher", [])) == 2  # A3 (attempt 1 + attempt 2)
-    assert len(completes_by_name.get("researcher", [])) == 2  # A3
+    assert len(starts_by_name.get("reviewer", [])) == 1
+    assert len(completes_by_name.get("reviewer", [])) == 1
+    assert len(starts_by_name.get("researcher", [])) == 1
+    assert len(completes_by_name.get("researcher", [])) == 1
 
-    # --- §1.4 Evaluation verdict sequence ---
-    eval_events = [e for e in events if isinstance(e, EvaluationEvent)]
-    assert len(eval_events) == 2  # E1
-    assert (eval_events[0].verdict, eval_events[1].verdict) == ("revise", "accept")  # E2
-
-    # --- §1.5 Reflection ---
-    reflection_events = [e for e in events if isinstance(e, ReflectionGeneratedEvent)]
-    assert len(reflection_events) == 1  # R1
-    reflection_index = events.index(reflection_events[0])
-    first_eval_index = events.index(eval_events[0])
-    second_eval_index = events.index(eval_events[1])
-    assert first_eval_index < reflection_index < second_eval_index  # R2
-
-    # --- §1.6 Delegation (coordinator → grounded) ---
+    # --- Delegation (reviewer → researcher) ---
     delegation_events = [e for e in events if isinstance(e, DelegationEvent)]
-    assert len(delegation_events) == 1  # D1
-    assert delegation_events[0].caller_agent == "coordinator"  # D2
-    assert delegation_events[0].delegate_agent == "grounded"  # D3
-    assert delegation_events[0].task == "What changed in our retry policy last quarter?"  # D4
+    assert len(delegation_events) == 1
+    assert delegation_events[0].caller_agent == "reviewer"
+    assert delegation_events[0].delegate_agent == "researcher"
+    assert delegation_events[0].task == "What changed in our retry policy last quarter?"
 
-    # --- §1.7 Tool invocations ---
+    # --- Tool invocations: 1 search call inside researcher, 1 researcher call inside reviewer ---
     search_invokes = [e for e in events if isinstance(e, ToolInvokeEvent) and e.tool_name == "search"]
     search_results = [e for e in events if isinstance(e, ToolResultEvent) and e.tool_name == "search"]
-    assert len(search_invokes) == 2  # I1
-    assert len(search_results) == 2  # I2
+    assert len(search_invokes) == 1
+    assert len(search_results) == 1
 
-    grounded_invokes = [e for e in events if isinstance(e, ToolInvokeEvent) and e.tool_name == "grounded"]
-    grounded_results = [e for e in events if isinstance(e, ToolResultEvent) and e.tool_name == "grounded"]
-    assert len(grounded_invokes) == 1  # I3
-    assert len(grounded_results) == 1  # I4
+    researcher_invokes = [e for e in events if isinstance(e, ToolInvokeEvent) and e.tool_name == "researcher"]
+    researcher_results = [e for e in events if isinstance(e, ToolResultEvent) and e.tool_name == "researcher"]
+    assert len(researcher_invokes) == 1
+    assert len(researcher_results) == 1
 
-    # --- §1.8 Citations on the inner-researcher drafts ---
-    # Identify the two researcher attempts by their AgentStart/AgentComplete index windows.
-    researcher_starts = [events.index(e) for e in starts_by_name["researcher"]]
-    researcher_completes = [events.index(e) for e in completes_by_name["researcher"]]
-    researcher_windows = sorted(zip(researcher_starts, researcher_completes, strict=True))
-
-    def _end_of_turn_draft_in_window(start_idx: int, end_idx: int) -> str:
-        """Return the content of the final no-tool-calls LLM response in a researcher window."""
-        candidates = [
-            e
-            for i, e in enumerate(events)
-            if start_idx < i < end_idx and isinstance(e, LLMResponseEvent) and not e.tool_calls
-        ]
-        # The last no-tool-calls response in the window is the end-of-turn draft.
-        assert candidates, "expected at least one end-of-turn researcher LLMResponseEvent"
-        content = candidates[-1].content
-        assert isinstance(content, str)
-        return content
-
-    attempt_one_text = _end_of_turn_draft_in_window(*researcher_windows[0])
-    attempt_two_text = _end_of_turn_draft_in_window(*researcher_windows[1])
-    assert attempt_one_text.count("[") == 1  # C1: cites [R-1] once
-    assert attempt_two_text.count("[") == 2  # C2: cites [R-1] and [R-2]
+    # --- Citations on the researcher's end-of-turn draft ---
+    researcher_start_idx = events.index(starts_by_name["researcher"][0])
+    researcher_complete_idx = events.index(completes_by_name["researcher"][0])
+    end_of_turn_drafts = [
+        e
+        for i, e in enumerate(events)
+        if researcher_start_idx < i < researcher_complete_idx and isinstance(e, LLMResponseEvent) and not e.tool_calls
+    ]
+    assert end_of_turn_drafts, "expected at least one end-of-turn researcher LLMResponseEvent"
+    assert isinstance(end_of_turn_drafts[-1].content, str)
+    assert end_of_turn_drafts[-1].content.count("[") == 2  # cites [R-1] and [R-2]
 
 
 async def test_runs_with_no_api_keys_in_environment(monkeypatch: pytest.MonkeyPatch) -> None:
