@@ -20,7 +20,7 @@ The fastest path from zero to a running agent:
 
 That's the essential surface. For everything else — orchestration, evaluation, planning, observability, production guides, advanced reasoning strategies — see the [full guides index](guides/README.md).
 
-For API details (signatures, fields, constraints), read the docstrings in your editor, in the source tree under [`nanitics/`](../nanitics/), or at [docs.nanitics.dev](https://docs.nanitics.dev/). `nanitics.__all__` is the authoritative public surface. Runnable [examples](https://github.com/nanitics/nanitics/tree/main/examples) cover every SDK component using `MockLLMClient` — no API key required.
+For API details (signatures, fields, constraints), read the docstrings in your editor, in the source tree under [`nanitics/`](../nanitics/), or at [docs.nanitics.dev](https://docs.nanitics.dev/). The union of every public subpackage's `__all__` is the authoritative public surface. Runnable [examples](https://github.com/nanitics/nanitics/tree/main/examples) cover every SDK component using `MockLLMClient` — no API key required.
 
 ## Quick start
 
@@ -59,15 +59,28 @@ async def main():
 asyncio.run(main())
 ```
 
-For API details — signatures, fields, constraints — read the docstrings in your editor, in the source tree under [`nanitics/`](../nanitics/), or browse them at [docs.nanitics.dev](https://docs.nanitics.dev/). `nanitics.__all__` is the authoritative public surface.
+For API details — signatures, fields, constraints — read the docstrings in your editor, in the source tree under [`nanitics/`](../nanitics/), or browse them at [docs.nanitics.dev](https://docs.nanitics.dev/). The union of every public subpackage's `__all__` is the authoritative public surface.
 
 ## Public API surface
 
-The SDK exposes three namespaces:
+The public surface is hierarchical. Every name lives in a topic-named subpackage under `nanitics`; the top-level `nanitics` package itself exports only `__version__`. There are no flat re-exports — import from the subpackage directly.
 
-- **`nanitics`** — recommended core. Primitives and load-bearing compositions for building most agentic systems: the three agent types (`ReActAgent`, `ReasoningAgent`, `CodeActAgent`), all five memory types, core workflows (`Sequential`, `Parallel`, `DAG`), multi-agent foundations (`AgentTool`, `Broadcast`, context transfer), `Blackboard`, `Supervisor`, `JudgeRouter`, HITL and durable suspension, planning, evaluation, context management, error handling, safety, observability, standard LLM and embedding clients, built-in tools.
-- **`nanitics.patterns`** — named compositions over the core primitives. `create_orchestrator`, the `HandoffPayload`/`HandoffStep`/`create_handoff_chain` stack, and other sugar that could be rebuilt from primitives in a few lines but is named for discoverability.
+- **`nanitics.strategies`** — the foundational `Agent` / `Tool` / `SystemPromptBuilder` primitives and the agent strategies built on top: `ReActAgent`, `ReasoningAgent`, `CodeActAgent` (plus the specialized strategies re-exported from `nanitics.specialized`).
+- **`nanitics.memory`** — working, shared, semantic, episodic, and long-term memory stores.
+- **`nanitics.composition`** — multi-agent foundations and workflows: `Sequential`, `Parallel`, `DAG`, `AgentTool`, `Broadcast`, `Blackboard`, `Supervisor`, `JudgeRouter`, durable runs and checkpointing.
+- **`nanitics.tracing`** — events, emitters, trace stores, and level filtering for the Observatory.
+- **`nanitics.errors`** — error classes and the error-handling capability surface.
+- **`nanitics.hitl`** — human-in-the-loop primitives: approval, revision, human-input providers.
+- **`nanitics.evaluation`** — output evaluators, verdicts, and contexts.
+- **`nanitics.planning`** — goal- and plan-based planning primitives.
+- **`nanitics.context`** — context management: token counting, summarization, truncation.
+- **`nanitics.safety`** — cancellation tokens, iteration limits, sandboxes.
+- **`nanitics.tools`** — curated reference `Tool` implementations.
+- **`nanitics.infrastructure`** — LLM and embedding clients: `AnthropicLLMClient`, `OpenAILLMClient`, `LiteLLMClient`, `MockLLMClient`, `VoyageEmbeddingClient`, `MockEmbeddingClient`.
+- **`nanitics.patterns`** — named compositions over the core primitives: `create_orchestrator`, the `HandoffPayload`/`HandoffStep`/`create_handoff_chain` stack, and other sugar that could be rebuilt from primitives in a few lines but is named for discoverability.
 - **`nanitics.specialized`** — specialized primitives that are structurally distinct but niche. Reach for them deliberately: `ReWOOAgent`, `ReflexionAgent`, `TreeOfThoughtAgent`, `LATSAgent`, the `Loop`/`Conditional`/`MapReduce`/`Pipeline` workflows, the `Bidding`/`Debate`/`Consensus` coordination patterns, `MessageBus`, `PeerNetwork`, `MistralLLMClient`, hierarchical-decomposition planning.
+
+The `patterns` and `specialized` namespaces signal adoption guidance, not maturity — every symbol there is part of the v1.0 surface. The union of every public subpackage's `__all__` is the authoritative public surface (see [deprecation-policy.md](deprecation-policy.md)).
 
 ## LLM providers
 
