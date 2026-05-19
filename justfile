@@ -112,6 +112,7 @@ docs:
       -e nanitics=https://github.com/nanitics/nanitics/blob/main/nanitics/ \
       --logo https://raw.githubusercontent.com/nanitics/nanitics/main/assets/nanitics-logo.png \
       --logo-link https://github.com/nanitics/nanitics \
+      --favicon /favicon.ico \
       --footer-text "Nanitics ${version}" \
       -o build/docs/ \
       nanitics \
@@ -131,6 +132,8 @@ docs:
       nanitics.specialized
     uv run python scripts/generate_llms_txt.py --output build/docs/llms.txt
     cp docs/CNAME build/docs/CNAME
+    cp assets/favicon.ico build/docs/favicon.ico
+    cp assets/apple-touch-icon.png build/docs/apple-touch-icon.png
 
 # Quick coverage check — mirrors `check`'s non-docker coverage computation so a clean run here matches the gate
 coverage:
