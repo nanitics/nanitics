@@ -114,7 +114,21 @@ docs:
       --logo-link https://github.com/nanitics/nanitics \
       --footer-text "Nanitics ${version}" \
       -o build/docs/ \
-      nanitics nanitics.patterns nanitics.experimental
+      nanitics \
+      nanitics.strategies \
+      nanitics.memory \
+      nanitics.composition \
+      nanitics.tracing \
+      nanitics.errors \
+      nanitics.hitl \
+      nanitics.evaluation \
+      nanitics.planning \
+      nanitics.context \
+      nanitics.safety \
+      nanitics.tools \
+      nanitics.infrastructure \
+      nanitics.patterns \
+      nanitics.specialized
     uv run python scripts/generate_llms_txt.py --output build/docs/llms.txt
     cp docs/CNAME build/docs/CNAME
 

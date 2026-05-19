@@ -221,9 +221,8 @@ def test_cli_entrypoint_defaults_resolve_real_project(
 
     Exercises the default-parameter branches (`package=None`, `guides_dir=None`,
     `description=None`) against the real repo. Also verifies that the auto-load
-    path picks up the `nanitics.patterns` and `nanitics.specialized` namespaces
-    as `###` subsections under `## API` with anchors that point at their pdoc
-    pages.
+    path picks up every public Nanitics subpackage as a `###` subsection under
+    `## API` with anchors that point at the corresponding pdoc page.
     """
     repo_root = _SCRIPT_PATH.parent.parent
     monkeypatch.chdir(repo_root)
@@ -234,13 +233,29 @@ def test_cli_entrypoint_defaults_resolve_real_project(
     assert text.startswith("# Nanitics\n")
     assert "## API" in text
     assert "## Guides" in text
-    # `nanitics.patterns` and `nanitics.specialized` are rendered as `###`
-    # subsections, and their anchors live at their pdoc pages — not at the
-    # core `nanitics.html`.
-    assert "### nanitics.patterns" in text
-    assert "### nanitics.specialized" in text
+    # Every public subpackage is rendered as a `###` subsection, and its
+    # anchors live at the matching pdoc page — not at the top-level
+    # `nanitics.html`.
+    for subpackage in (
+        "strategies",
+        "memory",
+        "composition",
+        "tracing",
+        "errors",
+        "hitl",
+        "evaluation",
+        "planning",
+        "context",
+        "safety",
+        "tools",
+        "infrastructure",
+        "patterns",
+        "specialized",
+    ):
+        assert f"### nanitics.{subpackage}" in text
+    assert "nanitics/strategies.html#ReActAgent" in text
     assert "nanitics/patterns.html#create_orchestrator" in text
-    assert "nanitics/experimental.html#ReWOOAgent" in text
+    assert "nanitics/specialized.html#ReWOOAgent" in text
 
 
 def test_whitespace_only_docstring_falls_back_to_no_description(

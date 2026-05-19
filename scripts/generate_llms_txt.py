@@ -1,10 +1,9 @@
 """Generate `llms.txt` for the hosted API reference.
 
-Walks `nanitics.__all__`, `nanitics.patterns.__all__`, and
-`nanitics.specialized.__all__` plus `docs/guides/*.md` and emits an
-`llms.txt` file conforming to the llms.txt spec (https://llmstxt.org/).
-Invoked by `just docs` after pdoc runs and by the `docs.yml` GitHub
-Actions workflow.
+Walks the `__all__` of every public Nanitics subpackage plus
+`docs/guides/*.md` and emits an `llms.txt` file conforming to the
+llms.txt spec (https://llmstxt.org/). Invoked by `just docs` after pdoc
+runs and by the `docs.yml` GitHub Actions workflow.
 
 One source of truth: each package's own `__all__` and the existing guide
 tree. No hand-maintained listing — when an `__all__` changes or a guide
@@ -115,9 +114,9 @@ def _render_api_section(
             for ``nanitics.patterns``). Used to construct each symbol's anchor URL.
         section_header: Optional subsection name. When ``None`` (the default),
             the block opens with ``## API``. When provided, the block opens
-            with ``### {section_header}`` — used to mark
-            ``nanitics.patterns`` / ``nanitics.specialized`` subsections
-            under the single top-level ``## API`` heading.
+            with ``### {section_header}`` — used to mark each
+            ``nanitics.<subpackage>`` subsection under the single
+            top-level ``## API`` heading.
     """
     heading = "## API" if section_header is None else f"### {section_header}"
     lines = [heading, ""]
@@ -204,8 +203,8 @@ def main(
         argv: CLI arguments.
         package: Top-level package whose ``__all__`` is walked into the
             ``## API`` block. When ``None``, the CLI auto-loads ``nanitics``
-            and seeds ``extra_packages`` with ``nanitics.patterns`` and
-            ``nanitics.specialized`` (when not already provided).
+            and seeds ``extra_packages`` with every public Nanitics
+            subpackage (when not already provided).
         extra_packages: Additional packages to render as ``### {header}``
             subsections under the same ``## API`` heading. Each entry is
             ``(package, html_path, section_header)``. Tests that inject a
@@ -219,23 +218,39 @@ def main(
 
     if package is None:
         try:
+            import importlib
+
             import nanitics as _nanitics
-            import nanitics.patterns as _nanitics_patterns
-            import nanitics.specialized as _nanitics_experimental
 
             package = _nanitics
             if extra_packages is None:
+                # Mirrors the public-subpackage list in
+                # ``docs/deprecation-policy.md`` and the ``just docs`` recipe.
+                # Order matches the docstring of ``nanitics/__init__.py`` —
+                # primitives first, then the curated-composition namespaces.
+                _subpackage_names = (
+                    "strategies",
+                    "memory",
+                    "composition",
+                    "tracing",
+                    "errors",
+                    "hitl",
+                    "evaluation",
+                    "planning",
+                    "context",
+                    "safety",
+                    "tools",
+                    "infrastructure",
+                    "patterns",
+                    "specialized",
+                )
                 extra_packages = [
                     (
-                        _nanitics_patterns,
-                        "nanitics/patterns.html",
-                        "nanitics.patterns",
-                    ),
-                    (
-                        _nanitics_experimental,
-                        "nanitics/experimental.html",
-                        "nanitics.specialized",
-                    ),
+                        importlib.import_module(f"nanitics.{name}"),
+                        f"nanitics/{name}.html",
+                        f"nanitics.{name}",
+                    )
+                    for name in _subpackage_names
                 ]
         except ImportError as exc:
             print(f"error: cannot import `nanitics`: {exc}", file=sys.stderr)
