@@ -1,4 +1,4 @@
-"""Reference tools — curated :class:`~nanitics.core.Tool` implementations.
+"""Reference tools — curated :class:`~nanitics.strategies.Tool` implementations.
 
 Four factories ship with the SDK so a developer can build a useful
 multi-agent system without writing tool plumbing:

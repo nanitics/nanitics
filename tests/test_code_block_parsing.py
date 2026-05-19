@@ -1,6 +1,6 @@
 """Tests for parse_code_blocks in parsing.py."""
 
-from nanitics.core.agents.parsing import parse_code_blocks
+from nanitics.strategies.agents.parsing import parse_code_blocks
 
 
 class TestParseCodeBlocks:

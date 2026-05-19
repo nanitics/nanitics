@@ -2,11 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from nanitics.core.agents.evaluation import (
-    EvaluationContext,
-    EvaluationVerdict,
-    OutputEvaluator,
-)
 from nanitics.infrastructure.llm.instrumented import InstrumentedLLMClient
 from nanitics.infrastructure.llm.protocol import LLMClient, Message
 from nanitics.infrastructure.observability.emitter import EventEmitter
@@ -17,6 +12,11 @@ from nanitics.infrastructure.observability.events import (
     Usage,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.evaluation import (
+    EvaluationContext,
+    EvaluationVerdict,
+    OutputEvaluator,
+)
 
 from .base import Agent, AgentInput, AgentResult, _input_to_text
 

@@ -6,8 +6,6 @@ from nanitics.composition.multi_agent.context_transfer import (
     ContextTransferStrategy,
     RawOutputTransfer,
 )
-from nanitics.core.agents.base import Agent, AgentInput
-from nanitics.core.tools.protocol import ToolResult
 from nanitics.infrastructure.llm.protocol import (
     ContentBlock,
     TextContentBlock,
@@ -16,6 +14,8 @@ from nanitics.infrastructure.llm.protocol import (
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import DelegationEvent
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.base import Agent, AgentInput
+from nanitics.strategies.tools.protocol import ToolResult
 
 
 class AgentTool:

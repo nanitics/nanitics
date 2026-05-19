@@ -10,9 +10,9 @@ from nanitics.composition.multi_agent.handoff_protocol import (
     handoff_receiver_instructions,
     handoff_sender_instructions,
 )
-from nanitics.core.agents.base import AgentResult
 from nanitics.infrastructure.llm.protocol import Message
 from nanitics.infrastructure.observability.events import Usage
+from nanitics.strategies.agents.base import AgentResult
 
 
 def _make_result(

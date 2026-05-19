@@ -12,7 +12,7 @@ Covers:
 - Parameter validation (empty code, code too long) raises
   :class:`~nanitics.infrastructure.errors.ToolParameterError`.
 - The returned object satisfies the structural
-  :class:`~nanitics.core.tools.protocol.Tool` protocol.
+  :class:`~nanitics.strategies.tools.protocol.Tool` protocol.
 
 All tests use :class:`~nanitics.safety.sandbox.mock.MockSandbox` — no Docker
 and no real subprocess execution.
@@ -24,13 +24,13 @@ from typing import Self
 
 import pytest
 
-from nanitics.core.tools.protocol import Tool, ToolResult
 from nanitics.infrastructure.errors import (
     ToolExecutionError,
     ToolParameterError,
 )
 from nanitics.safety.sandbox.mock import MockSandbox
 from nanitics.safety.sandbox.protocol import ExecutionResult
+from nanitics.strategies.tools.protocol import Tool, ToolResult
 from nanitics.tools.code_execution import create_code_execution_tool
 
 # --- Helpers -----------------------------------------------------------------

@@ -5,20 +5,6 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from nanitics.core.agents.context import ContextManagement, ContextProvider
-from nanitics.core.agents.errors import ErrorHandling
-from nanitics.core.agents.evaluation import (
-    EvaluationResult,
-    EvaluationVerdict,
-    OutputEvaluator,
-)
-from nanitics.core.agents.parsing import (
-    parse_working_memory_update,
-    strip_working_memory_block,
-)
-from nanitics.core.agents.working_memory import WorkingMemory, WorkingMemoryContributor
-from nanitics.core.prompts.builder import SystemPromptContributor
-from nanitics.core.tools import Tool, ToolRegistry
 from nanitics.infrastructure.errors import AgentIterationLimitError, AgentToolCallLimitError
 from nanitics.infrastructure.llm.protocol import LLMClient, Message, ToolCall
 from nanitics.infrastructure.observability.emitter import EventEmitter
@@ -32,6 +18,20 @@ from nanitics.infrastructure.observability.events import (
 )
 from nanitics.safety.cancellation import CancellationToken
 from nanitics.safety.iteration_limits import IterationLimiter, ToolCallLimiter
+from nanitics.strategies.agents.context import ContextManagement, ContextProvider
+from nanitics.strategies.agents.errors import ErrorHandling
+from nanitics.strategies.agents.evaluation import (
+    EvaluationResult,
+    EvaluationVerdict,
+    OutputEvaluator,
+)
+from nanitics.strategies.agents.parsing import (
+    parse_working_memory_update,
+    strip_working_memory_block,
+)
+from nanitics.strategies.agents.working_memory import WorkingMemory, WorkingMemoryContributor
+from nanitics.strategies.prompts.builder import SystemPromptContributor
+from nanitics.strategies.tools import Tool, ToolRegistry
 
 from .base import Agent, AgentInput, AgentResult
 

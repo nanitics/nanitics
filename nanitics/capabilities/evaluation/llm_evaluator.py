@@ -12,7 +12,6 @@ from nanitics.capabilities.evaluation.protocol import (
     EvaluationResult,
     EvaluationVerdict,
 )
-from nanitics.core.agents.base import AgentInput, _input_to_text
 from nanitics.infrastructure.errors import LLMError, LLMRateLimitError
 from nanitics.infrastructure.llm.protocol import LLMClient, LLMResponse, Message
 from nanitics.infrastructure.observability.emitter import EventEmitter
@@ -20,6 +19,7 @@ from nanitics.infrastructure.observability.events import (
     LLMRequestEvent,
     LLMResponseEvent,
 )
+from nanitics.strategies.agents.base import AgentInput, _input_to_text
 
 
 class _EvaluationResponse(BaseModel):

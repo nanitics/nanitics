@@ -8,12 +8,12 @@ from nanitics.collaboration.protocol import (
     HumanInputRequest,
     HumanInputType,
 )
-from nanitics.core.tools.context import ToolContext
-from nanitics.core.tools.function_tool import FunctionTool, tool
 from nanitics.infrastructure.observability.events import (
     HumanInputRequestEvent,
     HumanInputResponseEvent,
 )
+from nanitics.strategies.tools.context import ToolContext
+from nanitics.strategies.tools.function_tool import FunctionTool, tool
 
 _MISSING_CONTEXT_MESSAGE = (
     "HITL tools require a ToolContext with run_id and tool_call_id — "

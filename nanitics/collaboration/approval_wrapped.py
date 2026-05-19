@@ -10,14 +10,14 @@ from nanitics.collaboration.protocol import (
     HumanInputRequest,
     HumanInputType,
 )
-from nanitics.core.tools.context import _current_tool_context
-from nanitics.core.tools.protocol import Tool, ToolResult
 from nanitics.infrastructure.llm.protocol import ToolSchema
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
     HumanInputRequestEvent,
     HumanInputResponseEvent,
 )
+from nanitics.strategies.tools.context import _current_tool_context
+from nanitics.strategies.tools.protocol import Tool, ToolResult
 
 _MISSING_CONTEXT_MESSAGE = (
     "ApprovalWrappedTool requires a ToolContext with run_id and tool_call_id — "

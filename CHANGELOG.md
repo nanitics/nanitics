@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Renamed `nanitics.core` to `nanitics.strategies`.** The subpackage that hosts the long-tail agent strategies (`ReActAgent`, `ReWOOAgent`, `ReflexionAgent`, `LATSAgent`, `TreeOfThoughtAgent`, `CodeActAgent`, `ReasoningAgent`) plus the foundational `Agent` / `Tool` / `SystemPromptBuilder` primitives moves from `nanitics.core` to `nanitics.strategies`. The flat `nanitics.*` re-export surface is unchanged — only the subpackage path changes. Adopters importing from `nanitics.core.*` directly need to rewrite to `nanitics.strategies.*`. Per the no-backward-compatibility rule, no shim is provided.
+
 ### Documentation
 
 - Reverted the Propodeum-client framing introduced in #47. The README tagline, `docs/index.md` opener, `docs/vision.md` opener, and `pyproject.toml` `description` field are restored to SDK-focused positioning. The README "Why Nanitics?" first bullet returns to "Composable primitives, not a framework." The README "About" section now carries a single neutral attribution line. Nanitics is the SDK; Propodeum is the maintainer, not the audience. No code, public-API surface, or behavior changes.

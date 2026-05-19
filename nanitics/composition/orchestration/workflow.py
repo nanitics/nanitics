@@ -414,7 +414,7 @@ class WorkflowCancelledError(Exception):
 class BoundWorkflow:
     """A per-invocation binding of a :class:`Workflow` to a parent trace.
 
-    Symmetric to :class:`nanitics.core.agents.bound.BoundAgent`. Holds a
+    Symmetric to :class:`nanitics.strategies.agents.bound.BoundAgent`. Holds a
     child emitter constructed in the calling task and drives
     :meth:`Workflow.execute` under it without mutating the workflow —
     safe to use concurrently on a shared workflow across tasks.

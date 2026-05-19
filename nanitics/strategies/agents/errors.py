@@ -9,7 +9,7 @@ from nanitics.infrastructure.observability.emitter import EventEmitter
 class ErrorHandling(Protocol):
     """Protocol for agent error recovery strategies.
 
-    The base :class:`~nanitics.core.agents.base.Agent` delegates to an
+    The base :class:`~nanitics.strategies.agents.base.Agent` delegates to an
     ``ErrorHandling`` instance to decide how to respond to LLM errors,
     tool errors, and schema violations — whether to retry, feed a
     correction prompt back to the model, degrade gracefully, or

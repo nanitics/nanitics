@@ -27,7 +27,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from nanitics import FunctionTool, Tool, ToolResult
-from nanitics.core.tools.context import ToolContext
+from nanitics.strategies.tools.context import ToolContext
 
 # Key the tool writes to ``ToolContext.state`` carrying the latest
 # ``ToolResult.metadata`` — the Supervisor's ``PredicateTrigger`` reads

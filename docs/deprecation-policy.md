@@ -18,7 +18,7 @@ release without notice. This includes:
 - Symbols with a leading underscore (e.g. `nanitics._deprecation`, any
   `_private_helper`).
 - Submodules that are not themselves re-exported (e.g. internal organization
-  under `nanitics.core.*` or `nanitics.infrastructure.*`).
+  under `nanitics.strategies.*` or `nanitics.infrastructure.*`).
 - Attributes accessed via dotted paths that are not themselves listed in
   `nanitics.__all__` — reaching into a subsystem to pull a type that is not
   re-exported is reaching into internals.

@@ -13,7 +13,6 @@ from nanitics.capabilities.planning.models import (
 )
 from nanitics.capabilities.planning.store import InMemoryPlanStore
 from nanitics.capabilities.planning.tools import create_planning_tools
-from nanitics.core.tools.function_tool import FunctionTool
 from nanitics.infrastructure.errors import ToolParameterError
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter
 from nanitics.infrastructure.observability.events import (
@@ -22,6 +21,7 @@ from nanitics.infrastructure.observability.events import (
     PlanRevisedEvent,
     PlanStepUpdatedEvent,
 )
+from nanitics.strategies.tools.function_tool import FunctionTool
 from tests.testing_helpers import make_emitter
 
 

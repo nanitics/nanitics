@@ -27,12 +27,12 @@ import httpx
 import pytest
 import respx
 
-from nanitics.core.tools.protocol import Tool, ToolResult
 from nanitics.infrastructure.errors import (
     ToolExecutionError,
     ToolParameterError,
     ToolTimeoutError,
 )
+from nanitics.strategies.tools.protocol import Tool, ToolResult
 from nanitics.tools.http import create_http_tool
 
 # --- Construction ------------------------------------------------------------

@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from nanitics.core.agents.base import AgentResult
+from nanitics.strategies.agents.base import AgentResult
 
 
 class HandoffPayload(BaseModel):

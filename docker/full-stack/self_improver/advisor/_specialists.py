@@ -11,10 +11,10 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from nanitics.core.agents.reasoning import ReasoningAgent
 from nanitics.infrastructure.llm.protocol import LLMClient
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import TraceEvent
+from nanitics.strategies.agents.reasoning import ReasoningAgent
 from self_improver.advisor._prompts import build_dimension_block, build_shared_block
 from self_improver.advisor.proposal import Proposal
 from self_improver.advisor.rubric import Rubric

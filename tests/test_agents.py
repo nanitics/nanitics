@@ -15,7 +15,6 @@ from nanitics import (
     tool,
 )
 from nanitics.capabilities.errors.handler import ErrorHandler
-from nanitics.core.tools import ToolRegistry
 from nanitics.infrastructure import AgentErrorEvent, AgentStartEvent, LLMRequestEvent
 from nanitics.infrastructure.errors import LLMRateLimitError, ToolNotFoundError
 from nanitics.infrastructure.observability.events import (
@@ -24,6 +23,7 @@ from nanitics.infrastructure.observability.events import (
     ErrorRetryEvent,
     SafetyToolCallLimitEvent,
 )
+from nanitics.strategies.tools import ToolRegistry
 
 
 @tool(name="add", description="Add two numbers")
@@ -386,7 +386,7 @@ class TestReasoningAgent:
     async def test_truncation_triggers_revision_with_evaluator(self) -> None:
         """Truncated response triggers revision when evaluator present."""
         from nanitics import LLMResponse
-        from nanitics.core.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
+        from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class _AcceptEval:
             @property
@@ -415,7 +415,7 @@ class TestReasoningAgent:
     async def test_truncation_during_revision_loop(self) -> None:
         """Truncation during revision loop (after evaluator REVISE) triggers truncation handling."""
         from nanitics import LLMResponse
-        from nanitics.core.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
+        from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         call_count = 0
 
@@ -463,8 +463,8 @@ class TestReasoningAgent:
         scripted ``parsed.model_dump()``.
         """
         from nanitics import LLMResponse
-        from nanitics.core.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
         from nanitics.infrastructure.observability.events import AgentStepEvent
+        from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class Answer(BaseModel):
             value: int
@@ -2104,7 +2104,7 @@ class TestReActStructuredOutput:
     async def test_react_truncation_triggers_revision(self) -> None:
         """Truncated response (max_tokens) triggers revision loop in ReAct."""
         from nanitics import LLMResponse
-        from nanitics.core.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
+        from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class _AcceptEval:
             @property
@@ -2134,7 +2134,7 @@ class TestReActStructuredOutput:
     async def test_react_truncation_exceeds_max_revisions(self) -> None:
         """Repeated truncation beyond max_revisions → evaluation_failed."""
         from nanitics import LLMResponse
-        from nanitics.core.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
+        from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class _AcceptEval:
             @property
@@ -2163,7 +2163,7 @@ class TestReActStructuredOutput:
 
     async def test_react_evaluator_error_skips_evaluation(self) -> None:
         """EVALUATOR_ERROR verdict → evaluation_skipped."""
-        from nanitics.core.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
+        from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class _ErrorEval:
             @property
@@ -2188,7 +2188,7 @@ class TestReActStructuredOutput:
 
     async def test_react_reject_without_revision_budget(self) -> None:
         """REJECT verdict with max_revisions=0 → evaluation_failed."""
-        from nanitics.core.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
+        from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class _RejectEval:
             @property
@@ -2225,7 +2225,7 @@ class TestReActStructuredOutputEvaluation:
         from pydantic import BaseModel
 
         from nanitics import LLMResponse
-        from nanitics.core.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
+        from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class Answer(BaseModel):
             text: str
@@ -2279,7 +2279,7 @@ class TestReActStructuredOutputEvaluation:
         from pydantic import BaseModel
 
         from nanitics import LLMResponse
-        from nanitics.core.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
+        from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class Answer(BaseModel):
             text: str
@@ -2351,7 +2351,7 @@ class TestReActStructuredOutputEvaluation:
         """EVALUATOR_ERROR in structured output path → evaluation_skipped."""
         from pydantic import BaseModel
 
-        from nanitics.core.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
+        from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class Answer(BaseModel):
             text: str
@@ -2386,7 +2386,7 @@ class TestReActStructuredOutputEvaluation:
         """REJECT in structured output path → evaluation_failed."""
         from pydantic import BaseModel
 
-        from nanitics.core.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
+        from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class Answer(BaseModel):
             text: str
@@ -2422,7 +2422,7 @@ class TestReActStructuredOutputEvaluation:
         from pydantic import BaseModel
 
         from nanitics import LLMResponse
-        from nanitics.core.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
+        from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class Answer(BaseModel):
             text: str
@@ -2495,7 +2495,7 @@ class TestReActStructuredOutputEvaluation:
         from pydantic import BaseModel
 
         from nanitics import LLMResponse
-        from nanitics.core.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
+        from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class Answer(BaseModel):
             text: str
@@ -2561,7 +2561,7 @@ class TestReActStructuredOutputEvaluation:
         from pydantic import BaseModel
 
         from nanitics import LLMResponse
-        from nanitics.core.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
+        from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class Answer(BaseModel):
             text: str
@@ -2629,7 +2629,7 @@ class TestReActStructuredOutputEvaluation:
         from pydantic import BaseModel
 
         from nanitics import LLMResponse
-        from nanitics.core.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
+        from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class Answer(BaseModel):
             text: str
@@ -2690,8 +2690,8 @@ class TestReActStructuredOutputEvaluation:
         from pydantic import BaseModel
 
         from nanitics import LLMResponse
-        from nanitics.core.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
         from nanitics.infrastructure.observability.events import EvaluationEvent, EvaluationRevisionEvent
+        from nanitics.strategies.agents.evaluation import EvaluationContext, EvaluationResult, EvaluationVerdict
 
         class Answer(BaseModel):
             text: str

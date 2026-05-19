@@ -19,9 +19,9 @@ from nanitics.composition.multi_agent.supervisor import (
     SupervisionResult,
     Supervisor,
 )
-from nanitics.core.agents.base import AgentResult
 from nanitics.infrastructure.llm.protocol import Message
 from nanitics.infrastructure.observability.events import SupervisionEvent
+from nanitics.strategies.agents.base import AgentResult
 
 
 def make_agent(name: str, responses: list[LLMResponse], emitter: InMemoryEmitter) -> ReActAgent:
@@ -137,7 +137,7 @@ class TestQualityTrigger:
 
     async def test_reject_verdict_escalates(self) -> None:
         """REJECT verdict (not REVISE or EVALUATOR_ERROR) falls through to ESCALATE."""
-        from nanitics.core.agents.evaluation import (
+        from nanitics.strategies.agents.evaluation import (
             EvaluationContext,
             EvaluationResult,
             EvaluationVerdict,
@@ -484,7 +484,7 @@ class TestSupervisor:
 # ── Integration Test ───────────────────────────────────────
 
 
-from nanitics.core.agents.evaluation import (
+from nanitics.strategies.agents.evaluation import (
     EvaluationContext,
     EvaluationResult,
     EvaluationVerdict,

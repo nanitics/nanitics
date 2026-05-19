@@ -8,12 +8,6 @@ from nanitics.capabilities.memory.episodic import (
     InMemoryEpisodeStore,
     OutcomeType,
 )
-from nanitics.core.agents.evaluation import (
-    EvaluationContext,
-    EvaluationResult,
-    EvaluationVerdict,
-    OutputEvaluator,
-)
 from nanitics.experimental import ReflexionAgent
 from nanitics.infrastructure.observability.events import (
     AgentCompleteEvent,
@@ -24,6 +18,12 @@ from nanitics.infrastructure.observability.events import (
     ReflectionGeneratedEvent,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.evaluation import (
+    EvaluationContext,
+    EvaluationResult,
+    EvaluationVerdict,
+    OutputEvaluator,
+)
 from tests.testing_helpers import make_emitter, make_response, make_usage
 
 

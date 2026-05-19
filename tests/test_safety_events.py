@@ -9,12 +9,12 @@ from nanitics import (
     ToolCall,
     tool,
 )
-from nanitics.core.agents.codeact import CodeActAgent
-from nanitics.core.agents.react import ReActAgent
 from nanitics.infrastructure import (
     SafetyCancellationEvent,
     SafetyIterationLimitEvent,
 )
+from nanitics.strategies.agents.codeact import CodeActAgent
+from nanitics.strategies.agents.react import ReActAgent
 from tests.testing_helpers import make_emitter, make_response, make_usage
 
 

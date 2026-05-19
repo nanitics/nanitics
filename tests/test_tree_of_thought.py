@@ -6,18 +6,6 @@ from pydantic import ValidationError
 from nanitics import (
     MockLLMClient,
 )
-from nanitics.core.agents.evaluation import (
-    EvaluationContext,
-    EvaluationResult,
-    EvaluationVerdict,
-)
-from nanitics.core.agents.tree_of_thought import (
-    SearchStrategy,
-    ThoughtNode,
-    TreeOfThoughtAgent,
-    _Candidate,
-    _GenerationResponse,
-)
 from nanitics.infrastructure.observability.events import (
     TreeSearchCompleteEvent,
     TreeSearchNodeCreatedEvent,
@@ -25,6 +13,18 @@ from nanitics.infrastructure.observability.events import (
     TreeSearchNodePrunedEvent,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.evaluation import (
+    EvaluationContext,
+    EvaluationResult,
+    EvaluationVerdict,
+)
+from nanitics.strategies.agents.tree_of_thought import (
+    SearchStrategy,
+    ThoughtNode,
+    TreeOfThoughtAgent,
+    _Candidate,
+    _GenerationResponse,
+)
 from tests.testing_helpers import make_emitter, make_response
 
 

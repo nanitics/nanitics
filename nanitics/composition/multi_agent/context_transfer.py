@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
-from nanitics.core.agents.base import AgentResult
 from nanitics.infrastructure.llm.protocol import LLMClient, Message
+from nanitics.strategies.agents.base import AgentResult
 
 
 @runtime_checkable

@@ -1,6 +1,6 @@
 """ConditionalTool: state-driven tool visibility.
 
-Wraps any :class:`~nanitics.core.tools.protocol.Tool` with a predicate
+Wraps any :class:`~nanitics.strategies.tools.protocol.Tool` with a predicate
 that controls whether the tool appears in the schema list sent to the LLM.
 When the predicate returns ``False``, the tool is hidden from the agent
 and cannot be invoked.
@@ -36,7 +36,7 @@ class ConditionalTool:
     """Wraps a tool with a predicate controlling its visibility.
 
     The wrapped tool appears in
-    :meth:`~nanitics.core.tools.registry.ToolRegistry.list_schemas` only
+    :meth:`~nanitics.strategies.tools.registry.ToolRegistry.list_schemas` only
     when ``is_enabled`` returns ``True`` for the current ``tool_state``.
     Schema and execution delegate unchanged to the inner tool.
 

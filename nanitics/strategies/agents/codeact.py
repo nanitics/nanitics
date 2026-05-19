@@ -4,11 +4,6 @@ import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
-from nanitics.core.agents.context import ContextManagement, ContextProvider
-from nanitics.core.agents.errors import ErrorHandling
-from nanitics.core.agents.evaluation import EvaluationVerdict, OutputEvaluator
-from nanitics.core.prompts.builder import SystemPromptContributor
-from nanitics.core.tools import Tool, ToolRegistry
 from nanitics.infrastructure.errors import AgentIterationLimitError
 from nanitics.infrastructure.llm.protocol import LLMClient, Message, ToolCall, ToolSchema
 from nanitics.infrastructure.observability.emitter import EventEmitter
@@ -21,6 +16,11 @@ from nanitics.infrastructure.observability.events import (
 from nanitics.safety.cancellation import CancellationToken
 from nanitics.safety.iteration_limits import IterationLimiter
 from nanitics.safety.sandbox.protocol import ExecutionResult, Sandbox
+from nanitics.strategies.agents.context import ContextManagement, ContextProvider
+from nanitics.strategies.agents.errors import ErrorHandling
+from nanitics.strategies.agents.evaluation import EvaluationVerdict, OutputEvaluator
+from nanitics.strategies.prompts.builder import SystemPromptContributor
+from nanitics.strategies.tools import Tool, ToolRegistry
 
 from .base import Agent, AgentInput, AgentResult
 

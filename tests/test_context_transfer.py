@@ -5,10 +5,10 @@ from nanitics.composition.multi_agent.context_transfer import (
     SummaryTransfer,
     TrajectoryTransfer,
 )
-from nanitics.core.agents.base import AgentResult
 from nanitics.infrastructure.llm.mock import MockLLMClient
 from nanitics.infrastructure.llm.protocol import LLMResponse, Message, ToolCall
 from nanitics.infrastructure.observability.events import Usage
+from nanitics.strategies.agents.base import AgentResult
 
 
 def _make_result(

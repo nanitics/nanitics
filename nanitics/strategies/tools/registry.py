@@ -29,7 +29,7 @@ class ToolRegistry:
     """Manages a collection of tools and dispatches LLM tool calls.
 
     The registry stores tools by name, validates parameters, sets the
-    :class:`~nanitics.core.tools.context.ToolContext` for each invocation,
+    :class:`~nanitics.strategies.tools.context.ToolContext` for each invocation,
     and emits ``ToolInvokeEvent`` / ``ToolResultEvent`` for observability.
 
     Agents create a ``ToolRegistry`` internally from the ``tools`` list

@@ -9,7 +9,6 @@ from nanitics import (
     Usage,
     tool,
 )
-from nanitics.core.agents.codeact import CodeActAgent
 from nanitics.infrastructure.observability.events import (
     CodeExecutionEvent,
     CodeExecutionResultEvent,
@@ -18,6 +17,7 @@ from nanitics.infrastructure.observability.events import (
 )
 from nanitics.safety.sandbox.docker import DockerSandbox
 from nanitics.safety.sandbox.protocol import SandboxConfig
+from nanitics.strategies.agents.codeact import CodeActAgent
 from tests.testing_helpers import make_emitter, make_usage
 
 

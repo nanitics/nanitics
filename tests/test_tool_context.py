@@ -4,11 +4,11 @@ from uuid import uuid4
 
 import pytest
 
-from nanitics.core.tools import ToolContext, ToolRegistry, tool
-from nanitics.core.tools.context import _current_tool_context
 from nanitics.infrastructure.errors import ToolExecutionError
 from nanitics.infrastructure.llm.protocol import ToolCall
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter
+from nanitics.strategies.tools import ToolContext, ToolRegistry, tool
+from nanitics.strategies.tools.context import _current_tool_context
 
 
 def _make_tool_call(name: str = "test_tool", **arguments: object) -> ToolCall:

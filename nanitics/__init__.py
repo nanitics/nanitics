@@ -177,25 +177,6 @@ from nanitics.composition import (
     WorkflowCancelledError,
     WorkflowStep,
 )
-from nanitics.core import (
-    Agent,
-    AgentInput,
-    AgentResult,
-    BoundAgent,
-    CodeActAgent,
-    ContextManagement,
-    ErrorHandling,
-    FunctionTool,
-    ReActAgent,
-    ReasoningAgent,
-    SystemPromptBuilder,
-    SystemPromptContributor,
-    Tool,
-    ToolContext,
-    ToolRegistry,
-    ToolResult,
-    tool,
-)
 from nanitics.infrastructure import (
     LEVEL_ORDER,
     AgentBudgetExceededError,
@@ -297,6 +278,25 @@ from nanitics.safety import (
     Sandbox,
     SandboxConfig,
     ToolCallLimiter,
+)
+from nanitics.strategies import (
+    Agent,
+    AgentInput,
+    AgentResult,
+    BoundAgent,
+    CodeActAgent,
+    ContextManagement,
+    ErrorHandling,
+    FunctionTool,
+    ReActAgent,
+    ReasoningAgent,
+    SystemPromptBuilder,
+    SystemPromptContributor,
+    Tool,
+    ToolContext,
+    ToolRegistry,
+    ToolResult,
+    tool,
 )
 from nanitics.tools import (
     CodeExecutionResult,

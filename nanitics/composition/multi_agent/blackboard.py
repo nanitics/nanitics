@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict
 
 from nanitics.capabilities.memory.shared import SharedMemory
 from nanitics.capabilities.memory.shared_tools import create_shared_memory_tools
-from nanitics.core.agents.base import Agent
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
     BlackboardCompleteEvent,
@@ -21,6 +20,7 @@ from nanitics.infrastructure.observability.events import (
     SharedMemoryWriteEvent,
     TraceEvent,
 )
+from nanitics.strategies.agents.base import Agent
 
 
 @dataclass

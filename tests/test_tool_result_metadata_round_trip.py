@@ -53,14 +53,14 @@ from nanitics.composition.durability.resume import (
 from nanitics.composition.durability.store import InMemoryCheckpointStore
 from nanitics.composition.orchestration.adapters import AgentStep
 from nanitics.composition.orchestration.sequential import Sequential
-from nanitics.core.agents.codeact import CodeActAgent
-from nanitics.core.agents.evaluation import (
+from nanitics.infrastructure.llm.anthropic import _to_anthropic_messages
+from nanitics.strategies.agents.codeact import CodeActAgent
+from nanitics.strategies.agents.evaluation import (
     EvaluationContext,
     EvaluationResult,
     EvaluationVerdict,
 )
-from nanitics.core.agents.lats import ActionNode, LATSAgent
-from nanitics.infrastructure.llm.anthropic import _to_anthropic_messages
+from nanitics.strategies.agents.lats import ActionNode, LATSAgent
 from tests.testing_helpers import make_emitter, make_response
 
 # ── Fixture tools ────────────────────────────────────────────

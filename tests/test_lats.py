@@ -8,12 +8,6 @@ from nanitics import (
     tool,
 )
 from nanitics.capabilities.memory.episodic import InMemoryEpisodeStore
-from nanitics.core.agents.evaluation import (
-    EvaluationContext,
-    EvaluationResult,
-    EvaluationVerdict,
-)
-from nanitics.core.agents.lats import ActionNode, LATSAgent
 from nanitics.infrastructure.observability.events import (
     LLMRequestEvent,
     LLMResponseEvent,
@@ -24,6 +18,12 @@ from nanitics.infrastructure.observability.events import (
     TreeSearchNodePrunedEvent,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.evaluation import (
+    EvaluationContext,
+    EvaluationResult,
+    EvaluationVerdict,
+)
+from nanitics.strategies.agents.lats import ActionNode, LATSAgent
 from tests.testing_helpers import make_emitter, make_response
 
 # ──────────────────────────────────────────────────────────

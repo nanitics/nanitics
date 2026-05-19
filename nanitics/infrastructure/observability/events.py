@@ -186,7 +186,7 @@ class ToolInvokeEvent(BaseEvent):
     runs — e.g.
     :class:`~nanitics.collaboration.approval_wrapped.ApprovalWrappedTool`
     on the reject path — cause this event to be suppressed; see
-    :attr:`~nanitics.core.tools.protocol.ToolResult.executed`.
+    :attr:`~nanitics.strategies.tools.protocol.ToolResult.executed`.
     """
 
     event_type: Literal["tool.invoke"] = "tool.invoke"
@@ -203,7 +203,7 @@ class ToolResultEvent(BaseEvent):
     rejected pre-execute. Never emitted when a wrapper short-circuits
     execution; in that case neither this event nor its paired
     :class:`ToolInvokeEvent` is emitted. See
-    :attr:`~nanitics.core.tools.protocol.ToolResult.executed`.
+    :attr:`~nanitics.strategies.tools.protocol.ToolResult.executed`.
     """
 
     event_type: Literal["tool.result"] = "tool.result"

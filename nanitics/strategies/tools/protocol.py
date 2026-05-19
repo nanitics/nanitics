@@ -20,7 +20,7 @@ class ToolResult(BaseModel):
     model.
 
     The ``executed`` flag is a wrapper-signalling mechanism consumed by
-    :class:`~nanitics.core.tools.registry.ToolRegistry`:
+    :class:`~nanitics.strategies.tools.registry.ToolRegistry`:
 
     - It defaults to ``True`` so existing tools are unaffected — every
       tool that actually runs its work returns ``executed=True`` by

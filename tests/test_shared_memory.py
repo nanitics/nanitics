@@ -13,8 +13,6 @@ from nanitics.capabilities.memory.shared import (
     SharedMemoryProvider,
 )
 from nanitics.capabilities.memory.shared_tools import create_shared_memory_tools
-from nanitics.core.tools.function_tool import FunctionTool
-from nanitics.core.tools.registry import ToolRegistry
 from nanitics.infrastructure.llm.protocol import ToolCall
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter
 from nanitics.infrastructure.observability.events import (
@@ -23,6 +21,8 @@ from nanitics.infrastructure.observability.events import (
     SharedMemorySupersededEvent,
     SharedMemoryWriteEvent,
 )
+from nanitics.strategies.tools.function_tool import FunctionTool
+from nanitics.strategies.tools.registry import ToolRegistry
 from tests.testing_helpers import make_emitter
 
 

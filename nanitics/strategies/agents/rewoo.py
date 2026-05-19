@@ -7,10 +7,6 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel, ConfigDict
 
-from nanitics.core.agents.context import ContextManagement, ContextProvider
-from nanitics.core.agents.evaluation import EvaluationVerdict, OutputEvaluator
-from nanitics.core.prompts.builder import SystemPromptContributor
-from nanitics.core.tools import Tool, ToolRegistry
 from nanitics.infrastructure.llm.protocol import LLMClient, Message
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
@@ -21,6 +17,10 @@ from nanitics.infrastructure.observability.events import (
     Usage,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.context import ContextManagement, ContextProvider
+from nanitics.strategies.agents.evaluation import EvaluationVerdict, OutputEvaluator
+from nanitics.strategies.prompts.builder import SystemPromptContributor
+from nanitics.strategies.tools import Tool, ToolRegistry
 
 from .base import Agent, AgentInput, AgentResult, _input_to_text
 
@@ -396,7 +396,7 @@ class ReWOOAgent(Agent):
                 max_revisions = self._output_evaluator.max_revisions
 
                 if self._is_truncated(response):
-                    from nanitics.core.agents.evaluation import EvaluationResult
+                    from nanitics.strategies.agents.evaluation import EvaluationResult
 
                     eval_result = EvaluationResult(
                         verdict=EvaluationVerdict.REVISE,

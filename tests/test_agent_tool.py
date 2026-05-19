@@ -11,8 +11,6 @@ from nanitics.composition.multi_agent.context_transfer import (
     SummaryTransfer,
     TrajectoryTransfer,
 )
-from nanitics.core.agents.base import AgentResult
-from nanitics.core.tools.protocol import Tool
 from nanitics.infrastructure.llm.mock import MockLLMClient
 from nanitics.infrastructure.llm.protocol import (
     ImageContentBlock,
@@ -22,6 +20,8 @@ from nanitics.infrastructure.llm.protocol import (
 )
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter
 from nanitics.infrastructure.observability.events import DelegationEvent, Usage
+from nanitics.strategies.agents.base import AgentResult
+from nanitics.strategies.tools.protocol import Tool
 
 
 def _make_emitter() -> InMemoryEmitter:
@@ -345,11 +345,11 @@ class TestAgentToolIntegration:
     """Integration test: ReActAgent caller with AgentTool delegate."""
 
     async def test_react_agent_uses_agent_tool(self):
-        from nanitics.core.agents.react import ReActAgent
         from nanitics.infrastructure.llm.protocol import ToolCall
         from nanitics.infrastructure.observability.events import (
             SpanStartEvent,
         )
+        from nanitics.strategies.agents.react import ReActAgent
 
         emitter = _make_emitter()
         all_events: list[object] = []
@@ -367,7 +367,7 @@ class TestAgentToolIntegration:
                 ),
             ]
         )
-        from nanitics.core.agents.reasoning import ReasoningAgent
+        from nanitics.strategies.agents.reasoning import ReasoningAgent
 
         delegate = ReasoningAgent(
             name="knowledge-agent",

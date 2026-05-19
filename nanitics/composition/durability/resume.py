@@ -22,7 +22,7 @@ from nanitics.composition.durability.suspension import SuspendExecution
 
 if TYPE_CHECKING:
     from nanitics.composition.orchestration.workflow import Workflow
-    from nanitics.core.agents.base import Agent
+    from nanitics.strategies.agents.base import Agent
 
 
 @dataclass(frozen=True)
@@ -126,7 +126,7 @@ class DurableRun:
         from nanitics.composition.orchestration.adapters import AgentStep
         from nanitics.composition.orchestration.sequential import Sequential
         from nanitics.composition.orchestration.workflow import Workflow
-        from nanitics.core.agents.base import Agent
+        from nanitics.strategies.agents.base import Agent
 
         self._hitl_store = hitl_store
         self._checkpoint_store = checkpoint_store

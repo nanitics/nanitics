@@ -15,10 +15,10 @@ from nanitics.capabilities.memory.episodic import (
     RecallResult,
     extract_episode,
 )
-from nanitics.core.agents.base import AgentResult
 from nanitics.infrastructure.embeddings import MockEmbeddingClient
 from nanitics.infrastructure.llm.protocol import Message, TextContentBlock, ToolCall
 from nanitics.infrastructure.observability.events import Usage
+from nanitics.strategies.agents.base import AgentResult
 
 
 def make_store(max_episodes: int | None = None) -> InMemoryEpisodeStore:

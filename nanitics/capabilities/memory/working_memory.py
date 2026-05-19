@@ -6,13 +6,13 @@ from collections.abc import Callable
 from nanitics.capabilities.memory.context_provider import (
     ContextContent,
 )
-from nanitics.core.agents.working_memory import (
-    WorkingMemory,
-    WorkingMemoryContributor,
-)
 from nanitics.infrastructure.llm.protocol import Message
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import WorkingMemoryReadEvent
+from nanitics.strategies.agents.working_memory import (
+    WorkingMemory,
+    WorkingMemoryContributor,
+)
 
 # Re-export from Core
 __all__ = [
@@ -88,7 +88,7 @@ class WorkingMemoryProvider:
             concurrent sharing.
         emitter_provider: Callback returning the current emitter.
             Resolves through the owning agent's per-task emitter when
-            wired from :class:`~nanitics.core.agents.base.Agent`.
+            wired from :class:`~nanitics.strategies.agents.base.Agent`.
             Overrides ``emitter`` when both are supplied. When an agent
             receives this provider via ``context_providers`` and no
             provider is set, the agent auto-wires

@@ -29,7 +29,6 @@ from nanitics.capabilities.memory.working_memory import (
     WorkingMemoryProvider,
 )
 from nanitics.composition.multi_agent.agent_tool import AgentTool
-from nanitics.core.agents.evaluation import EvaluationContext
 from nanitics.infrastructure.embeddings.mock import MockEmbeddingClient
 from nanitics.infrastructure.llm.mock import MockLLMClient
 from nanitics.infrastructure.llm.protocol import LLMResponse, Message, ToolCall
@@ -40,6 +39,7 @@ from nanitics.infrastructure.observability.events import (
     SharedMemoryReadEvent,
     WorkingMemoryReadEvent,
 )
+from nanitics.strategies.agents.evaluation import EvaluationContext
 from tests.testing_helpers import make_response, make_usage
 
 

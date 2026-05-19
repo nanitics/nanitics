@@ -10,8 +10,8 @@ from nanitics import (
     TextContentBlock,
     tool,
 )
-from nanitics.core.agents.base import _input_to_text
 from nanitics.infrastructure import AgentStartEvent, LLMRequestEvent
+from nanitics.strategies.agents.base import _input_to_text
 from tests.testing_helpers import make_emitter, make_response
 
 # ──────────────────────────────────────────────────────────

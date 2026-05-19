@@ -15,8 +15,6 @@ from nanitics.capabilities.planning.models import (
     StepStatus,
 )
 from nanitics.capabilities.planning.store import PlanStore
-from nanitics.core.tools.context import ToolContext
-from nanitics.core.tools.function_tool import FunctionTool, tool
 from nanitics.infrastructure.observability.events import (
     GoalStatusChangedEvent,
     PlanCreatedEvent,
@@ -24,6 +22,8 @@ from nanitics.infrastructure.observability.events import (
     PlanStepDetail,
     PlanStepUpdatedEvent,
 )
+from nanitics.strategies.tools.context import ToolContext
+from nanitics.strategies.tools.function_tool import FunctionTool, tool
 
 _STATUS_INDICATORS = {
     StepStatus.not_started: "[ ]",

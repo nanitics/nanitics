@@ -17,7 +17,7 @@ from nanitics.capabilities.memory.context_provider import (
     ContextContent,
     ContextProvider,
 )
-from nanitics.core.agents.base import _render_context_wrapper
+from nanitics.strategies.agents.base import _render_context_wrapper
 from tests.testing_helpers import make_emitter, make_response
 
 

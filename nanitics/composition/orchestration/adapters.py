@@ -5,7 +5,7 @@ from typing import Any
 
 from nanitics.composition.orchestration.protocol import StepResult
 from nanitics.composition.orchestration.workflow import Workflow
-from nanitics.core.agents.base import Agent
+from nanitics.strategies.agents.base import Agent
 
 
 class AgentStep:

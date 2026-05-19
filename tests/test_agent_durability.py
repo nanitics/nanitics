@@ -7,7 +7,7 @@ The resume path is driven exclusively through
 :class:`nanitics.composition.durability.resume.DurableRun` and
 :class:`~nanitics.composition.durability.resume.ResumeService`; tests never
 reach into agent-internal resume-wiring — that channel is the orchestrator's
-private contract with :class:`~nanitics.core.agents.base.Agent`.
+private contract with :class:`~nanitics.strategies.agents.base.Agent`.
 """
 
 from __future__ import annotations

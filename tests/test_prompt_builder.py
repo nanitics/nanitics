@@ -1,7 +1,7 @@
 """Tests for SystemPromptBuilder."""
 
-from nanitics.core.prompts import SystemPromptBuilder
 from nanitics.infrastructure.llm.protocol import SystemPromptSection
+from nanitics.strategies.prompts import SystemPromptBuilder
 
 # --- SystemPromptBuilder ---
 

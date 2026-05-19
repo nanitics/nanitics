@@ -7,7 +7,7 @@ type of ``MCPClient.list_tools``).
 
 Design highlights:
 
-* Structural conformance to :class:`~nanitics.core.tools.protocol.Tool` via
+* Structural conformance to :class:`~nanitics.strategies.tools.protocol.Tool` via
   the runtime-checkable ``Tool`` protocol — no inheritance.
 * Does NOT own the session.  When the owning ``MCPClient`` exits its
   ``async with`` block, any subsequent call to :meth:`execute` fails fast
@@ -26,7 +26,6 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any
 
-from nanitics.core.tools.protocol import ToolResult
 from nanitics.infrastructure.errors import (
     LLMProviderError,
     ToolExecutionError,
@@ -34,6 +33,7 @@ from nanitics.infrastructure.errors import (
 )
 from nanitics.infrastructure.llm.protocol import ToolSchema
 from nanitics.infrastructure.mcp._translation import call_result_to_tool_result
+from nanitics.strategies.tools.protocol import ToolResult
 
 try:
     from mcp import McpError

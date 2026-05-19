@@ -32,11 +32,11 @@ from pathlib import Path
 
 import pytest
 
-from nanitics.core.tools.protocol import Tool, ToolResult
 from nanitics.infrastructure.errors import (
     ToolExecutionError,
     ToolParameterError,
 )
+from nanitics.strategies.tools.protocol import Tool, ToolResult
 from nanitics.tools.file_read import create_file_read_tool
 
 # --- Construction ------------------------------------------------------------

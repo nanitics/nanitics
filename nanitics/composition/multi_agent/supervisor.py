@@ -6,14 +6,14 @@ from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict
 
-from nanitics.core.agents.base import Agent, AgentResult
-from nanitics.core.agents.evaluation import (
+from nanitics.infrastructure.observability.emitter import EventEmitter
+from nanitics.infrastructure.observability.events import SupervisionEvent
+from nanitics.strategies.agents.base import Agent, AgentResult
+from nanitics.strategies.agents.evaluation import (
     EvaluationContext,
     EvaluationVerdict,
     OutputEvaluator,
 )
-from nanitics.infrastructure.observability.emitter import EventEmitter
-from nanitics.infrastructure.observability.events import SupervisionEvent
 
 # ── Data Models ────────────────────────────────────────────
 

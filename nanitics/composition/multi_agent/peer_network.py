@@ -5,9 +5,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from nanitics.core.agents.base import AgentResult
-from nanitics.core.agents.react import ReActAgent
-from nanitics.core.tools.protocol import Tool, ToolResult
 from nanitics.infrastructure.errors import AgentError
 from nanitics.infrastructure.llm.protocol import LLMClient, ToolSchema
 from nanitics.infrastructure.observability.emitter import EventEmitter
@@ -17,6 +14,9 @@ from nanitics.infrastructure.observability.events import (
     PeerNetworkStartEvent,
 )
 from nanitics.safety.cancellation import CancellationToken
+from nanitics.strategies.agents.base import AgentResult
+from nanitics.strategies.agents.react import ReActAgent
+from nanitics.strategies.tools.protocol import Tool, ToolResult
 
 
 class PeerSpec(BaseModel):

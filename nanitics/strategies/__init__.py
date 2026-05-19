@@ -1,4 +1,10 @@
-from nanitics.core.agents import (
+"""Agent strategies and the foundational ``Agent`` / ``Tool`` / ``SystemPromptBuilder`` primitives.
+
+Houses the long tail of agent strategies (ReAct, ReWOO, Reflexion, LATS, Tree-of-Thought,
+CodeAct, Reasoning) alongside the base primitives every strategy depends on.
+"""
+
+from nanitics.strategies.agents import (
     ActionNode,
     Agent,
     AgentInput,
@@ -27,8 +33,8 @@ from nanitics.core.agents import (
     WorkingMemory,
     WorkingMemoryContributor,
 )
-from nanitics.core.prompts import SystemPromptBuilder, SystemPromptContributor
-from nanitics.core.tools import (
+from nanitics.strategies.prompts import SystemPromptBuilder, SystemPromptContributor
+from nanitics.strategies.tools import (
     ConditionalTool,
     FunctionTool,
     Tool,
