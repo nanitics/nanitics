@@ -160,12 +160,14 @@ python examples/providers/real_llm_quickstart.py
 
 ## Next Steps
 
+Continue the **Start here** path in the [guides index](README.md#start-here):
+
 - **[Core Concepts](core-concepts.md)** — the agent loop, message types, LLM client protocol, and system prompts
 - **[Tools](tools.md)** — defining tools, managing tool state, configuring registries
-- **[Built-in Tools](built-in-tools.md)** — the four shipped tools (web search, HTTP, file read, code execution) and when to pick them
-- **[Agent Types](agent-types.md)** — choosing the right agent type for your use case
-- **[Testing](testing.md)** — `MockLLMClient`, trace assertions, multi-agent test patterns
-- **[Streaming](streaming.md)** — shipping agent events out of the process as Server-Sent Events
-- **[Examples directory](../../examples/)** — 63 runnable examples covering every SDK component. Run any with `python examples/<name>.py` from an installed environment, or `uv run python examples/<name>.py` from a repo clone.
+- **[Memory](memory.md)** — Working memory first; when to reach for the others
+- **[Human-in-the-Loop](human-in-the-loop.md)** — approval and revision gates
+- **[Multi-Agent Foundations](multi-agent-foundations.md)** — agent-as-tool and the primitives that compose two agents
+
+Then browse the [full guides index](README.md) for orchestration, evaluation, observability, deployment, and the [Advanced Patterns](advanced-patterns.md) page for specialized reasoning strategies and coordination shapes. The [examples directory](../../examples/) has runnable scripts for every SDK component — run any with `python examples/<name>.py` from an installed environment, or `uv run python examples/<name>.py` from a repo clone.
 
 > **Runnable example:** [`examples/agents/react_agent.py`](../../examples/agents/react_agent.py) — agent creation, tool use, result inspection, and event tracing with `MockLLMClient`.
