@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Nanitics Observatory</title>
+    <!--
+      Prime the base-URL global so `npm run dev` (Vite proxy) keeps working.
+      When the SPA is served by the Python observatory router this <script>
+      element is rewritten with the live mount prefix at request time.
+    -->
+    <script id="nanitics-observatory-base">window.__NANITICS_OBSERVATORY_BASE__ = "/api/observatory";</script>
     <script>
       (function () {
         try {

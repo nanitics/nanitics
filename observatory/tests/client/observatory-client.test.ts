@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ObservatoryClient } from "../../src/client/observatory-client";
 
 // ---------------------------------------------------------------------------
@@ -171,6 +171,34 @@ describe("ObservatoryClient", () => {
 	describe("getBaseUrl", () => {
 		it("returns the base URL", () => {
 			expect(client.getBaseUrl()).toBe("/api/observatory");
+		});
+	});
+
+	describe("base URL resolution", () => {
+		const ORIGINAL = (globalThis as { window?: Window }).window?.__NANITICS_OBSERVATORY_BASE__;
+
+		beforeEach(() => {
+			window.__NANITICS_OBSERVATORY_BASE__ = undefined;
+		});
+
+		afterEach(() => {
+			window.__NANITICS_OBSERVATORY_BASE__ = ORIGINAL;
+		});
+
+		it("falls back to window.__NANITICS_OBSERVATORY_BASE__ when no argument is passed", () => {
+			window.__NANITICS_OBSERVATORY_BASE__ = "/admin/observatory";
+			const c = new ObservatoryClient();
+			expect(c.getBaseUrl()).toBe("/admin/observatory");
+		});
+
+		it("constructor argument wins over the injected global", () => {
+			window.__NANITICS_OBSERVATORY_BASE__ = "/admin/observatory";
+			const c = new ObservatoryClient("/custom");
+			expect(c.getBaseUrl()).toBe("/custom");
+		});
+
+		it("throws when neither argument nor global is available", () => {
+			expect(() => new ObservatoryClient()).toThrow(/__NANITICS_OBSERVATORY_BASE__/);
 		});
 	});
 });

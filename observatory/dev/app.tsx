@@ -9,15 +9,10 @@ import { RunListPage } from "../src/pages/run-list-page";
 import { WorkflowDetailPage } from "../src/pages/workflow-detail-page";
 import { createDefaultRegistries } from "../src/registry/default-renderers";
 
-function detectBaseUrl(): string {
-	// When served embedded from the observatory router, the page URL is the API base.
-	// e.g. http://localhost:8001/api/observatory/ → base = /api/observatory
-	// In dev mode (Vite proxy), pathname is "/" so fall back to the proxy path.
-	const path = window.location.pathname.replace(/\/+$/, "");
-	return path || "/api/observatory";
-}
-
-const client = new ObservatoryClient(detectBaseUrl());
+// In production the Python router injects window.__NANITICS_OBSERVATORY_BASE__
+// so the same bundle works at any mount prefix. The dev index.html primes the
+// global to the Vite proxy path so `npm run dev` keeps working.
+const client = new ObservatoryClient();
 const { registry, agentViewRegistry, panelRegistry } = createDefaultRegistries();
 
 // --- Hash-based routing ---

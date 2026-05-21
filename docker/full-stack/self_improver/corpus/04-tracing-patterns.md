@@ -45,7 +45,9 @@ malformed rows raise `MalformedStoredEventError`, never silently skip.
 
 ## Embedded Observatory
 
-`create_observatory_router(store, static_dir=...)` mounts a FastAPI
-router that exposes the store over HTTP and serves the React viewer
-bundle. The embedded-compose image uses it and adopter apps mount it
-behind their own auth.
+`mount_observatory(app, store, prefix="/observatory")` attaches the
+JSON API and the embedded React viewer in one call. The bundle ships
+inside the wheel, so the helper is enough on its own; adopters that
+need to attach different middleware to the API and UI surfaces drop
+down to `create_observatory_api_router` and
+`create_observatory_ui_router`.

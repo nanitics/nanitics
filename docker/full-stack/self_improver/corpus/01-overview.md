@@ -14,9 +14,9 @@ The core building blocks an adopter composes are:
 - `PersistentTraceStore` — the protocol that persists events
   individually. `PostgresTraceStore` is the production implementation;
   `InMemoryPersistentTraceStore` is for tests.
-- **Observatory** — the embedded FastAPI router (`create_observatory_router`)
-  that exposes the store's contents as an HTTP API and ships a React
-  bundle for the trace viewer.
+- **Observatory** — the `mount_observatory(app, store)` helper that
+  attaches the JSON API and the embedded React bundle. The bundle ships
+  inside the wheel; no frontend toolchain is needed at the call site.
 
 This file is a high-level map. Details — how events are serialised,
 how redaction interacts with storage, what `TracedExecutor` does

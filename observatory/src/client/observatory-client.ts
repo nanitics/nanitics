@@ -13,8 +13,37 @@ import type {
 	WorkflowDAGResponse,
 } from "../types";
 
+declare global {
+	interface Window {
+		__NANITICS_OBSERVATORY_BASE__?: string;
+	}
+}
+
+/**
+ * Resolve the API base URL the Observatory should talk to.
+ *
+ * The Python UI router injects `window.__NANITICS_OBSERVATORY_BASE__` so
+ * the same prebuilt bundle works at any mount prefix. When the global is
+ * absent (embedding the components in a custom SPA, running unit tests),
+ * fall back to the explicit constructor argument.
+ */
+function resolveBaseUrl(explicit: string | undefined): string {
+	if (explicit !== undefined) return explicit;
+	const injected = typeof window !== "undefined" ? window.__NANITICS_OBSERVATORY_BASE__ : undefined;
+	if (typeof injected === "string") return injected;
+	throw new Error(
+		"ObservatoryClient: no base URL provided and window.__NANITICS_OBSERVATORY_BASE__ is not set. " +
+			"Either pass the API base URL to the constructor or mount the Python observatory router so " +
+			"it injects the global at request time.",
+	);
+}
+
 export class ObservatoryClient {
-	constructor(private readonly baseUrl: string) {}
+	private readonly baseUrl: string;
+
+	constructor(baseUrl?: string) {
+		this.baseUrl = resolveBaseUrl(baseUrl);
+	}
 
 	getBaseUrl(): string {
 		return this.baseUrl;

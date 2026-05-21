@@ -39,13 +39,16 @@ under `docker/observatory-dev/`.
 ### Prerequisites
 
 - Docker with `docker compose` (v2).
-- The Observatory embed bundle at `observatory/dist-embed/`. It is
-  committed to the repo for convenience. If it is stale or you want to
-  pick up frontend changes, rebuild it:
+- The embedded Observatory SPA at `nanitics/observatory/ui_assets/`.
+  It is `.gitignore`d (it's a build artifact); build it once before
+  bringing the compose up:
 
   ```sh
   just observatory-build
   ```
+
+  The directory is populated by Vite into the Python package so the
+  bundle is the thing the wheel ships and the docker image installs.
 
 - No API keys needed. The app defaults to `MockLLMClient` so the
   first-run experience is key-free. If `ANTHROPIC_API_KEY` is present
@@ -95,29 +98,23 @@ just observatory-compose-down
 
 The compose app is 60 lines and you probably want to copy it. Here is
 the essential wiring — a `PersistentTraceStore`, a `TracedExecutor`
-pointed at it, and the Observatory router mounted on your FastAPI app.
+pointed at it, and `mount_observatory(...)` to attach the API + SPA in
+one line.
 
 ```python
-from pathlib import Path
-
 from fastapi import FastAPI
 from pydantic import BaseModel
 
 from nanitics.infrastructure import LLMResponse, MockLLMClient
 from nanitics.strategies import ReActAgent, tool
 from nanitics.tracing import InMemoryPersistentTraceStore, ToolCall, TracedExecutor, Usage
-from nanitics.observatory import create_observatory_router
-
-UI_DIR = Path("/srv/observatory-ui")  # where you copied observatory/dist-embed
+from nanitics.observatory import mount_observatory
 
 store = InMemoryPersistentTraceStore()
 executor = TracedExecutor(store)
 
 app = FastAPI()
-app.include_router(
-    create_observatory_router(store, static_dir=UI_DIR),
-    prefix="/api/observatory",
-)
+mount_observatory(app, store, prefix="/api/observatory")
 
 
 @tool("greet", "Greet someone by name.")
@@ -186,12 +183,29 @@ Three things to understand:
    `EventEmitter` outside `TracedExecutor` — see
    [observability.md](observability.md) for why.
 
-3. **`create_observatory_router(store, *, static_dir=...)`** is the
-   one factory you call. When `static_dir` points at a directory
-   containing a built `index.html` and `assets/`, the router serves
-   the embedded UI at its mount root. When `static_dir` is `None` the
-   API endpoints still work and the UI root returns a helpful fallback
-   page.
+3. **`mount_observatory(app, store, *, prefix="/observatory", static_dir=None)`**
+   is the one helper you call. It mounts both the JSON API and the
+   embedded SPA under the same prefix. The SPA bundle ships *inside the
+   wheel* under `nanitics/observatory/ui_assets/`, so `static_dir` defaults
+   to that path via `importlib.resources` — a fresh `pip install nanitics`
+   plus this one call gives you a working UI with no frontend toolchain.
+
+   The SPA picks up its mount prefix at request time (via
+   `window.__NANITICS_OBSERVATORY_BASE__`, which the UI router injects
+   into `index.html`), so the same bundle works at `/observatory`,
+   `/api/observatory`, `/admin/runs`, or any other prefix — no rebuild
+   needed.
+
+   Consumers that need different middleware on the data endpoints and
+   the UI (auth on the UI, bearer-token on the API) drop down to
+   `create_observatory_api_router(store)` and `create_observatory_ui_router()`
+   and wire them by hand.
+
+   **Version pin by construction.** Because the UI bundle ships inside
+   the same wheel that ships the router, the UI in 0.4.0 always speaks
+   the 0.4.0 API. Skewed UI ↔ API versions are not a class of bug that
+   can happen unless a consumer deliberately opts in via the npm
+   package below.
 
 ### SSE streaming
 
@@ -207,20 +221,36 @@ SSE patterns the Observatory builds on.
 
 ### Custom event renderers in Python?
 
-Mostly a frontend concern — see [Wiring the frontend
-ObservatoryProvider](#wiring-the-frontend-observatoryprovider) below.
-The Python side is the raw event pipeline; every rendering decision
-happens in the React UI.
+Mostly a frontend concern — see [When to reach for
+`@nanitics/observatory` (the escape hatch)](#when-to-reach-for-naniticsobservatory-the-escape-hatch)
+below. The Python side is the raw event pipeline; every rendering
+decision happens in the React UI.
 
-## Wiring the frontend ObservatoryProvider
+## When to reach for `@nanitics/observatory` (the escape hatch)
 
-The compose path above uses the **embedded UI** — a pre-built React
-bundle served by the Observatory router from `static_dir`. That is the
-default and it requires no frontend toolchain.
+The default path is the one above: `mount_observatory(...)` from
+Python. The wheel ships the SPA, the SPA picks up the mount prefix at
+request time, and you don't need Node anywhere in your toolchain.
 
-When you want to embed Observatory components into your own React app
-— your internal dashboard, a debugging console, an existing admin UI
-— you install the `@nanitics/observatory` package from npm.
+Two consumer profiles do need the npm package — install it
+deliberately when one of these describes you:
+
+- **Embedders** — you want specific Observatory pages
+  (`RunListPage`, `RunDetailPage`, `AgentDetailPage`) inside your own
+  React app, sharing your app's chrome, routing, and auth.
+- **Customizers** — you ship custom `agentViewRegistry` /
+  `panelRegistry` entries (custom React panels for a domain-specific
+  agent type, custom event renderers) that cannot be expressed by
+  configuring the embedded UI.
+
+If neither describes you, skip this section — `mount_observatory(...)`
+is the whole story.
+
+Picking up the npm package is also how you opt **out** of the
+[version-pin-by-construction](#mounting-the-backend-in-your-own-fastapi-app)
+the wheel-bundled SPA gives you. That's occasionally useful (run a
+newer UI against an older API while you're rolling out a migration),
+but it's a deliberate choice, not the default.
 
 ### Install
 
@@ -242,6 +272,10 @@ import {
 } from "@nanitics/observatory";
 import "@nanitics/observatory/styles.css";
 
+// Pass the API base URL explicitly when embedding the components in
+// your own SPA. When the bundle is served by the Python router instead,
+// the no-arg constructor picks the prefix up from
+// `window.__NANITICS_OBSERVATORY_BASE__`.
 const client = new ObservatoryClient("/api/observatory");
 const { registry, agentViewRegistry, panelRegistry } =
   createDefaultRegistries();
@@ -423,8 +457,12 @@ a real deployment needs ships when adopter signal shapes it.
 Naming each gap so you can plan around it.
 
 - **`ObservatoryAuthProvider` protocol.** A pluggable auth hook on
-  `create_observatory_router`. Not currently shipped; a future, signal-
-  driven addition.
+  `mount_observatory` (or on the individual API / UI routers). Not
+  currently shipped; a future, signal-driven addition. The router
+  split between `create_observatory_api_router` and
+  `create_observatory_ui_router` is the prerequisite for doing this
+  cleanly — auth shape often differs between the data endpoints and
+  the SPA — and is the seam future auth work plugs into.
 - **Production deployment guide.** The adopter-facing "stand up
   Observatory in production with Postgres, Caddy, retention, and
   scrubbing" walkthrough lives at

@@ -17,7 +17,6 @@ import asyncio
 import os
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Any
 
 import asyncpg
@@ -27,14 +26,13 @@ from llm_provider import build_llm_client
 from runners import REGISTRATIONS, ShellContext
 
 from nanitics.infrastructure import LLMClient
-from nanitics.observatory import create_observatory_router
+from nanitics.observatory import mount_observatory
 from nanitics.tracing import (
     PersistentTraceStore,
     PostgresTraceStore,
     TracedExecutor,
 )
 
-UI_DIR = Path("/srv/observatory-ui")
 _READINESS_PROBE_TIMEOUT_SECONDS = 2.0
 
 
@@ -116,10 +114,7 @@ def create_app(
         )
         app.state.shell_context = context
 
-        app.include_router(
-            create_observatory_router(store, static_dir=UI_DIR),
-            prefix="/api/observatory",
-        )
+        mount_observatory(app, store, prefix="/api/observatory")
 
         # Snapshot before registration so we only run newly-added handlers.
         _pre_register_startup = {id(h) for h in app.router.on_startup}

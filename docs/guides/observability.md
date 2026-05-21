@@ -338,7 +338,7 @@ The observatory layer provides both a backend API and a frontend component libra
 
 ### API Router
 
-`create_observatory_router()` creates a FastAPI `APIRouter` backed by a `PersistentTraceStore`. It exposes endpoints organized around five resource types:
+`mount_observatory(app, store, prefix="/observatory")` attaches both the JSON API and the embedded SPA to your FastAPI app in one line. Under the hood the API surface is `create_observatory_api_router(store)`, organized around five resource types:
 
 - **Runs** — list, create, update status, get detail with summary statistics
 - **Trace hierarchy** — span tree for tree visualization, events within a specific span
@@ -347,9 +347,9 @@ The observatory layer provides both a backend API and a frontend component libra
 - **Events** — flat event list with level/type filtering and cursor pagination
 - **SSE streaming** — real-time event delivery with level filtering and reconnection support
 
-Include the router in your FastAPI application with a prefix (e.g., `/api/observatory`).
+Consumers that want different middleware on the API and UI surfaces — bearer-token auth on the data endpoints, session auth on the SPA — drop down to `create_observatory_api_router` and `create_observatory_ui_router` and wire them individually.
 
-> **See also:** `create_observatory_router` docstring and route definitions in `nanitics/observatory/` for the full endpoint surface.
+> **See also:** docstrings on `mount_observatory`, `create_observatory_api_router`, and `create_observatory_ui_router` in `nanitics/observatory/` for the full endpoint surface.
 
 ### Frontend Components
 

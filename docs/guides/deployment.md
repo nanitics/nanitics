@@ -12,7 +12,7 @@ This guide covers exactly one realistic deployment: the full-stack compose under
 
 The guide deliberately does **not** cover:
 
-- A framework matrix (FastAPI vs Django vs Flask). The SDK is framework-agnostic; the compose uses FastAPI because that is the minimal glue to mount `create_observatory_router` and host runner endpoints. The wiring pattern transfers.
+- A framework matrix (FastAPI vs Django vs Flask). The SDK is framework-agnostic; the compose uses FastAPI because that is the minimal glue to call `mount_observatory(...)` and host runner endpoints. The wiring pattern transfers.
 - A serverless chapter. Long-running agent loops, durable HITL, and streaming traces have awkward shapes on request-per-function runtimes; the SDK does not currently ship a serverless adapter.
 - Reference Kubernetes manifests or Terraform. Adopter environments differ on image registry, secret source, Postgres provisioning, and reverse-proxy choice — a single reference manifest would be wrong for most readers. The "Take this to your own infrastructure" section below names the decisions in prose.
 
@@ -20,7 +20,13 @@ The guide deliberately does **not** cover:
 
 - Docker with `docker compose` v2.
 - One LLM API key — `ANTHROPIC_API_KEY` (default, recommended) or `OPENAI_API_KEY`.
-- The Observatory embed bundle at `observatory/dist-embed/`. It is committed to the repo for convenience; rebuild it with `just observatory-build` if it is missing or you want to pick up frontend changes.
+- The embedded Observatory SPA at `nanitics/observatory/ui_assets/`. The directory is `.gitignore`d; build it once before bringing the stack up:
+
+  ```sh
+  just observatory-build
+  ```
+
+  The bundle ships inside the Python wheel, so the compose's docker image installs it as part of the SDK install — no separate copy in the Dockerfile.
 
 Both `just` recipes named in this guide — `just full-stack-compose` and `just full-stack-compose-down` — are defined in the repo's [`justfile`](../../justfile).
 
@@ -35,7 +41,10 @@ git clone https://github.com/nanitics/nanitics
 cd nanitics
 ```
 
-Build the Observatory embed bundle. This only needs to run once per clone, or after a pull that includes frontend changes — the repo ships a pre-built bundle so the step is a no-op on an up-to-date tree:
+Build the embedded Observatory SPA. The bundle lives under
+`nanitics/observatory/ui_assets/` (gitignored — it's a build artifact)
+and ships inside the wheel; build it once per clone, plus after any pull
+that touches frontend code:
 
 ```sh
 just observatory-build
@@ -104,7 +113,7 @@ The `app` container exposes three kinds of endpoints in one process:
 - **Observatory surface** — `GET /api/observatory/` (UI root) and `GET /api/observatory/runs/...` (JSON API) and `GET /api/observatory/runs/{id}/stream` (SSE live-update).
 - **Runner surface** — every route a `RunnerRegistration` installs under `/runners/<slug>/*`. The four showcase runners (`sql-analyst`, `auction-routing`, `judge-routing`, `self-improver`) each own their slug and their routes.
 
-The Observatory is **not** a separate service — the router and the pre-built React bundle live inside `app`, matching the integration pattern adopters use in their own FastAPI applications (see [Observatory Integration](observatory-integration.md) for the in-process wiring). The compose's `app.py` is short on purpose: it reads the Postgres DSN, builds the `PostgresTraceStore` in `lifespan` setup, constructs a `TracedExecutor`, mounts `create_observatory_router` at `/api/observatory/`, and delegates every runner's endpoint installation to its `RunnerRegistration.register(app, ctx)` callable. Adopters replicating the pattern do the same five things in their own FastAPI shells.
+The Observatory is **not** a separate service — the router and the pre-built React bundle live inside `app`, matching the integration pattern adopters use in their own FastAPI applications (see [Observatory Integration](observatory-integration.md) for the in-process wiring). The compose's `app.py` is short on purpose: it reads the Postgres DSN, builds the `PostgresTraceStore` in `lifespan` setup, constructs a `TracedExecutor`, calls `mount_observatory(app, store, prefix="/api/observatory")`, and delegates every runner's endpoint installation to its `RunnerRegistration.register(app, ctx)` callable. Adopters replicating the pattern do the same five things in their own FastAPI shells.
 
 For the authoritative stack reference — every env var documented, the full service table, the runner index — see [`docker/full-stack/README.md`](../../docker/full-stack/README.md). This guide does not duplicate it.
 
@@ -141,7 +150,7 @@ The compose's role grants, the sandbox user's `statement_timeout = '2s'` pin, th
 
 ## Reverse-proxy auth
 
-The compose exposes `app` on port 8000 with no authentication in front of it. The Observatory has no built-in auth hook on `create_observatory_router` — that seam is deliberate, and filling it is adopter-owned.
+The compose exposes `app` on port 8000 with no authentication in front of it. The Observatory has no built-in auth hook on `mount_observatory` — that seam is deliberate, and filling it is adopter-owned. The `create_observatory_api_router` / `create_observatory_ui_router` split is the seam consumers attach middleware to today (e.g., bearer-token auth on the API, session auth on the UI).
 
 Any deployment that reaches more than one trusted developer terminates auth at a reverse proxy — nginx, Caddy, a cloud load balancer — that sits in front of the compose. The proxy protects the mount path (`/api/observatory`) and the UI path (`/api/observatory/`) together. Two proxy-side settings are load-bearing:
 

@@ -2,6 +2,14 @@
 
 React components for embedding the [Nanitics](https://github.com/nanitics/nanitics) Observatory — run list, run detail, event timeline — inside downstream apps.
 
+> **Most consumers do not need this package.** The Nanitics Python wheel
+> ships a prebuilt SPA. `mount_observatory(app, store, prefix="/observatory")`
+> in your FastAPI app gives you a working UI with no frontend toolchain.
+> Reach for the npm package only when you want to **embed** specific
+> pages inside your own React app, or **customize** the rendering
+> registries beyond what configuration covers. See the
+> [integration guide](https://github.com/nanitics/nanitics/blob/main/docs/guides/observatory-integration.md#when-to-reach-for-naniticsobservatory-the-escape-hatch).
+
 ## Install
 
 ```bash
@@ -47,7 +55,10 @@ The styles import is required. It ships precompiled Tailwind utilities and the t
 
 ## Server side
 
-The Observatory components talk to the Python SDK's `create_observatory_router(store)` endpoint over HTTP. See the [integration guide](https://github.com/nanitics/nanitics/blob/main/docs/guides/observatory-integration.md) for the full setup.
+The Observatory components talk to the Python SDK's
+`create_observatory_api_router(store)` endpoint over HTTP. See the
+[integration guide](https://github.com/nanitics/nanitics/blob/main/docs/guides/observatory-integration.md)
+for the full setup.
 
 ## Versioning
 

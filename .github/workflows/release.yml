@@ -28,6 +28,22 @@ jobs:
       - name: Install Python 3.13
         run: uv python install 3.13
 
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: observatory/package-lock.json
+
+      - name: Build embedded Observatory SPA
+        # Populates nanitics/observatory/ui_assets/ so the wheel ships
+        # the UI bundle. The directory is .gitignored; hatchling pulls
+        # it in via `artifacts` in pyproject.toml.
+        working-directory: observatory
+        run: |
+          npm ci
+          npx vite build --config vite.embed.config.ts
+
       - name: Build wheel and sdist
         run: uv build
 
