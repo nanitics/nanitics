@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`@nanitics/observatory` publishes via npm OIDC Trusted Publishing.** The publish workflow now authenticates to npm using OpenID Connect tokens issued by GitHub Actions instead of a long-lived `NPM_TOKEN` secret. No tokens are stored in the repo; the npm package settings name `nanitics/nanitics` + `publish-observatory.yml` as the only trusted publisher for `@nanitics/observatory`, and the package access policy is set to "require 2FA and disallow tokens" so even a compromised bypass-2FA token cannot publish. Bumps the workflow's Node version to 22 and upgrades npm to a release that supports trusted publishing (≥11.5.1).
+
 - **`@nanitics/observatory` published to npm.** The React components for embedding the Observatory (run list, run detail, event timeline, registries, hooks) now ship as a public scoped package on the npm registry. Downstream apps can `npm install @nanitics/observatory` instead of consuming the package as a filesystem dependency. The package ships a precompiled ESM bundle, TypeScript declarations, and a precompiled stylesheet at `@nanitics/observatory/styles.css`. Peer deps: `react@^19.2.6`, `react-dom@^19.2.6`. Publishing is automated by `.github/workflows/publish-observatory.yml` (triggered by `observatory-v*` tags) with npm provenance signing.
 
 ### Changed

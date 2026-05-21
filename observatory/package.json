@@ -1,6 +1,6 @@
 {
   "name": "@nanitics/observatory",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "React components for embedding the Nanitics Observatory (run list, run detail, event timeline) in downstream apps.",
   "license": "Apache-2.0",
   "author": "Solid Software B.V.",
