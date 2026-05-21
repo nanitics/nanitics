@@ -9,9 +9,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Observatory is drop-in: the prebuilt SPA ships inside the Python
+  wheel.** `mount_observatory(app, store, prefix="/observatory")` now
+  attaches the JSON API and the embedded UI in one line, with no
+  `static_dir` argument and no frontend toolchain at the call site. The
+  Vite-built SPA lives under `nanitics/observatory/ui_assets/`
+  (`.gitignore`d; populated by `just observatory-build`) and is
+  force-included into the wheel via `[tool.hatch.build.targets.wheel]
+  artifacts`. The release workflow builds the bundle before `uv build`
+  so every published wheel carries it.
+
+- **Observatory router split into API and UI surfaces.**
+  `create_observatory_api_router(store)` returns the JSON data endpoints
+  (runs, span tree, agents, workflows, events, SSE stream).
+  `create_observatory_ui_router(*, static_dir=None)` returns the SPA
+  catch-all (`/` + `/assets/{path}`). `mount_observatory` is the
+  convenience helper that mounts both under one prefix. The split is
+  the seam consumers attach different middleware to (session auth on
+  the UI, bearer-token on the API) without forking the router.
+
+- **SPA picks up its mount prefix at request time.** The UI router
+  rewrites a `<script id="nanitics-observatory-base">` tag in
+  `index.html` to set `window.__NANITICS_OBSERVATORY_BASE__` to the
+  live mount prefix (JSON-encoded, so a hostile prefix cannot break out
+  of the literal). The same prebuilt bundle works at `/observatory`,
+  `/api/observatory`, `/admin/runs`, or any other path — no rebuild
+  needed. `ObservatoryClient` defaults to that global when constructed
+  with no argument, so the embedded SPA needs no explicit base URL.
+
+- **Version pin between UI and API by construction.** Because the SPA
+  ships *inside the same wheel that ships the router*, the UI in
+  `0.X.0` always speaks the `0.X.0` API. The `@nanitics/observatory`
+  npm package is now reframed as the deliberate escape hatch for
+  embedders (custom React app shells) and customizers (custom
+  `agentViewRegistry` / `panelRegistry` entries) — including the case
+  where a consumer explicitly wants to run a newer UI against an older
+  API while rolling out a migration.
+
 - **`@nanitics/observatory` publishes via npm OIDC Trusted Publishing.** The publish workflow now authenticates to npm using OpenID Connect tokens issued by GitHub Actions instead of a long-lived `NPM_TOKEN` secret. No tokens are stored in the repo; the npm package settings name `nanitics/nanitics` + `publish-observatory.yml` as the only trusted publisher for `@nanitics/observatory`, and the package access policy is set to "require 2FA and disallow tokens" so even a compromised bypass-2FA token cannot publish. Bumps the workflow's Node version to 22 and upgrades npm to a release that supports trusted publishing (≥11.5.1).
 
 - **`@nanitics/observatory` published to npm.** The React components for embedding the Observatory (run list, run detail, event timeline, registries, hooks) now ship as a public scoped package on the npm registry. Downstream apps can `npm install @nanitics/observatory` instead of consuming the package as a filesystem dependency. The package ships a precompiled ESM bundle, TypeScript declarations, and a precompiled stylesheet at `@nanitics/observatory/styles.css`. Peer deps: `react@^19.2.6`, `react-dom@^19.2.6`. Publishing is automated by `.github/workflows/publish-observatory.yml` (triggered by `observatory-v*` tags) with npm provenance signing.
+
+### Removed
+
+- **`nanitics.observatory.create_observatory_router`.** Removed in
+  favor of the API/UI split above. Adopters migrate as follows:
+  `app.include_router(create_observatory_router(store, static_dir=DIR), prefix="/observatory")`
+  → `mount_observatory(app, store, prefix="/observatory")` (no
+  `static_dir` needed; the wheel ships the bundle). Per the
+  no-backwards-compatibility rule, no shim is provided.
+
+- **Committed `observatory/dist-embed/` bundle.** The pre-built SPA is
+  no longer checked into the repo; it's a build artifact at
+  `nanitics/observatory/ui_assets/` (`.gitignore`d) produced by
+  `just observatory-build`. The `dist-embed/` path is gone everywhere
+  — `Dockerfile`s no longer copy it, `static_dir=UI_DIR` wiring is no
+  longer needed in adopter apps, and the docker compose images now
+  pick the bundle up automatically via the SDK install.
 
 ### Changed
 

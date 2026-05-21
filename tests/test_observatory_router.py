@@ -1,7 +1,8 @@
-"""Integration tests for the observatory FastAPI router."""
+"""Integration tests for the observatory FastAPI router factories."""
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -13,7 +14,16 @@ from nanitics.infrastructure.observability.storage import (
     InMemoryPersistentTraceStore,
     TraceEventRecord,
 )
-from nanitics.observatory.router import create_observatory_router
+from nanitics.observatory import (
+    create_observatory_api_router,
+    create_observatory_ui_router,
+    mount_observatory,
+)
+from nanitics.observatory._ui import (
+    compute_base_url,
+    default_ui_dir,
+    render_index_html,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -130,15 +140,12 @@ def store() -> InMemoryPersistentTraceStore:
 
 @pytest.fixture
 def client(store: InMemoryPersistentTraceStore) -> AsyncClient:
+    """API-only mount under ``/api/observatory`` — exercises the JSON endpoints."""
     from fastapi import FastAPI
 
     app = FastAPI()
-    router = create_observatory_router(store)
-    app.include_router(router, prefix="/api/observatory")
-    return AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test",
-    )
+    app.include_router(create_observatory_api_router(store), prefix="/api/observatory")
+    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
 # ---------------------------------------------------------------------------
@@ -523,96 +530,262 @@ class TestSummary:
 
 
 # ---------------------------------------------------------------------------
-# Tests: Embedded UI
+# Tests: UI router and bundle injection
 # ---------------------------------------------------------------------------
 
 
-class TestEmbeddedUI:
-    async def test_root_serves_fallback_when_no_static_dir(self, client: AsyncClient) -> None:
-        resp = await client.get("/api/observatory/")
-        assert resp.status_code == 200
-        assert "text/html" in resp.headers["content-type"]
-        assert "observatory-build" in resp.text
+def _build_minimal_bundle(target: Path) -> None:
+    """Create the minimal index.html + assets/ a UI-router test needs."""
+    (target / "assets").mkdir()
+    (target / "index.html").write_text(
+        "<!doctype html>"
+        "<html><head>"
+        '<script id="nanitics-observatory-base">window.__NANITICS_OBSERVATORY_BASE__ = "/api/observatory";</script>'
+        '</head><body><div id="root"></div></body></html>'
+    )
 
-    async def test_root_serves_index_when_built(self, store: InMemoryPersistentTraceStore, tmp_path: Path) -> None:
-        (tmp_path / "index.html").write_text("<html>observatory</html>")
 
+class TestUiRouter:
+    async def test_root_serves_fallback_when_no_bundle(self, tmp_path: Path) -> None:
+        # An empty directory has no index.html, so the fallback fires.
         from fastapi import FastAPI
 
         app = FastAPI()
-        router = create_observatory_router(store, static_dir=tmp_path)
-        app.include_router(router, prefix="/api/observatory")
+        app.include_router(create_observatory_ui_router(static_dir=tmp_path), prefix="/observatory")
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            resp = await c.get("/api/observatory/")
+            resp = await c.get("/observatory/")
             assert resp.status_code == 200
-            assert "observatory" in resp.text
+            assert "observatory-build" in resp.text
 
-    async def test_assets_not_found(self, client: AsyncClient) -> None:
-        resp = await client.get("/api/observatory/assets/nonexistent.js")
-        assert resp.status_code == 404
-
-    async def test_assets_not_found_with_static_dir(self, store: InMemoryPersistentTraceStore, tmp_path: Path) -> None:
-        (tmp_path / "assets").mkdir()
-        (tmp_path / "index.html").write_text("<html></html>")
-
+    async def test_root_injects_default_prefix(self, tmp_path: Path) -> None:
+        _build_minimal_bundle(tmp_path)
         from fastapi import FastAPI
 
         app = FastAPI()
-        router = create_observatory_router(store, static_dir=tmp_path)
-        app.include_router(router, prefix="/api/observatory")
+        app.include_router(create_observatory_ui_router(static_dir=tmp_path), prefix="/observatory")
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            resp = await c.get("/api/observatory/assets/missing.js")
+            resp = await c.get("/observatory/")
+            assert resp.status_code == 200
+            assert 'window.__NANITICS_OBSERVATORY_BASE__="/observatory"' in resp.text
+            # The original "/api/observatory" seed must be gone — otherwise
+            # the dev marker would override the live prefix in the browser.
+            assert "/api/observatory" not in resp.text
+
+    async def test_root_injects_custom_prefix(self, tmp_path: Path) -> None:
+        _build_minimal_bundle(tmp_path)
+        from fastapi import FastAPI
+
+        app = FastAPI()
+        app.include_router(create_observatory_ui_router(static_dir=tmp_path), prefix="/admin/runs")
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/admin/runs/")
+            assert resp.status_code == 200
+            assert 'window.__NANITICS_OBSERVATORY_BASE__="/admin/runs"' in resp.text
+
+    async def test_assets_not_found_with_bundle(self, tmp_path: Path) -> None:
+        _build_minimal_bundle(tmp_path)
+        from fastapi import FastAPI
+
+        app = FastAPI()
+        app.include_router(create_observatory_ui_router(static_dir=tmp_path), prefix="/observatory")
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/observatory/assets/missing.js")
             assert resp.status_code == 404
 
-    async def test_assets_served_with_cache_headers(self, store: InMemoryPersistentTraceStore, tmp_path: Path) -> None:
-        assets_dir = tmp_path / "assets"
-        assets_dir.mkdir()
-        (assets_dir / "app.js").write_bytes(b"console.log('hello');")
-        (tmp_path / "index.html").write_text("<html></html>")
-
+    async def test_assets_404_when_no_bundle(self, tmp_path: Path) -> None:
+        # Empty dir → no index, no assets; asset hits 404.
         from fastapi import FastAPI
 
         app = FastAPI()
-        router = create_observatory_router(store, static_dir=tmp_path)
-        app.include_router(router, prefix="/api/observatory")
+        app.include_router(create_observatory_ui_router(static_dir=tmp_path), prefix="/observatory")
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            resp = await c.get("/api/observatory/assets/app.js")
+            resp = await c.get("/observatory/assets/anything.js")
+            assert resp.status_code == 404
+
+    async def test_assets_served_with_cache_headers(self, tmp_path: Path) -> None:
+        _build_minimal_bundle(tmp_path)
+        (tmp_path / "assets" / "app.js").write_bytes(b"console.log('hello');")
+        from fastapi import FastAPI
+
+        app = FastAPI()
+        app.include_router(create_observatory_ui_router(static_dir=tmp_path), prefix="/observatory")
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/observatory/assets/app.js")
             assert resp.status_code == 200
             assert resp.headers["content-type"] == "application/javascript"
             assert "immutable" in resp.headers["cache-control"]
             assert resp.content == b"console.log('hello');"
 
-    async def test_assets_without_cache_headers(self, store: InMemoryPersistentTraceStore, tmp_path: Path) -> None:
-        assets_dir = tmp_path / "assets"
-        assets_dir.mkdir()
-        (assets_dir / "logo.png").write_bytes(b"\x89PNG")
-        (tmp_path / "index.html").write_text("<html></html>")
-
+    async def test_assets_without_cache_headers(self, tmp_path: Path) -> None:
+        _build_minimal_bundle(tmp_path)
+        (tmp_path / "assets" / "logo.png").write_bytes(b"\x89PNG")
         from fastapi import FastAPI
 
         app = FastAPI()
-        router = create_observatory_router(store, static_dir=tmp_path)
-        app.include_router(router, prefix="/api/observatory")
+        app.include_router(create_observatory_ui_router(static_dir=tmp_path), prefix="/observatory")
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            resp = await c.get("/api/observatory/assets/logo.png")
+            resp = await c.get("/observatory/assets/logo.png")
             assert resp.status_code == 200
             assert resp.headers["content-type"] == "image/png"
             assert "cache-control" not in resp.headers
 
-    async def test_assets_path_traversal_blocked(self, store: InMemoryPersistentTraceStore, tmp_path: Path) -> None:
-        assets_dir = tmp_path / "assets"
-        assets_dir.mkdir()
+    async def test_assets_path_traversal_blocked(self, tmp_path: Path) -> None:
+        _build_minimal_bundle(tmp_path)
         (tmp_path / "secret.txt").write_text("secret")
-        (tmp_path / "index.html").write_text("<html></html>")
+        from fastapi import FastAPI
+
+        app = FastAPI()
+        app.include_router(create_observatory_ui_router(static_dir=tmp_path), prefix="/observatory")
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/observatory/assets/../secret.txt")
+            assert resp.status_code == 404
+
+    async def test_default_static_dir_uses_bundled_assets(self, store: InMemoryPersistentTraceStore) -> None:
+        """With no explicit static_dir, the wheel-bundled UI assets serve the SPA."""
+        bundled = default_ui_dir()
+        if bundled is None:
+            pytest.skip("Embedded SPA not built; run `just observatory-build`.")
 
         from fastapi import FastAPI
 
         app = FastAPI()
-        router = create_observatory_router(store, static_dir=tmp_path)
-        app.include_router(router, prefix="/api/observatory")
+        # Use the convenience helper for an end-to-end mount.
+        mount_observatory(app, store, prefix="/observatory")
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            resp = await c.get("/api/observatory/assets/../secret.txt")
-            assert resp.status_code == 404
+            resp = await c.get("/observatory/")
+            assert resp.status_code == 200
+            assert 'window.__NANITICS_OBSERVATORY_BASE__="/observatory"' in resp.text
+
+    async def test_assets_404_when_bundle_missing_entirely(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """SDK-contributor path: no wheel bundle, no static_dir → all assets 404."""
+        from nanitics.observatory import router as router_mod
+
+        monkeypatch.setattr(router_mod, "default_ui_dir", lambda: None)
+        from fastapi import FastAPI
+
+        app = FastAPI()
+        app.include_router(create_observatory_ui_router(), prefix="/observatory")
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            ui_resp = await c.get("/observatory/")
+            assert ui_resp.status_code == 200
+            assert "observatory-build" in ui_resp.text
+            asset_resp = await c.get("/observatory/assets/anything.js")
+            assert asset_resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Tests: mount_observatory composes both routers
+# ---------------------------------------------------------------------------
+
+
+class TestMountObservatory:
+    async def test_api_endpoint_reachable(self, store: InMemoryPersistentTraceStore, tmp_path: Path) -> None:
+        _build_minimal_bundle(tmp_path)
+        from fastapi import FastAPI
+
+        app = FastAPI()
+        mount_observatory(app, store, prefix="/observatory", static_dir=tmp_path)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/observatory/runs")
+            assert resp.status_code == 200
+            assert resp.json() == {"runs": [], "total": 0}
+
+    async def test_ui_endpoint_reachable(self, store: InMemoryPersistentTraceStore, tmp_path: Path) -> None:
+        _build_minimal_bundle(tmp_path)
+        from fastapi import FastAPI
+
+        app = FastAPI()
+        mount_observatory(app, store, prefix="/observatory", static_dir=tmp_path)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/observatory/")
+            assert resp.status_code == 200
+            assert 'window.__NANITICS_OBSERVATORY_BASE__="/observatory"' in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Tests: index.html injection unit
+# ---------------------------------------------------------------------------
+
+
+class TestRenderIndexHtml:
+    def test_replaces_bootstrap_script(self) -> None:
+        bootstrap = (
+            b'<script id="nanitics-observatory-base">'
+            b'window.__NANITICS_OBSERVATORY_BASE__ = "/api/observatory";'
+            b"</script>"
+        )
+        html = b"<!doctype html><html><head>" + bootstrap + b"</head><body></body></html>"
+        out = render_index_html(html, "/admin/runs").decode()
+        assert 'window.__NANITICS_OBSERVATORY_BASE__="/admin/runs"' in out
+        assert "/api/observatory" not in out
+
+    def test_value_is_json_encoded_so_it_cannot_break_out(self) -> None:
+        # A prefix containing a quote/closing tag would break a naive embed.
+        html = (
+            b'<head><script id="nanitics-observatory-base">window.__NANITICS_OBSERVATORY_BASE__ = "/x";</script></head>'
+        )
+        hostile = '/a"</script><script>alert(1)//'
+        out = render_index_html(html, hostile).decode()
+        assert json.dumps(hostile) in out
+        assert "alert(1)" not in out.replace(json.dumps(hostile), "")
+
+    def test_missing_marker_raises(self) -> None:
+        with pytest.raises(ValueError, match="malformed"):
+            render_index_html(b"<html><head></head></html>", "/observatory")
+
+
+class TestComputeBaseUrl:
+    def test_strips_trailing_slash(self) -> None:
+        assert compute_base_url("", "/observatory/") == "/observatory"
+
+    def test_combines_root_path(self) -> None:
+        # ``root_path`` is what a reverse proxy mounts the app under.
+        assert compute_base_url("/api", "/observatory/") == "/api/observatory"
+
+    def test_app_root_mount(self) -> None:
+        # UI served at "/" (rare) — base is empty, the SPA falls back to relative URLs.
+        assert compute_base_url("", "/") == ""
+
+
+class TestDefaultUiDir:
+    def test_returns_path_when_bundle_present(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """When `ui_assets/index.html` is present, the bundle path is returned."""
+        from nanitics.observatory import _ui
+
+        bundle = tmp_path / _ui._BUNDLED_DIR_NAME
+        bundle.mkdir()
+        (bundle / "index.html").write_text("<html></html>")
+
+        def fake_files(package: str) -> Path:
+            assert package == "nanitics.observatory"
+            return tmp_path
+
+        monkeypatch.setattr(_ui.resources, "files", fake_files)
+        result = _ui.default_ui_dir()
+        assert result is not None
+        assert (result / "index.html").is_file()
+
+    def test_returns_none_when_bundle_missing(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """SDK-contributor path: simulate a fresh checkout with no built bundle."""
+        from nanitics.observatory import _ui
+
+        def fake_files(package: str) -> Path:
+            assert package == "nanitics.observatory"
+            return tmp_path  # tmp_path has no `ui_assets` child
+
+        monkeypatch.setattr(_ui.resources, "files", fake_files)
+        assert _ui.default_ui_dir() is None
 
 
 # ---------------------------------------------------------------------------

@@ -1,17 +1,25 @@
-"""FastAPI observatory router factory.
+"""FastAPI router factories for the Observatory.
 
-Creates an :class:`~fastapi.APIRouter` with all observatory endpoints
-backed by a :class:`PersistentTraceStore`.  Applications mount the router
-at whatever prefix makes sense for their domain::
+The Observatory ships two routers:
 
-    from nanitics.observatory import create_observatory_router
+* :func:`create_observatory_api_router` returns the JSON data endpoints
+  (runs, span tree, agents, workflows, events, SSE stream). Consumers who
+  serve their own UI mount this one directly.
+* :func:`create_observatory_ui_router` returns the static SPA — the index
+  page and ``/assets/{path}`` catch-all. The bundle ships inside the
+  wheel under ``nanitics/observatory/ui_assets/``; ``static_dir`` defaults
+  to that path so a wheel install needs no extra wiring.
 
-    router = create_observatory_router(store)
-    app.include_router(router, prefix="/api/observatory")
+Most adopters call :func:`mount_observatory`, which mounts both routers
+under one prefix in one line::
 
-When ``static_dir`` points to built observatory assets, visiting the
-router's root (``/api/observatory/``) serves the observatory UI.
-Build with ``just observatory-build``.
+    from nanitics.observatory import mount_observatory
+
+    mount_observatory(app, store, prefix="/observatory")
+
+The split exists so consumers can attach different middleware (auth,
+caching) to each surface, or serve one without the other. See
+``docs/guides/observatory-integration.md`` for the full story.
 """
 
 from __future__ import annotations
@@ -27,33 +35,46 @@ from typing import TYPE_CHECKING, cast, get_args
 from starlette.requests import Request
 
 from nanitics.infrastructure.observability.levels import TraceLevel
+from nanitics.observatory._ui import (
+    compute_base_url,
+    default_ui_dir,
+    render_index_html,
+)
 from nanitics.observatory.models import (
     RunCreateRequest,
     RunStatusUpdateRequest,
 )
 
 if TYPE_CHECKING:
+    from fastapi import APIRouter, FastAPI
+
     from nanitics.infrastructure.observability.storage import PersistentTraceStore
 
 _VALID_TRACE_LEVELS: frozenset[TraceLevel] = frozenset(get_args(TraceLevel))
 
+_MIME_TYPES = {
+    ".html": "text/html",
+    ".js": "application/javascript",
+    ".css": "text/css",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".ico": "image/x-icon",
+    ".json": "application/json",
+}
+_CACHE_MAX_AGE = 31_536_000  # 1 year in seconds
 
-def create_observatory_router(
-    store: PersistentTraceStore,
-    *,
-    static_dir: Path | None = None,
-):
-    """Create a FastAPI :class:`APIRouter` with all observatory endpoints.
+
+def create_observatory_api_router(store: PersistentTraceStore) -> APIRouter:
+    """Create an :class:`APIRouter` with the Observatory JSON API endpoints.
 
     Args:
         store: A :class:`PersistentTraceStore` implementation.
-        static_dir: Path to a directory containing built observatory UI
-            assets (``index.html`` + ``assets/``).  When *None*, the
-            embedded UI endpoints return a helpful fallback message.
 
     Returns:
-        An :class:`APIRouter` with run, trace hierarchy, agent, workflow,
-        event, and streaming endpoints.
+        An :class:`APIRouter` exposing run, span tree, agent, workflow,
+        event, summary, and SSE-stream endpoints. The router has no UI
+        routes — pair with :func:`create_observatory_ui_router` (or use
+        :func:`mount_observatory`) to serve the embedded SPA.
     """
     from fastapi import APIRouter, HTTPException, Query
     from fastapi.responses import Response
@@ -281,56 +302,100 @@ def create_observatory_router(
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
-    # ------------------------------------------------------------------
-    # Embedded UI (static files)
-    # ------------------------------------------------------------------
+    return router
 
-    _MIME_TYPES = {
-        ".html": "text/html",
-        ".js": "application/javascript",
-        ".css": "text/css",
-        ".svg": "image/svg+xml",
-        ".png": "image/png",
-        ".ico": "image/x-icon",
-        ".json": "application/json",
-    }
-    _CACHE_MAX_AGE = 31_536_000  # 1 year in seconds
 
-    _ui_dir = Path(static_dir) if static_dir is not None else None
+def create_observatory_ui_router(*, static_dir: Path | None = None) -> APIRouter:
+    """Create an :class:`APIRouter` that serves the embedded SPA.
+
+    The router exposes two routes:
+
+    * ``GET /`` — returns ``index.html`` with the SPA's runtime base URL
+      injected as ``window.__NANITICS_OBSERVATORY_BASE__``. The base URL
+      is derived from the request, so the same bundle works no matter
+      which prefix the router is mounted at.
+    * ``GET /assets/{path}`` — serves the hashed JS/CSS bundle with
+      immutable cache headers.
+
+    Args:
+        static_dir: Override the directory the SPA is read from. When
+            omitted, the wheel-bundled ``nanitics/observatory/ui_assets/``
+            directory is used. SDK contributors who have not built the UI
+            see a "UI not built" fallback page.
+
+    Returns:
+        An :class:`APIRouter` with the UI routes. Mount it alongside the
+        API router (or use :func:`mount_observatory` to do both at once).
+    """
+    from fastapi import APIRouter, HTTPException
+    from fastapi.responses import HTMLResponse, Response
+
+    router = APIRouter()
+
+    resolved = Path(static_dir) if static_dir is not None else default_ui_dir()
 
     @router.get("/")
-    async def observatory_ui():
-        if _ui_dir is None or not (_ui_dir / "index.html").is_file():
-            from fastapi.responses import HTMLResponse
-
+    async def observatory_ui(request: Request):
+        if resolved is None or not (resolved / "index.html").is_file():
             return HTMLResponse(
                 "<h1>Observatory UI not built</h1>"
                 "<p>Run <code>just observatory-build</code> to build the embedded UI, "
                 "then restart the server.</p>",
                 status_code=200,
             )
-        return Response(
-            content=(_ui_dir / "index.html").read_bytes(),
-            media_type="text/html",
-        )
+        base_url = compute_base_url(request.scope.get("root_path", ""), request.url.path)
+        rendered = render_index_html((resolved / "index.html").read_bytes(), base_url)
+        return Response(content=rendered, media_type="text/html")
 
     @router.get("/assets/{path:path}")
     async def observatory_assets(path: str):
-        if _ui_dir is None:
+        if resolved is None:
             raise HTTPException(status_code=404, detail="Asset not found")
-        assets_dir = _ui_dir / "assets"
-        resolved = (assets_dir / path).resolve()
-        if not resolved.is_file() or not resolved.is_relative_to(assets_dir.resolve()):
+        assets_dir = resolved / "assets"
+        candidate = (assets_dir / path).resolve()
+        if not candidate.is_file() or not candidate.is_relative_to(assets_dir.resolve()):
             raise HTTPException(status_code=404, detail="Asset not found")
-        suffix = resolved.suffix.lower()
+        suffix = candidate.suffix.lower()
         media_type = _MIME_TYPES.get(suffix, "application/octet-stream")
         headers = {}
         if suffix in (".js", ".css"):
             headers["Cache-Control"] = f"public, max-age={_CACHE_MAX_AGE}, immutable"
         return Response(
-            content=resolved.read_bytes(),
+            content=candidate.read_bytes(),
             media_type=media_type,
             headers=headers,
         )
 
     return router
+
+
+def mount_observatory(
+    app: FastAPI,
+    store: PersistentTraceStore,
+    *,
+    prefix: str = "/observatory",
+    static_dir: Path | None = None,
+) -> None:
+    """Mount the Observatory API and UI under a single prefix.
+
+    Args:
+        app: A FastAPI application instance.
+        store: A :class:`PersistentTraceStore` implementation.
+        prefix: The URL path the Observatory mounts under. Defaults to
+            ``"/observatory"``. The SPA picks up the prefix automatically
+            via the ``window.__NANITICS_OBSERVATORY_BASE__`` global the UI
+            router injects at request time.
+        static_dir: Override the directory the SPA is read from. When
+            omitted, the wheel-bundled UI is used.
+
+    The convenience helper covers the common case in one line::
+
+        mount_observatory(app, store, prefix="/observatory")
+
+    Consumers that need to attach different middleware to the API and UI
+    surfaces — for example, bearer-token auth on the data endpoints and
+    session auth on the UI — should call :func:`create_observatory_api_router`
+    and :func:`create_observatory_ui_router` directly.
+    """
+    app.include_router(create_observatory_api_router(store), prefix=prefix)
+    app.include_router(create_observatory_ui_router(static_dir=static_dir), prefix=prefix)

@@ -3,8 +3,8 @@
 One-service Docker compose that runs a Nanitics app with the embedded
 Observatory UI. Local development and demos only, not production.
 
-Prerequisite: the embed bundle at `observatory/dist-embed/` must exist.
-Run `just observatory-build` first if it is stale or missing.
+Prerequisite: the embedded SPA at `nanitics/observatory/ui_assets/`
+must exist (it is `.gitignore`d). Run `just observatory-build` first.
 
 Run (from the repo root):
 

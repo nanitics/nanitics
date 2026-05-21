@@ -92,8 +92,10 @@ nanitics/
 │   │       ├── levels.py            # Level classification (info/debug/verbose)
 │   │       ├── collector.py         # TraceCollector (buffer, flush, SSE queue)
 │   │       └── postgres_store.py    # PostgresTraceStore (PersistentTraceStore)
-│   ├── observatory/                 # Observatory backend API
-│   │   ├── __init__.py              # Public API: create_observatory_router, ObservatoryService, models
+│   ├── observatory/                 # Observatory backend API + embedded SPA
+│   │   ├── __init__.py              # Public API: mount_observatory, create_observatory_{api,ui}_router, ObservatoryService, models
+│   │   ├── _ui.py                   # SPA bundle resolution and request-time prefix injection
+│   │   ├── ui_assets/               # Built SPA (.gitignored; populated by `just observatory-build`)
 │   │   ├── models.py                # Response models and request schemas (Pydantic)
 │   │   ├── service.py               # Business logic composing PersistentTraceStore primitives
 │   │   ├── router.py                # FastAPI route definitions (thin delegates to service)
@@ -160,7 +162,7 @@ Adopters interact with the SDK through a layered import surface:
 
 - **`import nanitics`** — The primary import for daily use. Re-exports agents, tools, prompts, LLM clients, memory, planning, composition, collaboration, and other core abstractions (~300 symbols). Application code should start here.
 - **`import nanitics.infrastructure`** — Event classes (`*Event`, `BaseEvent`), trace levels (`TraceLevel`, `classify_level`, `is_level_included`, `LEVEL_ORDER`), and Postgres utilities (`get_schema_sql`). Used when subscribing to or inspecting trace events.
-- **`import nanitics.observatory`** — Observatory backend API (`create_observatory_router`, `ObservatoryService`, models). Used when embedding the trace visualization backend in an application.
+- **`import nanitics.observatory`** — Observatory backend API and embedded SPA (`mount_observatory`, `create_observatory_api_router`, `create_observatory_ui_router`, `ObservatoryService`, models). The wheel ships a prebuilt SPA bundle so `mount_observatory(app, store)` gives a working UI with no frontend toolchain.
 - **`import nanitics.composition`** — `CHECKPOINT_SCHEMA_VERSION` and other composition internals not needed in typical application code.
 
 The internal layer structure is for readers of the source. The external surface — the names re-exported from `nanitics` — is what an adopter imports.

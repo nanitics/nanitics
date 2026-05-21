@@ -8,7 +8,6 @@ compose uses to produce visible traces.
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -18,7 +17,7 @@ from nanitics.infrastructure import (
     LLMResponse,
     MockLLMClient,
 )
-from nanitics.observatory import create_observatory_router
+from nanitics.observatory import mount_observatory
 from nanitics.strategies import (
     ReActAgent,
     tool,
@@ -29,8 +28,6 @@ from nanitics.tracing import (
     TracedExecutor,
     Usage,
 )
-
-UI_DIR = Path("/srv/observatory-ui")
 
 
 @tool("greet", "Greet someone by name.")
@@ -74,10 +71,7 @@ def _make_llm_client() -> LLMClient:
 store = InMemoryPersistentTraceStore()
 executor = TracedExecutor(store)
 app = FastAPI(title="Nanitics Observatory — local dev")
-app.include_router(
-    create_observatory_router(store, static_dir=UI_DIR),
-    prefix="/api/observatory",
-)
+mount_observatory(app, store, prefix="/api/observatory")
 
 
 class RunRequest(BaseModel):

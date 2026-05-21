@@ -21,4 +21,3 @@
 # Generated / vendored — exclude from language stats and PR diff folding.
 uv.lock                            linguist-generated=true
 observatory/package-lock.json      linguist-generated=true
-observatory/dist-embed/**          linguist-generated=true linguist-vendored=true

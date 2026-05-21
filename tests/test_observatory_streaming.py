@@ -15,7 +15,7 @@ from nanitics.infrastructure.observability.storage import (
     RunRecord,
     TraceEventRecord,
 )
-from nanitics.observatory.router import create_observatory_router
+from nanitics.observatory.router import create_observatory_api_router
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -59,7 +59,7 @@ def client(store: InMemoryPersistentTraceStore) -> AsyncClient:
     from fastapi import FastAPI
 
     app = FastAPI()
-    router = create_observatory_router(store)
+    router = create_observatory_api_router(store)
     app.include_router(router, prefix="/api/observatory")
     return AsyncClient(
         transport=ASGITransport(app=app),

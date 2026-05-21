@@ -184,7 +184,9 @@ observatory-check: observatory-deps
 observatory-dev: observatory-deps
     cd observatory && npm run dev
 
-# Build observatory embed UI (served by the observatory router)
+# Build the embedded Observatory SPA into nanitics/observatory/ui_assets/
+# so the wheel ships it. Run this before `uv build` to produce a wheel
+# whose `mount_observatory(...)` call needs no static_dir argument.
 observatory-build: observatory-deps
     cd observatory && npx vite build --config vite.embed.config.ts
 

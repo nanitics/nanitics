@@ -11,8 +11,10 @@ mounted under `/runners/<slug>`.
 
 ## 1. One-minute bring-up
 
-Prerequisite: the Observatory embed bundle at `observatory/dist-embed/`.
-Run `just observatory-build` first if it is missing or stale.
+Prerequisite: the embedded Observatory SPA at
+`nanitics/observatory/ui_assets/`. The directory is `.gitignore`d
+(it's a build artifact that ships inside the wheel) — populate it with
+`just observatory-build` before bringing the stack up.
 
 From the repo root:
 

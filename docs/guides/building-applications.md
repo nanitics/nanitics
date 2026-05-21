@@ -288,7 +288,7 @@ await collector.close()  # flush remaining events, stop background loop
 
 The collector supports level-filtered SSE streaming — events at or above `min_level` are pushed to the optional `queue` for real-time delivery to clients.
 
-See [Observability](observability.md) for the full `TracedExecutor`, `TraceCollector`, `PersistentTraceStore`, and `create_observatory_router()` API reference.
+See [Observability](observability.md) for the full `TracedExecutor`, `TraceCollector`, `PersistentTraceStore`, and `mount_observatory()` API reference.
 
 ## Persistence
 

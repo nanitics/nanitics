@@ -61,6 +61,10 @@ logs/
 *.swn
 .tmp/
 
+# Observatory: built SPA bundle that ships inside the wheel.
+# Populated by `just observatory-build`; do not commit.
+nanitics/observatory/ui_assets/
+
 # File storage
 data/files/
 

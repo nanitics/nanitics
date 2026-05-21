@@ -6,8 +6,8 @@ embedded Observatory UI against that same store so the run can be
 inspected in a browser and screenshotted for the website's proof
 section (Phase 2.3 of ``temp/website/program.md``).
 
-Prerequisite: the embed bundle at ``observatory/dist-embed/`` must
-exist. Run ``just observatory-build`` first if it is missing or stale.
+Prerequisite: the embedded SPA at ``nanitics/observatory/ui_assets/``
+must exist. Run ``just observatory-build`` first if it is missing.
 
 Usage::
 
@@ -21,17 +21,15 @@ is gone after the process exits — re-run to recapture.
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
 
 from examples import homepage
 from nanitics import InMemoryPersistentTraceStore, TracedExecutor
-from nanitics.observatory import create_observatory_router
+from nanitics.observatory import mount_observatory
+from nanitics.observatory._ui import default_ui_dir
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-UI_DIR = REPO_ROOT / "observatory" / "dist-embed"
 HOST = "127.0.0.1"
 PORT = 8002
 
@@ -53,16 +51,13 @@ async def _populate_store(store: InMemoryPersistentTraceStore) -> str:
 
 def _build_app(store: InMemoryPersistentTraceStore) -> FastAPI:
     app = FastAPI(title="Nanitics Observatory — homepage trace capture")
-    app.include_router(
-        create_observatory_router(store, static_dir=UI_DIR),
-        prefix="/api/observatory",
-    )
+    mount_observatory(app, store, prefix="/api/observatory")
     return app
 
 
 def main() -> None:
-    if not UI_DIR.is_dir():
-        raise SystemExit(f"Embed bundle not found at {UI_DIR}. Run `just observatory-build` first.")
+    if default_ui_dir() is None:
+        raise SystemExit("Embedded Observatory SPA not built. Run `just observatory-build` first.")
 
     store = InMemoryPersistentTraceStore()
     run_id = asyncio.run(_populate_store(store))

@@ -24,7 +24,8 @@ RUN pip install --no-cache-dir \
       uvicorn \
  && rm -rf /srv/testpypi-dist
 
-COPY observatory/dist-embed /srv/observatory-ui
+# The embedded Observatory SPA ships inside the nanitics wheel under
+# `nanitics/observatory/ui_assets/` — no separate copy needed.
 COPY docker/full-stack/app.py /srv/app.py
 COPY docker/full-stack/llm_provider.py /srv/llm_provider.py
 COPY docker/full-stack/runners.py /srv/runners.py
