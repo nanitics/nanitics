@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`@nanitics/observatory` published to npm.** The React components for embedding the Observatory (run list, run detail, event timeline, registries, hooks) now ship as a public scoped package on the npm registry. Downstream apps can `npm install @nanitics/observatory` instead of consuming the package as a filesystem dependency. The package ships a precompiled ESM bundle, TypeScript declarations, and a precompiled stylesheet at `@nanitics/observatory/styles.css`. Peer deps: `react@^19.2.6`, `react-dom@^19.2.6`. Publishing is automated by `.github/workflows/publish-observatory.yml` (triggered by `observatory-v*` tags) with npm provenance signing.
+
 ### Changed
 
 - **Flattened the public surface into top-level subpackages.** The flat `nanitics.*` re-export surface (~286 names) is removed; every public symbol now lives at a predictable subpackage path. New top-level subpackages: `nanitics.memory`, `nanitics.evaluation`, `nanitics.planning`, `nanitics.context`, `nanitics.errors`, `nanitics.tracing`, `nanitics.hitl`. Existing subpackages (`strategies`, `specialized`, `composition`, `collaboration`, `safety`, `tools`, `patterns`, `infrastructure`) continue as before. Top-level `nanitics` now exposes only `__version__`. Adopters with `from nanitics import X` need to update imports to the relevant subpackage (`from nanitics.strategies import Agent`, `from nanitics.memory import SemanticStore`, `from nanitics.errors import NaniticsError`, etc.); per the no-backward-compatibility rule, no shim is provided. The leaked `nanitics.deprecated` re-export (`typing_extensions.deprecated`) is removed; future deprecation policy is documented separately. Closes F-01, F-02, F-03, F-04.

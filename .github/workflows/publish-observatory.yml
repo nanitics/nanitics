@@ -1,0 +1,75 @@
+name: Publish @nanitics/observatory
+
+on:
+  push:
+    tags:
+      - "observatory-v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run all build/test steps without publishing"
+        type: boolean
+        default: true
+
+concurrency:
+  group: publish-observatory-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # required for npm --provenance
+
+jobs:
+  publish:
+    name: Build and publish to npm
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: observatory
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+          cache-dependency-path: observatory/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify tag matches package version
+        if: startsWith(github.ref, 'refs/tags/observatory-v')
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#observatory-v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match package.json version ($PKG_VERSION)"
+            exit 1
+          fi
+          echo "Publishing version $PKG_VERSION"
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build library
+        run: npm run build:lib
+
+      - name: Publish to npm (dry run)
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+        run: npm publish --dry-run --provenance --access public
+
+      - name: Publish to npm
+        if: startsWith(github.ref, 'refs/tags/observatory-v') || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,19 +1,56 @@
 {
   "name": "@nanitics/observatory",
-  "version": "0.1.1",
-  "private": true,
+  "version": "0.1.2",
+  "description": "React components for embedding the Nanitics Observatory (run list, run detail, event timeline) in downstream apps.",
+  "license": "Apache-2.0",
+  "author": "Solid Software B.V.",
+  "homepage": "https://github.com/nanitics/nanitics",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nanitics/nanitics.git",
+    "directory": "observatory"
+  },
+  "bugs": {
+    "url": "https://github.com/nanitics/nanitics/issues"
+  },
+  "keywords": [
+    "nanitics",
+    "observatory",
+    "agent",
+    "tracing",
+    "observability",
+    "react"
+  ],
   "type": "module",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
-    }
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./dist/styles.css",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:lib": "tsup && npm run build:css",
+    "build:css": "tailwindcss -i src/styles.css -o dist/styles.css --minify",
+    "prepublishOnly": "npm run build:lib",
     "lint": "biome check src/ dev/app.tsx dev/main.tsx tests/",
     "format": "biome check --write src/ dev/app.tsx dev/main.tsx tests/",
     "test": "vitest run",
@@ -24,8 +61,14 @@
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
+  "dependencies": {
+    "@dagrejs/dagre": "^3.0.0",
+    "d3-hierarchy": "^3.1.2",
+    "lucide-react": "^1.16.0"
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
+    "@tailwindcss/cli": "^4.3.0",
     "@tailwindcss/vite": "^4.3.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
@@ -38,14 +81,10 @@
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "tailwindcss": "^4.1.8",
+    "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "vite": "^8.0.13",
     "vitest": "^4.1.6",
     "vitest-axe": "^0.1.0"
-  },
-  "dependencies": {
-    "@dagrejs/dagre": "^3.0.0",
-    "d3-hierarchy": "^3.1.2",
-    "lucide-react": "^1.16.0"
   }
 }
