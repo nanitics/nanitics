@@ -220,21 +220,15 @@ default and it requires no frontend toolchain.
 
 When you want to embed Observatory components into your own React app
 — your internal dashboard, a debugging console, an existing admin UI
-— you consume the `@nanitics/observatory` package from source. It is
-not currently on npm (see
-[What is not shipped](#what-is-not-shipped)).
+— you install the `@nanitics/observatory` package from npm.
 
-### From source
+### Install
 
-Add the package as a filesystem dependency in your `package.json`:
-
-```json
-{
-  "dependencies": {
-    "@nanitics/observatory": "file:../nanitics/observatory"
-  }
-}
+```bash
+npm install @nanitics/observatory
 ```
+
+Peer deps: `react@^19.2.6`, `react-dom@^19.2.6`.
 
 Then wire an `ObservatoryClient`, the default registries, and the
 provider tree. This mirrors `observatory/dev/app.tsx`:
@@ -246,6 +240,7 @@ import {
   RunListPage,
   createDefaultRegistries,
 } from "@nanitics/observatory";
+import "@nanitics/observatory/styles.css";
 
 const client = new ObservatoryClient("/api/observatory");
 const { registry, agentViewRegistry, panelRegistry } =
@@ -438,10 +433,6 @@ Naming each gap so you can plan around it.
   Observatory) is its substrate — deliberately separate from the
   narrow dev compose under `docker/observatory-dev/`, which is the
   key-free first-run path.
-- **`nanitics-observatory` package split and npm publication.** Today
-  the React components live in-repo under `observatory/` as a private
-  package (`"private": true`). npm publication, the registry
-  namespace, and the package-split workflow are future work.
 - **Default credential scrubber in the SDK.** A domain-neutral
   redaction implementation shipped as the default `RedactionHook`.
   Not shipped — redaction policy is domain-specific (credit-card
