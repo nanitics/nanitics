@@ -751,12 +751,25 @@ class TestComputeBaseUrl:
 
 
 class TestDefaultUiDir:
-    def test_returns_path_when_bundle_present(self) -> None:
-        """When `just observatory-build` has run, the bundled dir is returned."""
-        result = default_ui_dir()
-        if result is None:
-            pytest.skip("Embedded SPA not built; run `just observatory-build`.")
-        assert result.is_dir()
+    def test_returns_path_when_bundle_present(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """When `ui_assets/index.html` is present, the bundle path is returned."""
+        from nanitics.observatory import _ui
+
+        bundle = tmp_path / _ui._BUNDLED_DIR_NAME
+        bundle.mkdir()
+        (bundle / "index.html").write_text("<html></html>")
+
+        def fake_files(package: str) -> Path:
+            assert package == "nanitics.observatory"
+            return tmp_path
+
+        monkeypatch.setattr(_ui.resources, "files", fake_files)
+        result = _ui.default_ui_dir()
+        assert result is not None
         assert (result / "index.html").is_file()
 
     def test_returns_none_when_bundle_missing(
@@ -765,18 +778,12 @@ class TestDefaultUiDir:
         tmp_path: Path,
     ) -> None:
         """SDK-contributor path: simulate a fresh checkout with no built bundle."""
-        from importlib import resources as importlib_resources
-
         from nanitics.observatory import _ui
-
-        empty = tmp_path / "no_bundle"
-        empty.mkdir()
 
         def fake_files(package: str) -> Path:
             assert package == "nanitics.observatory"
-            return empty.parent  # parent has no `ui_assets` child
+            return tmp_path  # tmp_path has no `ui_assets` child
 
-        monkeypatch.setattr(importlib_resources, "files", fake_files)
         monkeypatch.setattr(_ui.resources, "files", fake_files)
         assert _ui.default_ui_dir() is None
 
