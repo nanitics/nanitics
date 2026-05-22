@@ -17,7 +17,9 @@ from nanitics.infrastructure.observability.postgres_store import (
     get_schema_sql,
 )
 from nanitics.infrastructure.observability.storage import (
+    RunResult,
     StoredTraceEvent,
+    TerminationReason,
     TraceEventRecord,
     TraceSummaryStats,
 )
@@ -761,3 +763,28 @@ class TestRowToRun:
         row = _run_row(metadata='{"k": "v"}')
         result = _row_to_run(row)
         assert result.metadata == {"k": "v"}
+
+    def test_result_none_yields_none(self) -> None:
+        row = _run_row(result=None)
+        run = _row_to_run(row)
+        assert run.result is None
+
+    def test_result_structured_json_round_trips(self) -> None:
+        payload = RunResult(
+            output="answer",
+            termination_reason=TerminationReason.ITERATION_LIMIT,
+            total_steps=4,
+        ).model_dump_json()
+        row = _run_row(result=payload)
+        run = _row_to_run(row)
+        assert run.result == RunResult(
+            output="answer",
+            termination_reason=TerminationReason.ITERATION_LIMIT,
+            total_steps=4,
+        )
+
+    def test_legacy_string_falls_back_to_output(self) -> None:
+        """Pre-migration rows contain arbitrary strings; expose them as ``output``."""
+        row = _run_row(result="not-valid-json-shape")
+        run = _row_to_run(row)
+        assert run.result == RunResult(output="not-valid-json-shape")

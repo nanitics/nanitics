@@ -25,7 +25,6 @@ resumable workflows, auction waiter registries) on the Observatory
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 from uuid import uuid4
@@ -34,7 +33,11 @@ from nanitics.infrastructure.observability.collector import TraceCollector
 from nanitics.infrastructure.observability.emitter import EventEmitter, InMemoryEmitter
 from nanitics.infrastructure.observability.levels import TraceLevel
 from nanitics.infrastructure.observability.redaction import RedactionHook
-from nanitics.infrastructure.observability.storage import PersistentTraceStore
+from nanitics.infrastructure.observability.storage import (
+    PersistentTraceStore,
+    RunResult,
+    TerminationReason,
+)
 
 T = TypeVar("T")
 
@@ -155,17 +158,62 @@ class TracedExecutor:
             raise
 
         await collector.close()
-        result_str = _serialize_result(result)
-        await self._trace_store.update_run_status(run_id, "completed", result=result_str)
+        adapted = _adapt_result(result)
+        await self._trace_store.update_run_status(run_id, "completed", result=adapted)
 
         return run_id, result
 
 
-def _serialize_result(result: object) -> str:
-    """Best-effort serialization of a run result for storage."""
-    if isinstance(result, str):
+def _adapt_result(result: object) -> RunResult:
+    """Map an arbitrary run return value into the typed :class:`RunResult`.
+
+    Native strategy result types (ReActResult, CodeActResult, etc.) expose
+    ``output``, ``termination_reason``, and ``total_steps`` either as
+    attributes (Pydantic models, dataclasses) or as dict keys. Strings
+    are treated as the run's output. Unknown termination strings land in
+    :attr:`TerminationReason.OTHER` with the original string preserved
+    in :attr:`RunResult.termination_reason_raw`.
+    """
+    if result is None:
+        return RunResult()
+    if isinstance(result, RunResult):
         return result
-    dump = getattr(result, "model_dump_json", None)
-    if callable(dump):
-        return dump()  # type: ignore[no-any-return]
-    return json.dumps(result, default=str)
+    if isinstance(result, str):
+        return RunResult(output=result)
+
+    output = _extract_str(result, "output")
+    raw_reason = _extract_str(result, "termination_reason")
+    reason, reason_raw = _normalize_termination(raw_reason)
+    total_steps = _extract_int(result, "total_steps")
+
+    return RunResult(
+        output=output,
+        termination_reason=reason,
+        termination_reason_raw=reason_raw,
+        total_steps=total_steps,
+    )
+
+
+def _extract_field(obj: object, name: str) -> object | None:
+    if isinstance(obj, dict):
+        return obj.get(name)
+    return getattr(obj, name, None)
+
+
+def _extract_str(obj: object, name: str) -> str | None:
+    value = _extract_field(obj, name)
+    return value if isinstance(value, str) else None
+
+
+def _extract_int(obj: object, name: str) -> int | None:
+    value = _extract_field(obj, name)
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _normalize_termination(raw: str | None) -> tuple[TerminationReason | None, str | None]:
+    if raw is None:
+        return None, None
+    try:
+        return TerminationReason(raw), None
+    except ValueError:
+        return TerminationReason.OTHER, raw

@@ -10,7 +10,9 @@ from nanitics.infrastructure.observability.storage import (
     InMemoryPersistentTraceStore,
     PersistentTraceStore,
     RunRecord,
+    RunResult,
     StoredTraceEvent,
+    TerminationReason,
     TraceEventRecord,
 )
 
@@ -93,6 +95,36 @@ class TestRunManagement:
         store = InMemoryPersistentTraceStore()
         # Should not raise
         await store.update_run_status("nonexistent", "completed")
+
+    async def test_update_run_status_with_result(self) -> None:
+        store = InMemoryPersistentTraceStore()
+        await store.register_run("run-1", "trace-1", {})
+        await store.update_run_status(
+            "run-1",
+            "completed",
+            result=RunResult(
+                output="answer",
+                termination_reason=TerminationReason.COMPLETED,
+                total_steps=5,
+            ),
+        )
+        run = await store.get_run("run-1")
+        assert run is not None
+        assert run.result == RunResult(
+            output="answer",
+            termination_reason=TerminationReason.COMPLETED,
+            total_steps=5,
+        )
+
+    async def test_update_run_status_result_omitted_preserves_prior(self) -> None:
+        """Passing ``result=None`` keeps the previously stored result."""
+        store = InMemoryPersistentTraceStore()
+        await store.register_run("run-1", "trace-1", {})
+        await store.update_run_status("run-1", "completed", result=RunResult(output="first"))
+        await store.update_run_status("run-1", "completed")  # no result kwarg
+        run = await store.get_run("run-1")
+        assert run is not None
+        assert run.result == RunResult(output="first")
 
     async def test_list_runs_all(self) -> None:
         store = InMemoryPersistentTraceStore()

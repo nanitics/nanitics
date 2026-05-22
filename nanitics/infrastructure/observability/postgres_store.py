@@ -12,10 +12,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from pydantic import ValidationError
+
 from nanitics.infrastructure.observability.storage import (
     DEFAULT_EVENTS_LIMIT,
     DEFAULT_RUNS_LIMIT,
     RunRecord,
+    RunResult,
     RunStatus,
     StoredTraceEvent,
     TraceEventRecord,
@@ -465,9 +468,15 @@ class PostgresTraceStore:
             )
 
     async def update_run_status(
-        self, run_id: str, status: RunStatus, *, error: str | None = None, result: str | None = None
+        self,
+        run_id: str,
+        status: RunStatus,
+        *,
+        error: str | None = None,
+        result: RunResult | None = None,
     ) -> None:
         """Update run status and optional error message / result."""
+        result_json = result.model_dump_json() if result is not None else None
         async with self._pool.acquire() as conn:
             if status in ("completed", "failed"):
                 await conn.execute(
@@ -478,7 +487,7 @@ class PostgresTraceStore:
                     """,
                     status,
                     error,
-                    result,
+                    result_json,
                     run_id,
                 )
             else:
@@ -490,7 +499,7 @@ class PostgresTraceStore:
                     """,
                     status,
                     error,
-                    result,
+                    result_json,
                     run_id,
                 )
 
@@ -694,5 +703,21 @@ def _row_to_run(row: asyncpg.Record) -> RunRecord:
         completed_at=row["completed_at"],
         metadata=metadata,
         error=row["error"],
-        result=row["result"],
+        result=_parse_result(row["result"]),
     )
+
+
+def _parse_result(raw: str | None) -> RunResult | None:
+    """Parse a stored result column into :class:`RunResult`.
+
+    Legacy rows written before the structured-result migration contain
+    arbitrary strings (the old ``_serialize_result`` output). Those are
+    surfaced as ``RunResult(output=<raw>)`` so consumers never see a
+    typed-validation failure on historical data.
+    """
+    if raw is None:
+        return None
+    try:
+        return RunResult.model_validate_json(raw)
+    except ValidationError:
+        return RunResult(output=raw)

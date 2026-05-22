@@ -44,6 +44,7 @@ from nanitics.strategies import ReActAgent
 from nanitics.tracing import (
     InMemoryEmitter,
     PostgresTraceStore,
+    RunResult,
     TraceCollector,
 )
 from validation.helpers import (
@@ -97,7 +98,7 @@ async def test_postgres_trace_store_endtoend(traced_emitter: InMemoryEmitter) ->
             )
             await run_with_retry(lambda: agent.run("Say OK."), max_attempts=2)
 
-            await store.update_run_status(run_id, "completed", result="ok")
+            await store.update_run_status(run_id, "completed", result=RunResult(output="ok"))
             await collector.flush()
             await collector.close()
 
@@ -106,7 +107,8 @@ async def test_postgres_trace_store_endtoend(traced_emitter: InMemoryEmitter) ->
             assert run is not None, "Registered run must be retrievable by id."
             assert run.status == "completed", f"Expected 'completed' status; got {run.status!r}"
             assert run.metadata == {"probe": "pg-trace"}, f"Metadata must round-trip JSONB intact; got {run.metadata!r}"
-            assert run.result == "ok"
+            assert run.result is not None
+            assert run.result.output == "ok"
 
             # --- All events retrievable ---
             all_events = await store.query_events(run_id, limit=500)
