@@ -14,6 +14,8 @@ from nanitics.strategies import ReasoningAgent
 from nanitics.tracing import (
     EventEmitter,
     InMemoryPersistentTraceStore,
+    RunResult,
+    TerminationReason,
     TracedExecutor,
 )
 from tests.testing_helpers import make_response
@@ -80,6 +82,7 @@ async def test_successful_execution(executor: TracedExecutor, store: InMemoryPer
     assert run is not None
     assert run.status == "completed"
     assert run.result is not None
+    assert run.result.output == "done"
 
     events = await store.query_events(run_id)
     assert len(events) > 0
@@ -141,19 +144,7 @@ async def test_default_metadata_is_empty(executor: TracedExecutor, store: InMemo
     assert run.metadata == {}
 
 
-async def test_result_stored_as_serialized_string(
-    executor: TracedExecutor, store: InMemoryPersistentTraceStore
-) -> None:
-    run_id, _result = await executor.execute(_successful_fn)
-
-    run = await store.get_run(run_id)
-    assert run is not None
-    assert run.result is not None
-    # _successful_fn returns result.output which is a plain string
-    assert run.result == "done"
-
-
-async def test_plain_string_result(executor: TracedExecutor, store: InMemoryPersistentTraceStore) -> None:
+async def test_string_result_maps_to_output(executor: TracedExecutor, store: InMemoryPersistentTraceStore) -> None:
     async def _string_fn(emitter: EventEmitter, run_id: str) -> str:
         del emitter, run_id
         return "plain-result"
@@ -163,56 +154,73 @@ async def test_plain_string_result(executor: TracedExecutor, store: InMemoryPers
     assert result == "plain-result"
     run = await store.get_run(run_id)
     assert run is not None
-    assert run.result == "plain-result"
+    assert run.result == RunResult(output="plain-result")
 
 
-async def test_pydantic_result_serialized_as_json(
+async def test_structured_result_extracts_known_fields(
     executor: TracedExecutor, store: InMemoryPersistentTraceStore
 ) -> None:
-    import json
-
     from pydantic import BaseModel
 
-    class MyResult(BaseModel):
-        value: int
-        label: str
+    class StrategyResult(BaseModel):
+        output: str
+        termination_reason: str
+        total_steps: int
+        extra_field: str
 
-    async def _pydantic_fn(emitter: EventEmitter, run_id: str) -> MyResult:
+    async def _structured_fn(emitter: EventEmitter, run_id: str) -> StrategyResult:
         del emitter, run_id
-        return MyResult(value=42, label="test")
+        return StrategyResult(
+            output="answer", termination_reason="iteration_limit", total_steps=7, extra_field="ignored"
+        )
 
-    run_id, result = await executor.execute(_pydantic_fn)
+    run_id, _ = await executor.execute(_structured_fn)
 
-    assert result.value == 42
     run = await store.get_run(run_id)
     assert run is not None
-    parsed = json.loads(run.result)  # type: ignore[arg-type]
-    assert parsed["value"] == 42
-    assert parsed["label"] == "test"
+    assert run.result == RunResult(
+        output="answer",
+        termination_reason=TerminationReason.ITERATION_LIMIT,
+        termination_reason_raw=None,
+        total_steps=7,
+    )
 
 
-async def test_dict_result_serialized_as_json(executor: TracedExecutor, store: InMemoryPersistentTraceStore) -> None:
-    import json
+async def test_unknown_termination_lands_in_other(
+    executor: TracedExecutor, store: InMemoryPersistentTraceStore
+) -> None:
+    async def _custom_fn(emitter: EventEmitter, run_id: str) -> dict[str, object]:
+        del emitter, run_id
+        return {"output": "x", "termination_reason": "novel_reason", "total_steps": 2}
 
-    async def _dict_fn(emitter: EventEmitter, run_id: str) -> dict[str, int]:
+    run_id, _ = await executor.execute(_custom_fn)
+
+    run = await store.get_run(run_id)
+    assert run is not None
+    assert run.result is not None
+    assert run.result.termination_reason is TerminationReason.OTHER
+    assert run.result.termination_reason_raw == "novel_reason"
+
+
+async def test_dict_without_known_fields_yields_empty_result(
+    executor: TracedExecutor, store: InMemoryPersistentTraceStore
+) -> None:
+    async def _opaque_dict_fn(emitter: EventEmitter, run_id: str) -> dict[str, int]:
         del emitter, run_id
         return {"a": 1, "b": 2}
 
-    run_id, result = await executor.execute(_dict_fn)
+    run_id, _ = await executor.execute(_opaque_dict_fn)
 
-    assert result == {"a": 1, "b": 2}
     run = await store.get_run(run_id)
     assert run is not None
-    parsed = json.loads(run.result)  # type: ignore[arg-type]
-    assert parsed == {"a": 1, "b": 2}
+    assert run.result == RunResult()
 
 
-async def test_non_serializable_result_falls_back_to_json_default(
+async def test_object_without_known_fields_yields_empty_result(
     executor: TracedExecutor, store: InMemoryPersistentTraceStore
 ) -> None:
     class Opaque:
-        def __str__(self) -> str:
-            return "opaque-value"
+        pass
 
     async def _opaque_fn(emitter: EventEmitter, run_id: str) -> Opaque:
         del emitter, run_id
@@ -222,8 +230,48 @@ async def test_non_serializable_result_falls_back_to_json_default(
 
     run = await store.get_run(run_id)
     assert run is not None
-    # json.dumps with default=str wraps the str() output in JSON
-    assert run.result == '"opaque-value"'
+    assert run.result == RunResult()
+
+
+async def test_none_result_yields_empty_result(executor: TracedExecutor, store: InMemoryPersistentTraceStore) -> None:
+    async def _none_fn(emitter: EventEmitter, run_id: str) -> None:
+        del emitter, run_id
+
+    run_id, _ = await executor.execute(_none_fn)
+
+    run = await store.get_run(run_id)
+    assert run is not None
+    assert run.result == RunResult()
+
+
+async def test_run_result_passthrough(executor: TracedExecutor, store: InMemoryPersistentTraceStore) -> None:
+    """A factory that already returns a ``RunResult`` is stored verbatim."""
+
+    async def _runresult_fn(emitter: EventEmitter, run_id: str) -> RunResult:
+        del emitter, run_id
+        return RunResult(output="explicit", termination_reason=TerminationReason.COMPLETED, total_steps=3)
+
+    run_id, _ = await executor.execute(_runresult_fn)
+
+    run = await store.get_run(run_id)
+    assert run is not None
+    assert run.result == RunResult(output="explicit", termination_reason=TerminationReason.COMPLETED, total_steps=3)
+
+
+async def test_non_string_field_values_are_ignored(
+    executor: TracedExecutor, store: InMemoryPersistentTraceStore
+) -> None:
+    """Non-string ``output`` / non-int ``total_steps`` are not coerced; they become ``None``."""
+
+    async def _bad_types_fn(emitter: EventEmitter, run_id: str) -> dict[str, object]:
+        del emitter, run_id
+        return {"output": 123, "total_steps": True, "termination_reason": None}
+
+    run_id, _ = await executor.execute(_bad_types_fn)
+
+    run = await store.get_run(run_id)
+    assert run is not None
+    assert run.result == RunResult()
 
 
 async def test_factory_receives_same_run_id_as_returned(

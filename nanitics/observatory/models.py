@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from nanitics.infrastructure.observability.storage import RunStatus
+from nanitics.infrastructure.observability.storage import RunResult, RunStatus
 
 WorkflowStepStatus = Literal["pending", "running", "completed", "error", "skipped"]
 """Runtime status of a workflow step as surfaced by the observatory."""
@@ -56,7 +56,7 @@ class RunResponse(BaseModel):
     completed_at: str | None
     metadata: dict[str, Any]
     error: str | None
-    result: str | None
+    result: RunResult | None
 
 
 class RunListItem(BaseModel):

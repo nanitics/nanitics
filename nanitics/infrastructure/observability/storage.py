@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
@@ -153,6 +154,38 @@ class StoredTraceEvent(TraceEventRecord):
     id: int
 
 
+class TerminationReason(StrEnum):
+    """Closed set of run termination reasons emitted by SDK strategies.
+
+    Unknown strings from future or third-party strategies map to ``OTHER``
+    with the original string preserved in ``RunResult.termination_reason_raw``.
+    """
+
+    COMPLETED = "completed"
+    ITERATION_LIMIT = "iteration_limit"
+    TOOL_CALL_LIMIT = "tool_call_limit"
+    EVALUATION_FAILED = "evaluation_failed"
+    EVALUATION_SKIPPED = "evaluation_skipped"
+    CANCELLED = "cancelled"
+    ERROR = "error"
+    OTHER = "other"
+
+
+class RunResult(BaseModel):
+    """Structured result of a completed run.
+
+    ``messages`` is intentionally absent: message logs live as trace events
+    and are fetched via :meth:`PersistentTraceStore.get_run_messages`.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    output: str | None = None
+    termination_reason: TerminationReason | None = None
+    termination_reason_raw: str | None = None
+    total_steps: int | None = None
+
+
 class RunRecord(BaseModel):
     """A registered run with lifecycle state."""
 
@@ -165,7 +198,7 @@ class RunRecord(BaseModel):
     completed_at: datetime | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
-    result: str | None = None
+    result: RunResult | None = None
 
 
 class TraceSummaryStats(BaseModel):
@@ -221,7 +254,12 @@ class PersistentTraceStore(Protocol):
         ...
 
     async def update_run_status(
-        self, run_id: str, status: RunStatus, *, error: str | None = None, result: str | None = None
+        self,
+        run_id: str,
+        status: RunStatus,
+        *,
+        error: str | None = None,
+        result: RunResult | None = None,
     ) -> None:
         """Update run status (completed, failed, suspended) and optional error/result."""
         ...
@@ -390,7 +428,12 @@ class InMemoryPersistentTraceStore:
         )
 
     async def update_run_status(
-        self, run_id: str, status: RunStatus, *, error: str | None = None, result: str | None = None
+        self,
+        run_id: str,
+        status: RunStatus,
+        *,
+        error: str | None = None,
+        result: RunResult | None = None,
     ) -> None:
         run = self._runs.get(run_id)
         if run is None:
