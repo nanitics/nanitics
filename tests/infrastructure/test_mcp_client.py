@@ -40,7 +40,6 @@ from nanitics.infrastructure.llm.protocol import (
     ToolCall,
     ToolSchema,
 )
-from nanitics.infrastructure.mcp import client as _mcp_client_mod
 from nanitics.infrastructure.mcp._tool import MCPTool
 from nanitics.infrastructure.mcp.client import MCPClient, MCPStdioParameters
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter
@@ -570,7 +569,10 @@ class TestHttpFactoriesPassAuth:
             captured["kwargs"] = kwargs
             yield (None, None, lambda: None)
 
-        monkeypatch.setattr(_mcp_client_mod, "_streamablehttp_client", _fake)
+        monkeypatch.setattr(
+            "nanitics.infrastructure.mcp.client._streamablehttp_client",
+            _fake,
+        )
 
         async def _provider() -> dict[str, str]:
             return {"Authorization": "Bearer X"}
@@ -596,7 +598,10 @@ class TestHttpFactoriesPassAuth:
             captured["kwargs"] = kwargs
             yield (None, None)
 
-        monkeypatch.setattr(_mcp_client_mod, "_sse_client", _fake)
+        monkeypatch.setattr(
+            "nanitics.infrastructure.mcp.client._sse_client",
+            _fake,
+        )
 
         async def _provider() -> dict[str, str]:
             return {"Authorization": "Bearer Y"}
@@ -621,7 +626,10 @@ class TestHttpFactoriesPassAuth:
             captured["kwargs"] = kwargs
             yield (None, None, lambda: None)
 
-        monkeypatch.setattr(_mcp_client_mod, "_streamablehttp_client", _fake)
+        monkeypatch.setattr(
+            "nanitics.infrastructure.mcp.client._streamablehttp_client",
+            _fake,
+        )
 
         client = MCPClient.streamable_http(url="http://example.com/mcp")
         async with client._transport_factory():
@@ -636,7 +644,10 @@ class TestHttpFactoriesPassAuth:
             captured["kwargs"] = kwargs
             yield (None, None)
 
-        monkeypatch.setattr(_mcp_client_mod, "_sse_client", _fake)
+        monkeypatch.setattr(
+            "nanitics.infrastructure.mcp.client._sse_client",
+            _fake,
+        )
 
         client = MCPClient.sse(url="http://example.com/sse")
         async with client._transport_factory():
@@ -674,7 +685,10 @@ class TestHeadersProviderEndToEnd:
             ) as client:
                 yield client
 
-        monkeypatch.setattr(_mcp_client_mod, "_streamablehttp_client", _fake)
+        monkeypatch.setattr(
+            "nanitics.infrastructure.mcp.client._streamablehttp_client",
+            _fake,
+        )
 
         counter = {"n": 0}
 
@@ -707,7 +721,10 @@ class TestHeadersProviderEndToEnd:
             ) as client:
                 yield client
 
-        monkeypatch.setattr(_mcp_client_mod, "_sse_client", _fake)
+        monkeypatch.setattr(
+            "nanitics.infrastructure.mcp.client._sse_client",
+            _fake,
+        )
 
         counter = {"n": 0}
 
@@ -744,7 +761,10 @@ class TestHeadersProviderEndToEnd:
             ) as client:
                 yield client
 
-        monkeypatch.setattr(_mcp_client_mod, "_streamablehttp_client", _fake)
+        monkeypatch.setattr(
+            "nanitics.infrastructure.mcp.client._streamablehttp_client",
+            _fake,
+        )
 
         call_count = {"n": 0}
 
@@ -784,7 +804,10 @@ class TestHeadersProviderEndToEnd:
             ) as client:
                 yield client
 
-        monkeypatch.setattr(_mcp_client_mod, "_streamablehttp_client", _fake)
+        monkeypatch.setattr(
+            "nanitics.infrastructure.mcp.client._streamablehttp_client",
+            _fake,
+        )
 
         async def _provider() -> dict[str, str]:
             return {"Authorization": "Bearer ROTATING"}
@@ -1253,7 +1276,10 @@ class TestHeadersProviderNoLeakage:
             ) as client:
                 yield client
 
-        monkeypatch.setattr(_mcp_client_mod, "_streamablehttp_client", _fake)
+        monkeypatch.setattr(
+            "nanitics.infrastructure.mcp.client._streamablehttp_client",
+            _fake,
+        )
 
         # Drive the auth flow at least once so the provider is exercised.
         http_client = MCPClient.streamable_http(
