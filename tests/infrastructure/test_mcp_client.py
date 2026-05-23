@@ -16,6 +16,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import anyio
+import httpx
 import pytest
 from mcp import ClientSession, ErrorData, McpError
 from mcp.server.fastmcp import FastMCP
@@ -39,6 +40,7 @@ from nanitics.infrastructure.llm.protocol import (
     ToolCall,
     ToolSchema,
 )
+from nanitics.infrastructure.mcp import client as _mcp_client_mod
 from nanitics.infrastructure.mcp._tool import MCPTool
 from nanitics.infrastructure.mcp.client import MCPClient, MCPStdioParameters
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter
@@ -419,9 +421,13 @@ class TestMCPClientFactory:
     def test_streamable_http_parameter_parity_with_sse(self) -> None:
         # Confirm both factories accept the same constructor knobs and stash
         # them identically — guards against signature drift between transports.
+        async def _hp() -> dict[str, str]:
+            return {"Authorization": "Bearer parity"}
+
         sse = MCPClient.sse(
             url="u",
             headers={"a": "b"},
+            headers_provider=_hp,
             name_prefix="p_",
             name_filter=lambda n: True,
             discovery_timeout=7.5,
@@ -430,6 +436,7 @@ class TestMCPClientFactory:
         http = MCPClient.streamable_http(
             url="u",
             headers={"a": "b"},
+            headers_provider=_hp,
             name_prefix="p_",
             name_filter=lambda n: True,
             discovery_timeout=7.5,
@@ -438,6 +445,361 @@ class TestMCPClientFactory:
         assert sse._name_prefix == http._name_prefix
         assert sse._discovery_timeout == http._discovery_timeout
         assert sse._default_call_timeout == http._default_call_timeout
+
+
+class TestHeadersProviderAuth:
+    """Unit tests for the private :class:`_HeadersProviderAuth` ``httpx.Auth`` subclass.
+
+    Drives a real ``httpx.AsyncClient`` against a ``MockTransport`` so the
+    merge semantics, exception propagation, and per-request invocation count
+    are validated at the wire level — the same surface the upstream MCP
+    transports route through.
+    """
+
+    async def test_provider_value_reaches_the_wire_overriding_static_header(self) -> None:
+        from nanitics.infrastructure.mcp.client import _HeadersProviderAuth
+
+        captured: list[httpx.Request] = []
+
+        def _handler(request: httpx.Request) -> httpx.Response:
+            captured.append(request)
+            return httpx.Response(200, json={})
+
+        async def _provider() -> dict[str, str]:
+            return {"Authorization": "Bearer A"}
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(_handler),
+            headers={"Authorization": "Bearer STATIC"},
+            auth=_HeadersProviderAuth(_provider),
+        ) as client:
+            await client.get("http://example.com/x")
+
+        assert captured[0].headers["Authorization"] == "Bearer A"
+
+    async def test_non_conflicting_keys_merge_with_existing_headers(self) -> None:
+        from nanitics.infrastructure.mcp.client import _HeadersProviderAuth
+
+        captured: list[httpx.Request] = []
+
+        def _handler(request: httpx.Request) -> httpx.Response:
+            captured.append(request)
+            return httpx.Response(200, json={})
+
+        async def _provider() -> dict[str, str]:
+            return {"X-Trace": "abc"}
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(_handler),
+            headers={"User-Agent": "ua"},
+            auth=_HeadersProviderAuth(_provider),
+        ) as client:
+            await client.get("http://example.com/x")
+
+        assert captured[0].headers["User-Agent"] == "ua"
+        assert captured[0].headers["X-Trace"] == "abc"
+
+    async def test_provider_exception_propagates_unchanged(self) -> None:
+        from nanitics.infrastructure.mcp.client import _HeadersProviderAuth
+
+        boom = RuntimeError("token refresh failed")
+
+        async def _provider() -> dict[str, str]:
+            raise boom
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200)),
+            auth=_HeadersProviderAuth(_provider),
+        ) as client:
+            with pytest.raises(RuntimeError) as exc_info:
+                await client.get("http://example.com/x")
+
+        assert exc_info.value is boom
+
+    async def test_provider_awaited_exactly_once_per_request(self) -> None:
+        from nanitics.infrastructure.mcp.client import _HeadersProviderAuth
+
+        counter = {"n": 0}
+
+        async def _provider() -> dict[str, str]:
+            counter["n"] += 1
+            return {"Authorization": f"Bearer {counter['n']}"}
+
+        captured: list[str] = []
+
+        def _handler(request: httpx.Request) -> httpx.Response:
+            captured.append(request.headers["Authorization"])
+            return httpx.Response(200, json={})
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(_handler),
+            auth=_HeadersProviderAuth(_provider),
+        ) as client:
+            await client.get("http://example.com/x")
+            await client.get("http://example.com/y")
+
+        assert counter["n"] == 2
+        assert captured == ["Bearer 1", "Bearer 2"]
+
+    async def test_provider_not_awaited_at_async_client_construction(self) -> None:
+        from nanitics.infrastructure.mcp.client import _HeadersProviderAuth
+
+        counter = {"n": 0}
+
+        async def _provider() -> dict[str, str]:
+            counter["n"] += 1
+            return {"Authorization": "Bearer X"}
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, json={})),
+            auth=_HeadersProviderAuth(_provider),
+        ) as _:
+            # No request dispatched yet — provider must not have run.
+            assert counter["n"] == 0
+
+
+class TestHttpFactoriesPassAuth:
+    """Verify the public HTTP factories construct an ``httpx.Auth`` and pass it to the upstream client."""
+
+    async def test_streamable_http_passes_auth_when_headers_provider_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict[str, Any] = {}
+
+        @asynccontextmanager
+        async def _fake(url: str, **kwargs: Any) -> AsyncIterator[tuple[Any, Any, Any]]:
+            captured["url"] = url
+            captured["kwargs"] = kwargs
+            yield (None, None, lambda: None)
+
+        monkeypatch.setattr(_mcp_client_mod, "_streamablehttp_client", _fake)
+
+        async def _provider() -> dict[str, str]:
+            return {"Authorization": "Bearer X"}
+
+        client = MCPClient.streamable_http(
+            url="http://example.com/mcp",
+            headers={"User-Agent": "studio/1.0"},
+            headers_provider=_provider,
+        )
+        async with client._transport_factory():
+            pass
+
+        assert captured["url"] == "http://example.com/mcp"
+        assert captured["kwargs"]["headers"] == {"User-Agent": "studio/1.0"}
+        assert isinstance(captured["kwargs"]["auth"], httpx.Auth)
+
+    async def test_sse_passes_auth_when_headers_provider_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict[str, Any] = {}
+
+        @asynccontextmanager
+        async def _fake(url: str, **kwargs: Any) -> AsyncIterator[tuple[Any, Any]]:
+            captured["url"] = url
+            captured["kwargs"] = kwargs
+            yield (None, None)
+
+        monkeypatch.setattr(_mcp_client_mod, "_sse_client", _fake)
+
+        async def _provider() -> dict[str, str]:
+            return {"Authorization": "Bearer Y"}
+
+        client = MCPClient.sse(
+            url="http://example.com/sse",
+            headers={"User-Agent": "studio/1.0"},
+            headers_provider=_provider,
+        )
+        async with client._transport_factory():
+            pass
+
+        assert captured["url"] == "http://example.com/sse"
+        assert captured["kwargs"]["headers"] == {"User-Agent": "studio/1.0"}
+        assert isinstance(captured["kwargs"]["auth"], httpx.Auth)
+
+    async def test_streamable_http_no_provider_passes_none_auth(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict[str, Any] = {}
+
+        @asynccontextmanager
+        async def _fake(url: str, **kwargs: Any) -> AsyncIterator[tuple[Any, Any, Any]]:
+            captured["kwargs"] = kwargs
+            yield (None, None, lambda: None)
+
+        monkeypatch.setattr(_mcp_client_mod, "_streamablehttp_client", _fake)
+
+        client = MCPClient.streamable_http(url="http://example.com/mcp")
+        async with client._transport_factory():
+            pass
+        assert captured["kwargs"]["auth"] is None
+
+    async def test_sse_no_provider_passes_none_auth(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict[str, Any] = {}
+
+        @asynccontextmanager
+        async def _fake(url: str, **kwargs: Any) -> AsyncIterator[tuple[Any, Any]]:
+            captured["kwargs"] = kwargs
+            yield (None, None)
+
+        monkeypatch.setattr(_mcp_client_mod, "_sse_client", _fake)
+
+        client = MCPClient.sse(url="http://example.com/sse")
+        async with client._transport_factory():
+            pass
+        assert captured["kwargs"]["auth"] is None
+
+
+class TestHeadersProviderEndToEnd:
+    """End-to-end transport tests using ``httpx.MockTransport``.
+
+    Builds a real ``MCPClient.streamable_http`` / ``MCPClient.sse`` whose
+    upstream client is constructed against a mock httpx transport that
+    captures every outgoing request's headers and asserts the rotating
+    ``headers_provider`` reaches the wire.
+
+    We do not drive the full MCP JSON-RPC handshake — that requires real
+    SSE response framing and is the upstream library's responsibility.
+    What we verify here is the SDK-side seam: the provider is invoked on
+    every outgoing HTTP request, the merged headers reach the wire, the
+    static ``headers`` set provides the base layer, and a raising provider
+    surfaces on the affected request without poisoning the session.
+    """
+
+    async def test_streamable_http_two_sequential_requests_each_get_fresh_token(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: list[httpx.Request] = []
+
+        @asynccontextmanager
+        async def _fake(url: str, **kwargs: Any) -> AsyncIterator[Any]:
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(lambda r: captured.append(r) or httpx.Response(200, json={})),
+                headers=kwargs.get("headers") or {},
+                auth=kwargs.get("auth"),
+            ) as client:
+                yield client
+
+        monkeypatch.setattr(_mcp_client_mod, "_streamablehttp_client", _fake)
+
+        counter = {"n": 0}
+
+        async def _provider() -> dict[str, str]:
+            counter["n"] += 1
+            return {"Authorization": f"Bearer v{counter['n']}"}
+
+        client = MCPClient.streamable_http(
+            url="http://example.com/mcp",
+            headers_provider=_provider,
+        )
+        async with client._transport_factory() as ctx_client:
+            await ctx_client.get("http://example.com/mcp/req1")
+            await ctx_client.get("http://example.com/mcp/req2")
+
+        assert [r.headers["Authorization"] for r in captured] == ["Bearer v1", "Bearer v2"]
+        assert counter["n"] == 2
+
+    async def test_sse_provider_runs_on_get_and_post(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: list[tuple[str, str]] = []
+
+        @asynccontextmanager
+        async def _fake(url: str, **kwargs: Any) -> AsyncIterator[Any]:
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(
+                    lambda r: captured.append((r.method, r.headers["Authorization"])) or httpx.Response(200, json={})
+                ),
+                headers=kwargs.get("headers") or {},
+                auth=kwargs.get("auth"),
+            ) as client:
+                yield client
+
+        monkeypatch.setattr(_mcp_client_mod, "_sse_client", _fake)
+
+        counter = {"n": 0}
+
+        async def _provider() -> dict[str, str]:
+            counter["n"] += 1
+            return {"Authorization": f"Bearer sse-{counter['n']}"}
+
+        client = MCPClient.sse(
+            url="http://example.com/sse",
+            headers_provider=_provider,
+        )
+        async with client._transport_factory() as ctx_client:
+            # Initial SSE GET (one provider invocation).
+            await ctx_client.get("http://example.com/sse")
+            # Subsequent JSON-RPC POSTs to the discovered endpoint.
+            await ctx_client.post("http://example.com/sse/endpoint", json={})
+            await ctx_client.post("http://example.com/sse/endpoint", json={})
+
+        assert captured == [
+            ("GET", "Bearer sse-1"),
+            ("POST", "Bearer sse-2"),
+            ("POST", "Bearer sse-3"),
+        ]
+
+    async def test_provider_raises_does_not_poison_session(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: list[httpx.Request] = []
+
+        @asynccontextmanager
+        async def _fake(url: str, **kwargs: Any) -> AsyncIterator[Any]:
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(lambda r: captured.append(r) or httpx.Response(200, json={})),
+                headers=kwargs.get("headers") or {},
+                auth=kwargs.get("auth"),
+            ) as client:
+                yield client
+
+        monkeypatch.setattr(_mcp_client_mod, "_streamablehttp_client", _fake)
+
+        call_count = {"n": 0}
+
+        async def _provider() -> dict[str, str]:
+            call_count["n"] += 1
+            if call_count["n"] == 2:
+                raise RuntimeError("transient refresh failure")
+            return {"Authorization": f"Bearer good-{call_count['n']}"}
+
+        client = MCPClient.streamable_http(
+            url="http://example.com/mcp",
+            headers_provider=_provider,
+        )
+        async with client._transport_factory() as ctx_client:
+            await ctx_client.get("http://example.com/mcp/req1")  # ok
+            with pytest.raises(RuntimeError, match="transient refresh failure"):
+                await ctx_client.get("http://example.com/mcp/req2")  # provider raises
+            await ctx_client.get("http://example.com/mcp/req3")  # ok again
+
+        # First and third requests reached the wire; second never did.
+        assert [r.headers["Authorization"] for r in captured] == [
+            "Bearer good-1",
+            "Bearer good-3",
+        ]
+
+    async def test_static_headers_and_provider_overlay_interact_correctly(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: list[httpx.Request] = []
+
+        @asynccontextmanager
+        async def _fake(url: str, **kwargs: Any) -> AsyncIterator[Any]:
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(lambda r: captured.append(r) or httpx.Response(200, json={})),
+                headers=kwargs.get("headers") or {},
+                auth=kwargs.get("auth"),
+            ) as client:
+                yield client
+
+        monkeypatch.setattr(_mcp_client_mod, "_streamablehttp_client", _fake)
+
+        async def _provider() -> dict[str, str]:
+            return {"Authorization": "Bearer ROTATING"}
+
+        client = MCPClient.streamable_http(
+            url="http://example.com/mcp",
+            headers={"User-Agent": "studio/1.0", "Authorization": "STATIC"},
+            headers_provider=_provider,
+        )
+        async with client._transport_factory() as ctx_client:
+            await ctx_client.get("http://example.com/mcp/req")
+
+        request = captured[0]
+        assert request.headers["User-Agent"] == "studio/1.0"
+        assert request.headers["Authorization"] == "Bearer ROTATING"
 
 
 class TestMCPClientLifecycle:
@@ -862,3 +1224,78 @@ class TestMCPIntegration:
         first_call_tools = llm.calls[0]["tools"]
         assert first_call_tools is not None
         assert [t.name for t in first_call_tools] == ["get_weather", "noop"]
+
+
+class TestHeadersProviderNoLeakage:
+    """Drift guard: a ``headers_provider`` returning a sentinel must not surface in any emitted event.
+
+    Today the MCP transport code never crosses into the ``EventEmitter`` —
+    this test exists to fail loudly if any future change wires header values
+    into an event payload. Hermetic: the auth is constructed against a real
+    ``MCPClient.streamable_http`` factory but routed through a mock httpx
+    transport so the provider runs against actual ``async_auth_flow``
+    machinery, then a tool call is dispatched through ``ToolRegistry`` over
+    the existing in-memory MCP session to populate the event stream.
+    """
+
+    async def test_sentinel_token_absent_from_all_emitted_events(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        sentinel_token = "Bearer SENTINEL-mcp-headers-provider-leakguard-9f3a2b1c"
+
+        async def _provider() -> dict[str, str]:
+            return {"Authorization": sentinel_token}
+
+        @asynccontextmanager
+        async def _fake(url: str, **kwargs: Any) -> AsyncIterator[Any]:
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(lambda r: httpx.Response(200, json={})),
+                headers=kwargs.get("headers") or {},
+                auth=kwargs.get("auth"),
+            ) as client:
+                yield client
+
+        monkeypatch.setattr(_mcp_client_mod, "_streamablehttp_client", _fake)
+
+        # Drive the auth flow at least once so the provider is exercised.
+        http_client = MCPClient.streamable_http(
+            url="http://example.com/mcp",
+            headers_provider=_provider,
+        )
+        async with http_client._transport_factory() as ctx_client:
+            await ctx_client.get("http://example.com/mcp/probe")
+
+        # Now drive a real MCP tool dispatch over the in-memory transport
+        # so the event emitter actually sees activity. The sentinel must
+        # not appear anywhere in the resulting event payloads.
+        mcp_client = MCPClient._for_testing(
+            transport_factory=_memory_transport_factory(_build_integration_server()),
+        )
+        emitter = InMemoryEmitter(trace_id="mcp-headers-leak")
+        registry = ToolRegistry(emitter=emitter)
+
+        async with mcp_client as c:
+            tools = await c.list_tools()
+            registry.register_all(tools)
+            await registry.dispatch(
+                ToolCall(id="leak-1", name="get_weather", arguments={"city": "sf"}),
+            )
+
+        # Recursive sweep of every emitted event's model_dump output.
+        def _contains(value: Any, needle: str) -> bool:
+            if isinstance(value, str):
+                return needle in value
+            if isinstance(value, dict):
+                return any(_contains(v, needle) for v in value.values()) or any(
+                    needle in k for k in value if isinstance(k, str)
+                )
+            if isinstance(value, (list, tuple, set)):
+                return any(_contains(v, needle) for v in value)
+            return False
+
+        for event in emitter.events:
+            payload = event.model_dump()
+            assert not _contains(payload, sentinel_token), (
+                f"Sentinel token leaked into event {type(event).__name__}: {payload}"
+            )
+
+        # Sanity: confirm we actually emitted events (otherwise the test is vacuous).
+        assert len(emitter.events) > 0

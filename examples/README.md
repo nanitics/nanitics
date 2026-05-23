@@ -52,7 +52,7 @@ and code execution.
 | [tools/event_emitter.py](tools/event_emitter.py) | `InMemoryEmitter`, event type hierarchy, spans, listeners, child emitters, memory capping, event levels | [Observability](../docs/guides/observability.md) |
 | [tools/web_search_tool.py](tools/web_search_tool.py) | `create_web_search_tool` (Tavily/Brave), `respx`-intercepted HTTPS, `ReActAgent` integration, `ToolInvokeEvent`/`ToolResultEvent` | [Tools](../docs/guides/tools.md) |
 | [tools/conditional_tool.py](tools/conditional_tool.py) | `ConditionalTool`, `is_enabled` state-driven schema visibility, `ToolRegistry` filtering | [Tools](../docs/guides/tools.md) |
-| [tools/mcp_tools.py](tools/mcp_tools.py) | `MCPClient`, in-process `FastMCP` server, `ReActAgent` over MCP-backed tools, multi-server `name_prefix` | [Tools](../docs/guides/tools.md) |
+| [tools/mcp_tools.py](tools/mcp_tools.py) | `MCPClient`, in-process `FastMCP` server, `ReActAgent` over MCP-backed tools, multi-server `name_prefix`, rotating-credential `headers_provider` | [Tools](../docs/guides/tools.md) |
 | [tools/http_file_tools.py](tools/http_file_tools.py) | `create_http_tool`, `create_file_read_tool`, UTF-8/base64 via `metadata.encoding`, `ReActAgent` integration | [Tools](../docs/guides/tools.md) |
 | [tools/sandbox.py](tools/sandbox.py) | `SandboxConfig` security boundaries, `ExecutionResult`, `MockSandbox` lifecycle, deterministic testing | [Safety](../docs/guides/safety.md) |
 | [tools/code_execution_tool.py](tools/code_execution_tool.py) | `create_code_execution_tool` over `Sandbox` protocol, `MockSandbox` / `DockerSandbox`, failure surfacing | [Tools](../docs/guides/tools.md) |
