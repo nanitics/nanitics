@@ -33,9 +33,11 @@ from __future__ import annotations
 
 import contextlib
 import warnings
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Self
+
+import httpx
 
 from nanitics.infrastructure.errors import LLMProviderError
 from nanitics.infrastructure.mcp._tool import MCPTool
@@ -63,6 +65,47 @@ if TYPE_CHECKING:
 
 
 _MCP_SOURCE_PREFIX = "[MCP]"
+
+
+# Type alias kept private — the public surface is the ``headers_provider``
+# parameter on the two HTTP factories. Documented inline in those factories'
+# docstrings, not re-exported.
+_HeadersProvider = Callable[[], Awaitable[dict[str, str]]]
+
+
+class _HeadersProviderAuth(httpx.Auth):
+    """Per-request httpx auth that delegates header production to a caller-supplied async provider.
+
+    Lives alongside ``MCPClient`` rather than in a sibling ``_auth.py`` module
+    because the class is small, private, and tightly coupled to the two HTTP
+    factories that construct it — splitting would force a cross-module import
+    for no readability gain. If the file ever grows another auth variant,
+    revisit the placement.
+
+    Behaviour:
+        * On every outgoing request, ``async_auth_flow`` awaits the stored
+          provider and merges the returned mapping over ``request.headers``,
+          with provider keys winning on conflict.
+        * No caching, no fallback, no retry, no logging. The provider's
+          contract (cache internally, refresh near expiry, raise on hard
+          failure) is the adopter's responsibility.
+        * Provider exceptions propagate unchanged from the awaiting request.
+    """
+
+    requires_request_body = False
+    requires_response_body = False
+
+    def __init__(self, provider: _HeadersProvider) -> None:
+        self._provider = provider
+
+    async def async_auth_flow(
+        self,
+        request: httpx.Request,
+    ) -> AsyncGenerator[httpx.Request, httpx.Response]:
+        overlay = await self._provider()
+        for key, value in overlay.items():
+            request.headers[key] = value
+        yield request
 
 
 @dataclass(frozen=True)
@@ -183,15 +226,57 @@ class MCPClient:
         url: str,
         *,
         headers: dict[str, str] | None = None,
+        headers_provider: _HeadersProvider | None = None,
         name_prefix: str = "",
         name_filter: Callable[[str], bool] | None = None,
         discovery_timeout: float | None = 30.0,
         default_call_timeout: float | None = 60.0,
     ) -> MCPClient:
-        """Connect to an MCP server over Server-Sent Events."""
+        """Connect to an MCP server over Server-Sent Events.
+
+        Args:
+            url: The MCP server endpoint URL.
+            headers: Static headers set once on the underlying
+                ``httpx.AsyncClient`` at construction. Recommended for
+                stable identity headers (User-Agent, tenant ID, tracing
+                correlation IDs) that do not rotate during a session.
+            headers_provider: Optional async callable
+                ``Callable[[], Awaitable[dict[str, str]]]`` invoked
+                **before every outgoing HTTP request** to produce a
+                rotating header overlay. SSE collapses "per request"
+                naturally to "on connect + on each POST", so the provider
+                runs on the initial SSE GET and on every subsequent POST
+                to the discovered endpoint — no special-casing.
+
+                The returned mapping is merged into the request's headers
+                with **provider keys winning on conflict** against the
+                static ``headers`` set, against MCP-protocol headers, or
+                any other pre-existing header on the request.
+
+                The provider is **expected to cache internally** and only
+                perform real refresh work near token expiry — the standard
+                OAuth client pattern. The SDK does not cache provider
+                returns.
+
+                Provider exceptions propagate unchanged from the request
+                that triggered the invocation. No fallback to stale
+                headers, no swallowing, no retry. Other in-flight or
+                subsequent requests are unaffected — the session is not
+                poisoned. Adopters who need resilience implement it inside
+                their provider, where the refresh context lives.
+            name_prefix: Prefix prepended to every discovered tool's name.
+            name_filter: Predicate over server-side tool names; tools for
+                which it returns ``False`` are skipped during discovery.
+            discovery_timeout: Bounds the MCP initialization handshake and
+                ``tools/list`` combined.
+            default_call_timeout: Bounds each ``execute()`` call when the
+                tool's schema does not declare its own timeout.
+        """
+
+        auth = _HeadersProviderAuth(headers_provider) if headers_provider is not None else None
 
         def _factory() -> contextlib.AbstractAsyncContextManager[tuple[Any, ...]]:
-            return _sse_client(url, headers=headers)
+            return _sse_client(url, headers=headers, auth=auth)
 
         return cls(
             transport_factory=_factory,
@@ -207,6 +292,7 @@ class MCPClient:
         url: str,
         *,
         headers: dict[str, str] | None = None,
+        headers_provider: _HeadersProvider | None = None,
         name_prefix: str = "",
         name_filter: Callable[[str], bool] | None = None,
         discovery_timeout: float | None = 30.0,
@@ -219,12 +305,54 @@ class MCPClient:
         ``(read, write, get_session_id)``; the session-id getter is
         intentionally dropped here — surfacing it as a public property is
         a follow-up.
+
+        Args:
+            url: The MCP server endpoint URL.
+            headers: Static headers set once on the underlying
+                ``httpx.AsyncClient`` at construction. Recommended for
+                stable identity headers (User-Agent, tenant ID, tracing
+                correlation IDs) that do not rotate during a session.
+            headers_provider: Optional async callable
+                ``Callable[[], Awaitable[dict[str, str]]]`` invoked
+                **before every outgoing HTTP request** to produce a
+                rotating header overlay. The provider runs on the
+                initialization POST, on each ``list_tools`` POST, on each
+                ``call_tool`` POST, and on the session-termination DELETE.
+
+                The returned mapping is merged into the request's headers
+                with **provider keys winning on conflict** against the
+                static ``headers`` set, against MCP-protocol headers
+                (``Mcp-Session-Id``, ``Mcp-Protocol-Version``), or any
+                other pre-existing header on the request. Adopters are
+                expected not to return MCP-protocol headers from the
+                provider.
+
+                The provider is **expected to cache internally** and only
+                perform real refresh work near token expiry — the standard
+                OAuth client pattern. The SDK does not cache provider
+                returns.
+
+                Provider exceptions propagate unchanged from the request
+                that triggered the invocation. No fallback to stale
+                headers, no swallowing, no retry. Other in-flight or
+                subsequent requests are unaffected — the session is not
+                poisoned. Adopters who need resilience implement it inside
+                their provider, where the refresh context lives.
+            name_prefix: Prefix prepended to every discovered tool's name.
+            name_filter: Predicate over server-side tool names; tools for
+                which it returns ``False`` are skipped during discovery.
+            discovery_timeout: Bounds the MCP initialization handshake and
+                ``tools/list`` combined.
+            default_call_timeout: Bounds each ``execute()`` call when the
+                tool's schema does not declare its own timeout.
         """
+
+        auth = _HeadersProviderAuth(headers_provider) if headers_provider is not None else None
 
         def _factory() -> contextlib.AbstractAsyncContextManager[tuple[Any, ...]]:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", DeprecationWarning)
-                return _streamablehttp_client(url, headers=headers)
+                return _streamablehttp_client(url, headers=headers, auth=auth)
 
         return cls(
             transport_factory=_factory,

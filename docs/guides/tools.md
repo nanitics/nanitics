@@ -112,7 +112,7 @@ async with MCPClient.stdio(params) as client:
     result = await agent.run("Show me the first few files in /tmp.")
 ```
 
-For SSE servers, use `MCPClient.sse(url=..., headers=...)` with the same `async with` shape.
+For HTTP servers, use `MCPClient.sse(url=..., headers=..., headers_provider=...)` or `MCPClient.streamable_http(url=..., headers=..., headers_provider=...)` with the same `async with` shape. `headers` is the static base set once on the underlying HTTP client (recommended for stable identity headers like `User-Agent` or tenant IDs); `headers_provider` is an optional async callable invoked before every outgoing request to produce a rotating overlay (see [Rotating credentials](#rotating-credentials) below).
 
 ### Name Management
 
@@ -140,6 +140,38 @@ Two timeouts bound the connection:
 - **`discovery_timeout`** (default 30s) — bounds the MCP initialization handshake and `tools/list` combined. On timeout, `LLMProviderError(provider="mcp")` is raised.
 - **`default_call_timeout`** (default 60s) — bounds each `execute()` call. Server-declared per-tool timeouts (rare) in `ToolSchema.timeout_seconds` override this. On timeout, `ToolTimeoutError` is raised.
 
+### Rotating credentials
+
+The MCP June 2025 spec mandates OAuth for HTTP transports. OAuth access tokens typically expire every 5–60 minutes, but an MCP session is intended to outlive any single token. The static `headers=` parameter is captured once at construction, so a rotating bearer token passed through `headers` would go stale mid-session — forcing you to exit the `async with`, rebuild the client, and re-run the MCP initialization handshake on every refresh.
+
+`headers_provider` solves this. Pass an async callable to either `MCPClient.sse` or `MCPClient.streamable_http`:
+
+<!-- verify: skip — illustrative fragment; runs inside an async context -->
+```python
+async def fresh_auth() -> dict[str, str]:
+    # Your OAuth client caches the access token and only refreshes near expiry.
+    token = await oauth_client.get_access_token()
+    return {"Authorization": f"Bearer {token}"}
+
+async with MCPClient.streamable_http(
+    url="https://mcp.example.com",
+    headers={"User-Agent": "studio/1.0", "X-Tenant": tenant_id},
+    headers_provider=fresh_auth,
+) as client:
+    tools = await client.list_tools()
+    # ... session runs across many token rotations without reconnecting ...
+```
+
+Decision frame:
+
+- Reach for `headers_provider` when the header value rotates during a session — OAuth bearer tokens, short-lived signed credentials, per-request tracing tokens.
+- Keep using `headers=` for stable identity headers — `User-Agent`, tenant ID, fixed correlation IDs. The static set and the rotating overlay coexist on the same call.
+- Provider keys win on conflict against the static `headers=` set, so you can put a placeholder static `Authorization` value (or omit it entirely) and let the provider be the authority.
+- The provider is **expected to cache internally** and only perform real refresh work near expiry. The SDK does not cache provider returns.
+- Provider exceptions propagate unchanged on the request that triggered the refresh — no fallback to stale credentials, no swallowing. Other in-flight or subsequent requests are unaffected; the session is not poisoned.
+
+See `MCPClient.sse` and `MCPClient.streamable_http` for the full per-parameter contract.
+
 ### Scope
 
 This integration is client-only. Out of scope for now:
@@ -148,7 +180,6 @@ This integration is client-only. Out of scope for now:
 - MCP resources and prompts (only tools are supported).
 - MCP sampling / elicitation callbacks.
 - Dynamic `tools/list_changed` re-discovery — the tool list is cached after the first call.
-- Streamable-HTTP transport — only stdio and SSE are supported.
 
 > **See also:** [`examples/tools/mcp_tools.py`](../../examples/tools/mcp_tools.py) — runnable demo using an in-process MCP server; includes a commented real-stdio section. See the `MCPClient` docstring for the full API surface.
 

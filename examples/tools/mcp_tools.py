@@ -224,6 +224,60 @@ async def main() -> None:
     print(f"  fs_list_files(/tmp): {fs_result.content.splitlines()[0]}, ...")
     print("✓ name_prefix makes cross-server tool sets collision-free")
 
+    # --- Section 4: headers_provider for rotating OAuth tokens (always runs) ---
+    print("\n--- Section 4: headers_provider for rotating OAuth tokens (HTTP transports) ---")
+    #
+    # Background: the MCP June 2025 spec mandates OAuth for HTTP transports.
+    # OAuth access tokens typically expire every 5–60 minutes, but an MCP
+    # session is intended to outlive any single token. The static ``headers=``
+    # parameter is captured once on the underlying ``httpx.AsyncClient`` —
+    # so a rotating bearer token passed through ``headers`` would go stale
+    # mid-session, forcing you to tear down and re-enter the ``async with``
+    # on every refresh.
+    #
+    # ``headers_provider`` is the supported fix. Pass an async callable that
+    # returns ``dict[str, str]``; the SDK invokes it before every outgoing
+    # HTTP request and merges the result onto the request headers (provider
+    # keys win on conflict). The provider is *expected* to cache its token
+    # internally and only refresh near expiry — the standard OAuth client
+    # pattern.
+    #
+    # Below: a deterministic two-step rotation built from a counter, so the
+    # example is reproducible without flakiness. We construct the client
+    # (no network — the URL is illustrative) and demonstrate that the
+    # provider returns a fresh value on each call.
+
+    counter = {"n": 0}
+
+    async def rotating_token_provider() -> dict[str, str]:
+        # In production this would cache the token and only refresh near
+        # expiry. Here we just increment a counter so the rotation is
+        # visible.
+        counter["n"] += 1
+        return {"Authorization": f"Bearer token-v{counter['n']}"}
+
+    # Construct the client with both a static identity header (set once,
+    # never re-read) and the rotating overlay. The two coexist on the same
+    # call: ``User-Agent`` stays put forever, ``Authorization`` refreshes on
+    # every outgoing request via the provider.
+    _http_client = MCPClient.streamable_http(
+        url="https://mcp.example.com/api",  # illustrative; not contacted
+        headers={"User-Agent": "studio/1.0", "X-Tenant": "acme"},
+        headers_provider=rotating_token_provider,
+    )
+    assert _http_client is not None  # construction succeeded; not entered
+
+    # Demonstrate the rotation by calling the provider directly. In a real
+    # session, the SDK calls this for you before every outgoing request.
+    first = await rotating_token_provider()
+    second = await rotating_token_provider()
+    print(f"  Provider return on call 1: {first}")
+    print(f"  Provider return on call 2: {second}")
+    assert first["Authorization"] == "Bearer token-v1"
+    assert second["Authorization"] == "Bearer token-v2"
+    assert first != second
+    print("✓ headers_provider produces a fresh credential on every call; no session re-entry needed")
+
     print("\nAll sections passed ✓")
 
 
