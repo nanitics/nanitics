@@ -702,12 +702,13 @@ class TestCancellation:
             cancellation_token=token,
         )
 
-        await agent.run("Do stuff")
-        # Step 2 should not execute because cancellation happened after level 0
-        solver_input = client.calls[1]["messages"][0].content
-        assert "found" in solver_input
-        # Step 2 result should be missing (not executed)
-        assert "[No result]" in solver_input
+        result = await agent.run("Do stuff")
+        # Cancellation between levels now short-circuits the run before the
+        # solver phase — the agent returns ``termination_reason="cancelled"``
+        # and Step 2 (the dependent level) never executes.
+        assert result.termination_reason == "cancelled"
+        # Only the planner LLM call should have happened; no solver call.
+        assert len(client.calls) == 1
 
 
 # ──────────────────────────────────────────────────────────

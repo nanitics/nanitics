@@ -16,6 +16,7 @@ from nanitics.infrastructure.observability.events import (
     Usage,
     WorkingMemoryUpdateEvent,
 )
+from nanitics.safety.cancellable_dispatch import RunCancelled, run_cancellable
 from nanitics.safety.cancellation import CancellationToken
 from nanitics.safety.iteration_limits import IterationLimiter, ToolCallLimiter
 from nanitics.strategies.agents.context import ContextManagement, ContextProvider
@@ -347,14 +348,19 @@ class ReActAgent(Agent):
                         )
                     )
 
-                    await self._dispatch_tool_batch(
-                        response.tool_calls,
-                        messages,
-                        available_tools,
-                        step_number,
-                        revision_count,
-                        usages,
-                    )
+                    try:
+                        await self._dispatch_tool_batch(
+                            response.tool_calls,
+                            messages,
+                            available_tools,
+                            step_number,
+                            revision_count,
+                            usages,
+                        )
+                    except RunCancelled as exc:
+                        self._emit_safety_cancellation(exc.step_number or step_number)
+                        termination_reason = "cancelled"
+                        break
 
                     if self._tool_call_limiter is not None:
                         try:
@@ -484,7 +490,12 @@ class ReActAgent(Agent):
                 continue
             tool_attempts.setdefault(i, 0)
             try:
-                result = await self._tool_registry.dispatch(tool_call)
+                result = await run_cancellable(
+                    self._tool_registry.dispatch(tool_call),
+                    self._cancellation_token,
+                    tool_name=tool_call.name,
+                    step_number=step_number,
+                )
                 # Propagate ``ToolResult.metadata`` onto ``Message.metadata`` so
                 # application code that inspects the conversation (e.g.
                 # ``TruncationPolicy`` reading ``metadata['protected']``) sees
@@ -515,6 +526,11 @@ class ReActAgent(Agent):
                     completed_tool_results=completed_tool_results,
                     suspended_tool_index=i,
                 )
+                raise
+            except RunCancelled:
+                # Cancellation is a control-flow signal — surface it
+                # past the error-handler so the agent loop converts it
+                # to ``termination_reason="cancelled"``.
                 raise
             except Exception as e:
                 correction = self._error_handler.handle_tool_error(e, tool_attempts[i], available_tools)

@@ -1,3 +1,4 @@
+import asyncio
 import threading
 from unittest.mock import AsyncMock, Mock
 
@@ -73,6 +74,109 @@ class TestCancellationTokenThreadSafety:
         thread.join()
 
         assert token.is_cancelled is True
+
+
+class TestCancellationTokenWaitAsync:
+    async def test_already_cancelled_resolves_immediately(self):
+        token = CancellationToken()
+        token.cancel()
+        # No timeout needed — if this hangs, the test framework's own
+        # timeout will surface the bug. We assert it returns without
+        # awaiting any external signal.
+        await asyncio.wait_for(token.wait_async(), timeout=1.0)
+
+    async def test_same_loop_cancel_wakes_pending_waiter(self):
+        token = CancellationToken()
+
+        async def _cancel_soon() -> None:
+            # Yield once so the waiter is parked on the asyncio.Event first.
+            await asyncio.sleep(0)
+            token.cancel()
+
+        await asyncio.gather(
+            asyncio.wait_for(token.wait_async(), timeout=1.0),
+            _cancel_soon(),
+        )
+        assert token.is_cancelled
+
+    async def test_cross_thread_cancel_wakes_pending_waiter(self):
+        token = CancellationToken()
+
+        async def _trigger() -> None:
+            # ``asyncio.to_thread`` schedules ``token.cancel()`` on a worker
+            # thread, exercising the ``call_soon_threadsafe`` branch.
+            await asyncio.to_thread(token.cancel)
+
+        # Park the waiter, then fire ``cancel()`` from another thread.
+        waiter = asyncio.create_task(token.wait_async())
+        await asyncio.sleep(0)  # let the waiter bind the loop
+        trigger = asyncio.create_task(_trigger())
+        await asyncio.wait_for(waiter, timeout=1.0)
+        await trigger
+        assert token.is_cancelled
+
+    async def test_wait_async_from_different_loop_raises(self):
+        token = CancellationToken()
+        # First-loop bind happens here.
+        bind_loop = asyncio.get_running_loop()
+        await asyncio.sleep(0)  # establish loop running
+
+        # Force a bind by calling wait_async briefly (already-cancelled fast
+        # path still binds the loop in the current implementation).
+        async def _first_wait() -> None:
+            # Schedule a cancel so the wait resolves quickly.
+            asyncio.get_running_loop().call_soon(token.cancel)
+            await token.wait_async()
+
+        await _first_wait()
+        assert token._bound_loop is bind_loop
+
+        # Now try to use it from a different loop.
+        def _other_loop_attempt() -> Exception | None:
+            other = asyncio.new_event_loop()
+            try:
+
+                async def _wait() -> None:
+                    await token.wait_async()
+
+                try:
+                    other.run_until_complete(_wait())
+                    return None
+                except Exception as exc:
+                    return exc
+            finally:
+                other.close()
+
+        err = await asyncio.to_thread(_other_loop_attempt)
+        assert isinstance(err, RuntimeError)
+        assert "different event loop" in str(err)
+
+    async def test_cancel_before_wait_async_binds_fast_path(self):
+        token = CancellationToken()
+        token.cancel()
+        # The first call after cancel should bind, see the already-cancelled
+        # state, and return immediately.
+        await asyncio.wait_for(token.wait_async(), timeout=1.0)
+        # Second call still works.
+        await asyncio.wait_for(token.wait_async(), timeout=1.0)
+
+    async def test_cancel_from_loop_thread_is_direct_set(self):
+        # Same-loop ``cancel()`` after binding goes through ``event.set()``
+        # directly, not ``call_soon_threadsafe``. Cover that branch.
+        token = CancellationToken()
+        waiter = asyncio.create_task(token.wait_async())
+        await asyncio.sleep(0)  # bind
+        token.cancel()
+        await asyncio.wait_for(waiter, timeout=1.0)
+
+    def test_cancel_before_any_async_use_is_noop_for_asyncio_event(self):
+        # Without a bound loop, ``cancel()`` must still set the thread event
+        # and not crash. This is the "no loop yet" branch in ``cancel``.
+        token = CancellationToken()
+        token.cancel()
+        assert token.is_cancelled is True
+        assert token._bound_loop is None
+        assert token._asyncio_event is None
 
 
 class TestAgentCancellationTokenAccess:

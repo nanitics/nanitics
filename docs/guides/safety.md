@@ -10,7 +10,7 @@ Agents run in loops, call external services, and — with `CodeActAgent` — exe
 |-----------|-----------------|-------|-------------|
 | Iteration limits | Infinite loops, unbounded token spend | Per-agent step counting | Raises `AgentIterationLimitError` |
 | Tool call limits | Unbounded tool usage within allowed steps | Per-agent cumulative tool call counting | Raises `AgentToolCallLimitError` |
-| Cancellation | Runaway agents in production (API timeouts, user abort) | External signal, checked between steps | Agent exits gracefully after current step |
+| Cancellation | Runaway agents in production (API timeouts, user abort) | External signal — checked between steps and raced against the in-flight tool/sandbox await | Agent returns `AgentResult(termination_reason="cancelled")`; an in-flight tool call is interrupted, not waited out |
 | Sandboxing | Dangerous code execution on host | Code execution environments (`CodeActAgent`) | Code runs isolated; failures contained |
 
 ## When to Use Each
@@ -68,7 +68,9 @@ A total-run budget spanning nested agents is not currently a primitive — per-a
 
 `CancellationToken` provides cooperative cancellation — an external signal that tells the agent to stop gracefully. The token is thread-safe and can be triggered from any thread (e.g., an API timeout handler). Cancellation is irreversible once signalled.
 
-Cancellation is **cooperative and polled between agent steps**; a long-running tool call or LLM request cannot be interrupted mid-flight. Once a tool starts running, it runs to completion. This keeps the tool authoring contract simple and avoids partial-execution states. For tighter control over in-flight calls, pair cancellation with the provider's `request_timeout` (and, for adopter-authored tools that use `create_http_tool`, its `request_timeout` argument) so long calls fail fast at the transport layer.
+Cancellation is **checked between agent steps and raced against the in-flight tool or sandbox await**. When `cancel()` fires during a tool call, the underlying coroutine is cancelled and the agent exits its loop with `AgentResult.termination_reason="cancelled"`. The tool-authoring contract is unchanged — tools do not need to accept a cancellation parameter; the agent loop is responsible for honoring the token. A long-running LLM request is still not interrupted directly; pair cancellation with the provider's `request_timeout` (and, for adopter-authored tools that use `create_http_tool`, its `request_timeout` argument) for the LLM-call path.
+
+Internally the helper that races the token against an awaitable raises `RunCancelled` (re-exported from `nanitics.errors`). Application code normally observes the structured `AgentResult` instead of catching the exception — `RunCancelled` is an internal control-flow signal that the agent loop converts to the public `termination_reason="cancelled"` outcome.
 
 > **See also:** [examples/control/cancellation.py](../../examples/control/cancellation.py)
 
@@ -90,7 +92,7 @@ For the honest-limits posture — what the Docker container blocks and what it d
 
 **Confusing iteration limits and tool call limits.** Iteration limits count reasoning steps. Tool call limits count individual tool invocations across all steps. An agent with `max_iterations=5` and `max_tool_calls=10` can take at most 5 steps, but also no more than 10 total tool calls across those steps.
 
-**Assuming cancellation is immediate.** The token is checked between steps, not during LLM calls. A cancelled agent still completes its current step before stopping.
+**Assuming cancellation is immediate.** Cancellation interrupts an in-flight tool or sandbox call and is also checked between steps, but the active LLM request is not interrupted — the run stops once the current LLM call returns. Pair the token with the provider's `request_timeout` if you need to bound that hop.
 
 **Forgetting sandbox cleanup.** Always use `async with` or explicitly call `cleanup()`. Docker containers persist until cleaned up, which can leak resources.
 

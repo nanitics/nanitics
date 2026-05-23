@@ -397,6 +397,48 @@ class TestMCPClientFactory:
         assert hasattr(cm, "__aenter__")
         assert hasattr(cm, "__aexit__")
 
+    def test_streamable_http_factory_stores_parameters(self) -> None:
+        client = MCPClient.streamable_http(
+            url="http://example.com/mcp",
+            headers={"Authorization": "Bearer x"},
+            name_prefix="web_",
+            discovery_timeout=10.0,
+            default_call_timeout=5.0,
+        )
+        assert client._name_prefix == "web_"
+        assert client._discovery_timeout == 10.0
+        assert client._default_call_timeout == 5.0
+        assert client._entered is False
+
+    def test_streamable_http_factory_invokes_upstream_client(self) -> None:
+        client = MCPClient.streamable_http(url="http://example.com/mcp")
+        cm = client._transport_factory()
+        assert hasattr(cm, "__aenter__")
+        assert hasattr(cm, "__aexit__")
+
+    def test_streamable_http_parameter_parity_with_sse(self) -> None:
+        # Confirm both factories accept the same constructor knobs and stash
+        # them identically — guards against signature drift between transports.
+        sse = MCPClient.sse(
+            url="u",
+            headers={"a": "b"},
+            name_prefix="p_",
+            name_filter=lambda n: True,
+            discovery_timeout=7.5,
+            default_call_timeout=4.25,
+        )
+        http = MCPClient.streamable_http(
+            url="u",
+            headers={"a": "b"},
+            name_prefix="p_",
+            name_filter=lambda n: True,
+            discovery_timeout=7.5,
+            default_call_timeout=4.25,
+        )
+        assert sse._name_prefix == http._name_prefix
+        assert sse._discovery_timeout == http._discovery_timeout
+        assert sse._default_call_timeout == http._default_call_timeout
+
 
 class TestMCPClientLifecycle:
     async def test_successful_enter_and_exit(self) -> None:
@@ -428,6 +470,37 @@ class TestMCPClientLifecycle:
         with pytest.raises(RuntimeError, match="no transport"):
             async with client:
                 pass  # pragma: no cover
+
+    async def test_three_tuple_transport_factory_accepted(self) -> None:
+        # Streamable HTTP's upstream client yields a 3-tuple
+        # ``(read, write, get_session_id)``. The MCPClient adapter must
+        # accept that shape (dropping the getter) without disturbing the
+        # 2-tuple stdio/SSE path.
+        server = FastMCP(name="t")
+
+        @server.tool(description="ping")
+        def ping() -> str:
+            return "pong"
+
+        two_tuple_factory = _memory_transport_factory(server)
+        session_id_calls: list[int] = []
+
+        @asynccontextmanager
+        async def _three_tuple_transport() -> AsyncIterator[tuple[Any, Any, Any]]:
+            async with two_tuple_factory() as (read, write):
+
+                def _get_session_id() -> str:
+                    session_id_calls.append(1)
+                    return "sid-123"
+
+                yield read, write, _get_session_id
+
+        client = MCPClient._for_testing(transport_factory=_three_tuple_transport)
+        async with client as c:
+            tools = await c.list_tools()
+            assert [t.schema.name for t in tools] == ["ping"]
+        # The session-id getter is intentionally ignored.
+        assert session_id_calls == []
 
     async def test_mcptool_unusable_after_exit(self) -> None:
         server = FastMCP(name="t")

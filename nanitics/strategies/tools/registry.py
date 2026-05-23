@@ -242,6 +242,12 @@ class ToolRegistry:
                 duration_ms=duration_ms,
             )
             raise
+        except asyncio.CancelledError:
+            # ``CancelledError`` is ``BaseException`` on Python 3.8+ so it
+            # already bypasses the broad ``Exception`` clause below. This
+            # explicit re-raise documents the invariant against future
+            # regressions (someone broadening to ``BaseException``).
+            raise
         except Exception as e:
             duration_ms = (time.perf_counter() - start) * 1000
             self._emit_invoke(tool_call)

@@ -108,6 +108,14 @@ class MCPTool:
                 str(exc),
                 tool_name=self._schema.name,
             ) from exc
+        except asyncio.CancelledError:
+            # ``CancelledError`` is ``BaseException`` on Python 3.8+ so it
+            # already escapes the ``except Exception`` branch below — this
+            # explicit re-raise is a ward against future regressions
+            # (e.g. someone broadening to ``except BaseException`` for
+            # "robustness" or an anyio shim that surfaces cancellation as
+            # a regular ``Exception``).
+            raise
         except Exception as exc:
             raise LLMProviderError(
                 f"MCP transport failure during {self._schema.name}: {exc}",
