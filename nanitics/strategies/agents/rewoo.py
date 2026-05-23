@@ -16,6 +16,7 @@ from nanitics.infrastructure.observability.events import (
     ToolInfo,
     Usage,
 )
+from nanitics.safety.cancellable_dispatch import RunCancelled, run_cancellable
 from nanitics.safety.cancellation import CancellationToken
 from nanitics.strategies.agents.context import ContextManagement, ContextProvider
 from nanitics.strategies.agents.evaluation import EvaluationVerdict, OutputEvaluator
@@ -310,10 +311,12 @@ class ReWOOAgent(Agent):
 
         # --- Phase 2: Worker ---
         variable_map: dict[int, str] = {}
+        worker_cancelled = False
         with self._emitter.span("worker"):
             for level in levels:
                 if self._is_cancelled:
                     self._emit_safety_cancellation(step_number)
+                    worker_cancelled = True
                     break
 
                 async def _execute_step(step: ReWOOStep) -> None:
@@ -329,7 +332,12 @@ class ReWOOAgent(Agent):
                     plan_step = plan_steps[step.step_number - 1]
                     try:
                         with self._emitter.span(f"step-{step.step_number}"):
-                            tool_result = await self._tool_registry.dispatch(tool_call)
+                            tool_result = await run_cancellable(
+                                self._tool_registry.dispatch(tool_call),
+                                self._cancellation_token,
+                                tool_name=tool_call.name,
+                                step_number=step.step_number,
+                            )
                             result_text = tool_result.content[: self._max_observation_length]
                             variable_map[step.step_number] = result_text
 
@@ -337,6 +345,8 @@ class ReWOOAgent(Agent):
                                 update={"status": StepStatus.completed, "result": result_text}
                             )
                             plan_steps[step.step_number - 1] = updated_step
+                    except RunCancelled:
+                        raise
                     except Exception as e:
                         error_text = str(e)[: self._max_observation_length]
                         variable_map[step.step_number] = f"[ERROR] {error_text}"
@@ -360,7 +370,12 @@ class ReWOOAgent(Agent):
                         )
                     )
 
-                await asyncio.gather(*[_execute_step(s) for s in level])
+                try:
+                    await asyncio.gather(*[_execute_step(s) for s in level])
+                except RunCancelled as exc:
+                    self._emit_safety_cancellation(exc.step_number or step_number)
+                    worker_cancelled = True
+                    break
 
                 for s in level:
                     step_number += 1
@@ -377,6 +392,15 @@ class ReWOOAgent(Agent):
                 }
             )
             await self._plan_store.update(updated_plan)
+
+        if worker_cancelled:
+            return AgentResult(
+                output=None,
+                total_steps=step_number,
+                termination_reason="cancelled",
+                messages=all_messages,
+                usage=self._aggregate_usage(usages),
+            )
 
         # --- Phase 3: Solver ---
         with self._emitter.span("solver"):

@@ -20,6 +20,7 @@ from nanitics.infrastructure.observability.events import (
     TreeSearchNodePrunedEvent,
     Usage,
 )
+from nanitics.safety.cancellable_dispatch import RunCancelled, run_cancellable
 from nanitics.safety.cancellation import CancellationToken
 from nanitics.strategies.agents.base import Agent, AgentInput, AgentResult, _input_to_text
 from nanitics.strategies.agents.context import ContextManagement, ContextProvider
@@ -363,7 +364,11 @@ class LATSAgent(Agent):
                 tc = response.tool_calls[0]
                 thought = response.content or ""
                 try:
-                    result = await self._tool_registry.dispatch(tc)
+                    result = await run_cancellable(
+                        self._tool_registry.dispatch(tc),
+                        self._cancellation_token,
+                        tool_name=tc.name,
+                    )
                     child = ActionNode(
                         parent_id=node.id,
                         depth=node.depth + 1,
@@ -373,6 +378,8 @@ class LATSAgent(Agent):
                         observation=result.content,
                         metadata=result.metadata or None,
                     )
+                except RunCancelled:
+                    raise
                 except Exception as exc:
                     child = ActionNode(
                         parent_id=node.id,
@@ -637,50 +644,55 @@ class LATSAgent(Agent):
 
             step_number = iteration
 
-            with self._emitter.span(f"step-{iteration}"):
-                leaf = self._select_leaf()
-                selection_path = [n.id for n in self._get_path_to_root(leaf.id)]
+            try:
+                with self._emitter.span(f"step-{iteration}"):
+                    leaf = self._select_leaf()
+                    selection_path = [n.id for n in self._get_path_to_root(leaf.id)]
 
-                if leaf.is_terminal or leaf.is_failed:
-                    # Re-selected a terminal/failed node — backpropagate existing value
-                    avg_value = leaf.value / max(leaf.visit_count, 1)
-                    self._backpropagate(leaf.id, avg_value)
+                    if leaf.is_terminal or leaf.is_failed:
+                        # Re-selected a terminal/failed node — backpropagate existing value
+                        avg_value = leaf.value / max(leaf.visit_count, 1)
+                        self._backpropagate(leaf.id, avg_value)
 
-                    self._emit_mcts_iteration(iteration, leaf.id, selection_path, 0)
-                    self._emit_step(step_number)
-                    continue
-
-                if leaf.depth >= self._max_depth:
-                    # At max depth — evaluate but don't expand
-                    score, _verdict = await self._evaluate_node(leaf, task_text)
-                    self._backpropagate(leaf.id, score)
-
-                    self._emit_mcts_iteration(iteration, leaf.id, selection_path, 0)
-                    self._emit_step(step_number)
-                    continue
-
-                # Expand
-                children = await self._expand(leaf, task_text, tool_schemas, episode_context)
-
-                # Evaluate and backpropagate each child
-                for child in children:
-                    current_child = self._nodes[child.id]
-                    if current_child.is_failed:
-                        self._backpropagate(child.id, 0.0)
+                        self._emit_mcts_iteration(iteration, leaf.id, selection_path, 0)
+                        self._emit_step(step_number)
                         continue
-                    score, verdict = await self._evaluate_node(current_child, task_text)
-                    self._backpropagate(child.id, score)
-                    if current_child.is_terminal and verdict == EvaluationVerdict.ACCEPT:
-                        accepted_terminal_ids.append(current_child.id)
 
-                # If every child of the expanded leaf ended up failed, mark
-                # the leaf (and, transitively, its ancestors) as dead too —
-                # otherwise the next iteration's _select_leaf would return
-                # the same leaf and _expand would pile on more zombie children.
-                self._propagate_pruning(leaf.id)
+                    if leaf.depth >= self._max_depth:
+                        # At max depth — evaluate but don't expand
+                        score, _verdict = await self._evaluate_node(leaf, task_text)
+                        self._backpropagate(leaf.id, score)
 
-                self._emit_mcts_iteration(iteration, leaf.id, selection_path, len(children))
-                self._emit_step(step_number)
+                        self._emit_mcts_iteration(iteration, leaf.id, selection_path, 0)
+                        self._emit_step(step_number)
+                        continue
+
+                    # Expand
+                    children = await self._expand(leaf, task_text, tool_schemas, episode_context)
+
+                    # Evaluate and backpropagate each child
+                    for child in children:
+                        current_child = self._nodes[child.id]
+                        if current_child.is_failed:
+                            self._backpropagate(child.id, 0.0)
+                            continue
+                        score, verdict = await self._evaluate_node(current_child, task_text)
+                        self._backpropagate(child.id, score)
+                        if current_child.is_terminal and verdict == EvaluationVerdict.ACCEPT:
+                            accepted_terminal_ids.append(current_child.id)
+
+                    # If every child of the expanded leaf ended up failed, mark
+                    # the leaf (and, transitively, its ancestors) as dead too —
+                    # otherwise the next iteration's _select_leaf would return
+                    # the same leaf and _expand would pile on more zombie children.
+                    self._propagate_pruning(leaf.id)
+
+                    self._emit_mcts_iteration(iteration, leaf.id, selection_path, len(children))
+                    self._emit_step(step_number)
+            except RunCancelled as exc:
+                self._emit_safety_cancellation(exc.step_number or step_number)
+                termination_reason = "cancelled"
+                break
 
         # Select best from accepted terminals, or fall back to best node
         if accepted_terminal_ids:

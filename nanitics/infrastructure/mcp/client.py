@@ -12,8 +12,9 @@ symbol directly for the common case.
 
 Current scope:
 
-* Transports: stdio (via ``mcp.client.stdio.stdio_client``) and SSE (via
-  ``mcp.client.sse.sse_client``). Streamable HTTP is not yet supported.
+* Transports: stdio (via ``mcp.client.stdio.stdio_client``), SSE (via
+  ``mcp.client.sse.sse_client``), and Streamable HTTP (via
+  ``mcp.client.streamable_http.streamablehttp_client``).
 * Tools only — no resources, prompts, sampling callbacks, or dynamic
   ``tools/list_changed`` re-discovery.
 * Tool list is cached on first ``list_tools()`` call.
@@ -31,6 +32,7 @@ Lifecycle contract:
 from __future__ import annotations
 
 import contextlib
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Self
@@ -44,6 +46,15 @@ try:
     from mcp import StdioServerParameters as _UpstreamStdioParameters
     from mcp import stdio_client as _stdio_client
     from mcp.client.sse import sse_client as _sse_client
+
+    # ``streamablehttp_client`` is the legacy upstream symbol kept for its
+    # ``headers=`` keyword argument; the newer ``streamable_http_client``
+    # requires the caller to pre-construct an ``httpx.AsyncClient``. We
+    # consciously prefer the legacy symbol for parameter parity with
+    # ``MCPClient.sse``. Silence the import-time DeprecationWarning.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        from mcp.client.streamable_http import streamablehttp_client as _streamablehttp_client
 except ImportError as _err:  # pragma: no cover
     raise ImportError("MCPClient requires the 'mcp' extra: pip install nanitics[mcp]") from _err
 
@@ -117,7 +128,7 @@ class MCPClient:
     def __init__(
         self,
         *,
-        transport_factory: Callable[[], contextlib.AbstractAsyncContextManager[tuple[Any, Any]]],
+        transport_factory: Callable[[], contextlib.AbstractAsyncContextManager[tuple[Any, ...]]],
         name_prefix: str = "",
         name_filter: Callable[[str], bool] | None = None,
         discovery_timeout: float | None = 30.0,
@@ -155,7 +166,7 @@ class MCPClient:
 
         upstream = parameters._to_upstream()
 
-        def _factory() -> contextlib.AbstractAsyncContextManager[tuple[Any, Any]]:
+        def _factory() -> contextlib.AbstractAsyncContextManager[tuple[Any, ...]]:
             return _stdio_client(upstream)
 
         return cls(
@@ -179,8 +190,41 @@ class MCPClient:
     ) -> MCPClient:
         """Connect to an MCP server over Server-Sent Events."""
 
-        def _factory() -> contextlib.AbstractAsyncContextManager[tuple[Any, Any]]:
+        def _factory() -> contextlib.AbstractAsyncContextManager[tuple[Any, ...]]:
             return _sse_client(url, headers=headers)
+
+        return cls(
+            transport_factory=_factory,
+            name_prefix=name_prefix,
+            name_filter=name_filter,
+            discovery_timeout=discovery_timeout,
+            default_call_timeout=default_call_timeout,
+        )
+
+    @classmethod
+    def streamable_http(
+        cls,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        name_prefix: str = "",
+        name_filter: Callable[[str], bool] | None = None,
+        discovery_timeout: float | None = 30.0,
+        default_call_timeout: float | None = 60.0,
+    ) -> MCPClient:
+        """Connect to an MCP server over the Streamable HTTP transport.
+
+        Mirrors :meth:`sse` parameter-for-parameter. The upstream
+        ``streamablehttp_client`` yields a 3-tuple
+        ``(read, write, get_session_id)``; the session-id getter is
+        intentionally dropped here — surfacing it as a public property is
+        a follow-up.
+        """
+
+        def _factory() -> contextlib.AbstractAsyncContextManager[tuple[Any, ...]]:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                return _streamablehttp_client(url, headers=headers)
 
         return cls(
             transport_factory=_factory,
@@ -194,7 +238,7 @@ class MCPClient:
     def _for_testing(
         cls,
         *,
-        transport_factory: Callable[[], contextlib.AbstractAsyncContextManager[tuple[Any, Any]]],
+        transport_factory: Callable[[], contextlib.AbstractAsyncContextManager[tuple[Any, ...]]],
         name_prefix: str = "",
         name_filter: Callable[[str], bool] | None = None,
         discovery_timeout: float | None = 30.0,
@@ -223,7 +267,15 @@ class MCPClient:
         await self._stack.__aenter__()
         try:
             # 1. Enter the transport context to get streams.
-            read_stream, write_stream = await self._stack.enter_async_context(self._transport_factory())
+            #    stdio/SSE yield a 2-tuple ``(read, write)``; streamable HTTP
+            #    yields a 3-tuple ``(read, write, get_session_id)`` — the
+            #    session-id getter is intentionally dropped for now (see
+            #    design-rationale §5).
+            streams = await self._stack.enter_async_context(self._transport_factory())
+            if len(streams) == 3:
+                read_stream, write_stream, _get_session_id = streams
+            else:
+                read_stream, write_stream = streams
             # 2. Open a ClientSession over the streams.
             raw_session: ClientSession = await self._stack.enter_async_context(ClientSession(read_stream, write_stream))
             # 3. Run initialization handshake, bounded by discovery_timeout.

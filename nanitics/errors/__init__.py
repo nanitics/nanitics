@@ -38,6 +38,7 @@ from nanitics.infrastructure.errors import (
     ToolTimeoutError,
 )
 from nanitics.infrastructure.observability import MalformedStoredEventError
+from nanitics.safety.cancellable_dispatch import RunCancelled
 
 __all__ = [
     "AgentBudgetExceededError",
@@ -66,6 +67,7 @@ __all__ = [
     "PeerBudgetExceededError",
     "PipelineContractError",
     "RetryPolicy",
+    "RunCancelled",
     "ToolError",
     "ToolExecutionError",
     "ToolNotFoundError",

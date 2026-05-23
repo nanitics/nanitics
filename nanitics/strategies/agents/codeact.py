@@ -13,6 +13,7 @@ from nanitics.infrastructure.observability.events import (
     ToolInfo,
     Usage,
 )
+from nanitics.safety.cancellable_dispatch import RunCancelled, run_cancellable
 from nanitics.safety.cancellation import CancellationToken
 from nanitics.safety.iteration_limits import IterationLimiter
 from nanitics.safety.sandbox.protocol import ExecutionResult, Sandbox
@@ -423,7 +424,17 @@ class CodeActAgent(Agent):
                         )
                     )
 
-                    result = await self._sandbox.execute(code)
+                    try:
+                        result = await run_cancellable(
+                            self._sandbox.execute(code),
+                            self._cancellation_token,
+                            tool_name="execute_code",
+                            step_number=step_number,
+                        )
+                    except RunCancelled as exc:
+                        self._emit_safety_cancellation(exc.step_number or step_number)
+                        termination_reason = "cancelled"
+                        break  # exit the per-call loop; outer loop checks below
 
                     self._emitter.emit(
                         CodeExecutionResultEvent(
@@ -450,6 +461,12 @@ class CodeActAgent(Agent):
                     # codeact-specific design choice deferred to a future
                     # Phase; ``Message.metadata`` stays ``None`` here by design.
                     tool_result_messages.append(Message(role="tool_result", content=obs, tool_call_id=tc.id))
+
+                if termination_reason == "cancelled":
+                    # Skip the post-batch bookkeeping — the partial step
+                    # state isn't useful and the safety event was emitted
+                    # at the cancellation site.
+                    break
 
                 observation = "\n\n".join(observations)
 
@@ -504,6 +521,7 @@ class CodeActAgent(Agent):
     def _create_tool_dispatcher(self) -> Callable[[str, dict[str, Any]], Awaitable[str]]:  # pragma: no cover (docker)
         registry = self._tool_registry
         assert registry is not None
+        token = self._cancellation_token
 
         async def dispatch(name: str, args: dict[str, Any]) -> str:
             tool_call = ToolCall(
@@ -511,7 +529,7 @@ class CodeActAgent(Agent):
                 name=name,
                 arguments=args,
             )
-            result = await registry.dispatch(tool_call)
+            result = await run_cancellable(registry.dispatch(tool_call), token, tool_name=name)
             return result.content
 
         return dispatch
