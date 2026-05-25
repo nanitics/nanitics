@@ -76,6 +76,7 @@ def _run_row(**overrides: Any) -> dict[str, Any]:
         "metadata": {"k": "v"},
         "error": None,
         "result": None,
+        "parent_run_id": None,
     }
     row.update(overrides)
     return row
@@ -111,12 +112,13 @@ class TestGetSchemaSql:
 class TestBuildMigrations:
     def test_default_table_names(self) -> None:
         migrations = _build_migrations("trace_events", "runs")
-        assert len(migrations) == 2
+        assert len(migrations) == 3
         baseline = migrations[0].up_sql[0]
         assert "trace_events" in baseline
         assert " runs (" in baseline
         assert migrations[0].version == 1
         assert migrations[1].version == 2
+        assert migrations[2].version == 3
 
     def test_custom_events_table(self) -> None:
         migrations = _build_migrations("my_events", "runs")
@@ -133,6 +135,29 @@ class TestBuildMigrations:
         assert " my_runs (" in baseline
         assert "idx_my_runs_" in baseline
         assert " runs (" not in baseline
+
+    def test_v3_adds_parent_run_id_with_cascade_and_partial_index(self) -> None:
+        migrations = _build_migrations("trace_events", "runs")
+        v3 = migrations[2]
+        assert v3.version == 3
+        joined = "\n".join(v3.up_sql)
+        assert "ALTER TABLE runs" in joined
+        assert "ADD COLUMN parent_run_id TEXT NULL" in joined
+        assert "REFERENCES runs(id) ON DELETE CASCADE" in joined
+        assert "CREATE INDEX idx_runs_parent" in joined
+        assert "WHERE parent_run_id IS NOT NULL" in joined
+
+    def test_v3_substitutes_custom_runs_table_in_alter_index_and_fk(self) -> None:
+        migrations = _build_migrations("evt_x", "runs_y")
+        v3 = migrations[2]
+        joined = "\n".join(v3.up_sql)
+        assert "ALTER TABLE runs_y" in joined
+        assert "REFERENCES runs_y(id)" in joined
+        assert "idx_runs_y_parent" in joined
+        assert "ON runs_y (parent_run_id)" in joined
+        # No bare ``runs`` token leaks through.
+        assert " runs " not in joined
+        assert " runs(" not in joined
 
 
 # ── ensure_schema ──────────────────────────────────────────
@@ -159,18 +184,21 @@ class TestEnsureSchema:
         assert any("pg_advisory_lock" in s for s in sqls)
         assert any("CREATE TABLE _trace_events_schema_version" in s for s in sqls)
         assert any("INSERT INTO _trace_events_schema_version (version) VALUES (0)" in s for s in sqls)
-        # Both migrations applied (baseline + v2 alter).
+        # All three migrations applied (baseline + v2 alter + v3 parent_run_id).
         assert "CREATE TABLE IF NOT EXISTS trace_events" in joined
         assert "ALTER TABLE trace_events" in joined
-        # Version updated to 1 then 2.
+        assert "ADD COLUMN parent_run_id" in joined
+        assert "CREATE INDEX idx_runs_parent" in joined
+        # Version updated to 1, then 2, then 3.
         version_updates = [s for s in sqls if "SET version = $1" in s]
-        assert len(version_updates) == 2
+        assert len(version_updates) == 3
         assert any("pg_advisory_unlock" in s for s in sqls)
 
-    async def test_legacy_database_marks_v1_then_runs_v2(self) -> None:
+    async def test_legacy_database_marks_v1_then_runs_v2_and_v3(self) -> None:
         pool, conn = _make_pool()
-        # Version table missing, events table present, current version = 1.
-        conn.fetchval = AsyncMock(side_effect=[False, True, 1])
+        # Version table missing, events table present, current version = 1,
+        # sibling-guard check: runs table exists.
+        conn.fetchval = AsyncMock(side_effect=[False, True, 1, True])
 
         store = PostgresTraceStore(pool)
         await store.ensure_schema()
@@ -182,14 +210,39 @@ class TestEnsureSchema:
         assert not any("CREATE TABLE IF NOT EXISTS trace_events" in s for s in sqls)
         # v2 migration applied.
         assert any("ALTER TABLE trace_events" in s for s in sqls)
-        # Version updated once (to 2).
+        # v3 migration applied.
+        assert any("ADD COLUMN parent_run_id" in s for s in sqls)
+        # Version updated twice (to 2, then 3).
+        version_updates = [s for s in sqls if "SET version = $1" in s]
+        assert len(version_updates) == 2
+
+    async def test_v2_to_v3_records_alter_and_partial_index(self) -> None:
+        """Specifically verify the v2→v3 transition emits both DDL statements."""
+        pool, conn = _make_pool()
+        # Version table exists, current version 2, runs table exists.
+        conn.fetchval = AsyncMock(side_effect=[True, 2, True])
+
+        store = PostgresTraceStore(pool)
+        await store.ensure_schema()
+
+        sqls = _sql_calls(conn)
+        joined = "\n".join(sqls)
+        # No v0/v1/v2 DDL appears.
+        assert "CREATE TABLE IF NOT EXISTS trace_events" not in joined
+        assert "ALTER COLUMN parent_id" not in joined
+        # v3 ALTER + partial index do appear.
+        assert "ADD COLUMN parent_run_id" in joined
+        assert "REFERENCES runs(id) ON DELETE CASCADE" in joined
+        assert "CREATE INDEX idx_runs_parent" in joined
+        assert "WHERE parent_run_id IS NOT NULL" in joined
+        # Single version bump to 3.
         version_updates = [s for s in sqls if "SET version = $1" in s]
         assert len(version_updates) == 1
 
     async def test_already_at_latest_version_is_noop(self) -> None:
         pool, conn = _make_pool()
-        # Version table exists, current version is already 2.
-        conn.fetchval = AsyncMock(side_effect=[True, 2])
+        # Version table exists, current version is already 3, sibling-guard check: runs table exists.
+        conn.fetchval = AsyncMock(side_effect=[True, 3, True])
 
         store = PostgresTraceStore(pool)
         await store.ensure_schema()
@@ -199,6 +252,7 @@ class TestEnsureSchema:
         assert not any("INSERT INTO _trace_events_schema_version" in s for s in sqls)
         assert not any("CREATE TABLE IF NOT EXISTS trace_events" in s for s in sqls)
         assert not any("ALTER TABLE trace_events" in s for s in sqls)
+        assert not any("ADD COLUMN parent_run_id" in s for s in sqls)
         assert not any("SET version = $1" in s for s in sqls)
         # Advisory lock acquired and released.
         assert any("pg_advisory_lock" in s for s in sqls)
@@ -206,7 +260,9 @@ class TestEnsureSchema:
 
     async def test_advisory_lock_released_on_migration_failure(self) -> None:
         pool, conn = _make_pool()
-        conn.fetchval = AsyncMock(side_effect=[True, 1])
+        # Version table exists, current_version=1, sibling-guard check passes (runs exists),
+        # transaction then fails.
+        conn.fetchval = AsyncMock(side_effect=[True, 1, True])
 
         # Make `conn.transaction()` raise inside the try block so the
         # advisory_unlock in the finally is exercised.
@@ -222,6 +278,40 @@ class TestEnsureSchema:
         sqls = _sql_calls(conn)
         assert any("pg_advisory_lock" in s for s in sqls)
         assert any("pg_advisory_unlock" in s for s in sqls)
+
+    async def test_sibling_conflict_guard_raises_when_runs_table_missing(self) -> None:
+        """If the version row claims baseline ran but configured runs_table is absent,
+        ``ensure_schema`` raises ``RuntimeError`` naming both tables — the SDK will not
+        silently re-run migrations under a different runs_table configuration.
+        """
+        pool, conn = _make_pool()
+        # Version table exists, current_version=2, sibling-guard check: runs_b missing.
+        conn.fetchval = AsyncMock(side_effect=[True, 2, False])
+
+        store = PostgresTraceStore(pool, table_name="evt_shared", runs_table="runs_b")
+        with pytest.raises(RuntimeError) as excinfo:
+            await store.ensure_schema()
+        message = str(excinfo.value)
+        assert "runs_b" in message
+        assert "evt_shared" in message
+        assert "schema version row" in message
+
+        # Advisory lock still released.
+        sqls = _sql_calls(conn)
+        assert any("pg_advisory_unlock" in s for s in sqls)
+
+    async def test_sibling_guard_does_not_fire_on_fresh_database(self) -> None:
+        """``current_version == 0`` path: runs table is legitimately absent and about
+        to be created by the baseline migration. Guard must not fire.
+        """
+        pool, conn = _make_pool()
+        # Version table missing, events table missing, current version=0 (fresh).
+        # If the guard fired here, fetchval would be exhausted earlier — we provide
+        # no fourth value because the guard branch must not be taken.
+        conn.fetchval = AsyncMock(side_effect=[False, False, 0])
+
+        store = PostgresTraceStore(pool)
+        await store.ensure_schema()  # must not raise
 
 
 # ── save_events_batch ──────────────────────────────────────
@@ -467,9 +557,22 @@ class TestRegisterRun:
         conn.execute.assert_awaited_once()
         args = conn.execute.await_args[0]
         assert "INSERT INTO runs" in args[0]
+        assert "parent_run_id" in args[0]
         assert args[1] == "run-1"
         assert args[2] == "trace-1"
         assert args[3] == json.dumps({"k": "v"})
+        # parent_run_id defaults to None.
+        assert args[4] is None
+
+    async def test_inserts_with_explicit_parent_run_id(self) -> None:
+        pool, conn = _make_pool()
+        store = PostgresTraceStore(pool)
+        await store.register_run("child-1", "trace-1", {}, parent_run_id="run-parent")
+
+        args = conn.execute.await_args[0]
+        assert "INSERT INTO runs" in args[0]
+        assert args[1] == "child-1"
+        assert args[4] == "run-parent"
 
 
 # ── update_run_status ──────────────────────────────────────
@@ -645,6 +748,50 @@ class TestListRuns:
         assert len(results) == 1
         assert results[0].id == "run-xyz"
 
+    async def test_parent_run_id_default_unset_omits_predicate(self) -> None:
+        pool, _ = _make_pool()
+        pool.fetch = AsyncMock(return_value=[])
+
+        store = PostgresTraceStore(pool)
+        await store.list_runs()
+
+        sql = pool.fetch.await_args[0][0]
+        assert "parent_run_id" not in sql.split("FROM")[1]
+
+    async def test_parent_run_id_none_filters_top_level_only(self) -> None:
+        pool, _ = _make_pool()
+        pool.fetch = AsyncMock(return_value=[])
+
+        store = PostgresTraceStore(pool)
+        await store.list_runs(parent_run_id=None)
+
+        args = pool.fetch.await_args[0]
+        sql = args[0]
+        assert "parent_run_id IS NULL" in sql
+        # No bound parameter for the IS NULL predicate.
+        assert "run-parent" not in args
+
+    async def test_parent_run_id_string_filters_children(self) -> None:
+        pool, _ = _make_pool()
+        pool.fetch = AsyncMock(return_value=[])
+
+        store = PostgresTraceStore(pool)
+        await store.list_runs(parent_run_id="run-parent")
+
+        args = pool.fetch.await_args[0]
+        sql = args[0]
+        assert "parent_run_id = $" in sql
+        assert "run-parent" in args
+
+    async def test_select_list_includes_parent_run_id(self) -> None:
+        pool, _ = _make_pool()
+        pool.fetch = AsyncMock(return_value=[])
+
+        store = PostgresTraceStore(pool)
+        await store.list_runs()
+        sql = pool.fetch.await_args[0][0]
+        assert "parent_run_id" in sql.split("FROM")[0]
+
 
 # ── count_runs ─────────────────────────────────────────────
 
@@ -674,6 +821,37 @@ class TestCountRuns:
 
         store = PostgresTraceStore(pool)
         assert await store.count_runs() == 0
+
+    async def test_parent_run_id_default_unset_omits_predicate(self) -> None:
+        pool, _ = _make_pool()
+        pool.fetchrow = AsyncMock(return_value={"cnt": 0})
+
+        store = PostgresTraceStore(pool)
+        await store.count_runs()
+
+        sql = pool.fetchrow.await_args[0][0]
+        assert "parent_run_id" not in sql
+
+    async def test_parent_run_id_none_filters_top_level_only(self) -> None:
+        pool, _ = _make_pool()
+        pool.fetchrow = AsyncMock(return_value={"cnt": 0})
+
+        store = PostgresTraceStore(pool)
+        await store.count_runs(parent_run_id=None)
+
+        sql = pool.fetchrow.await_args[0][0]
+        assert "parent_run_id IS NULL" in sql
+
+    async def test_parent_run_id_string_filters_children(self) -> None:
+        pool, _ = _make_pool()
+        pool.fetchrow = AsyncMock(return_value={"cnt": 0})
+
+        store = PostgresTraceStore(pool)
+        await store.count_runs(parent_run_id="run-parent")
+
+        args = pool.fetchrow.await_args[0]
+        assert "parent_run_id = $" in args[0]
+        assert "run-parent" in args
 
 
 # ── delete_run ─────────────────────────────────────────────
@@ -788,3 +966,13 @@ class TestRowToRun:
         row = _run_row(result="not-valid-json-shape")
         run = _row_to_run(row)
         assert run.result == RunResult(output="not-valid-json-shape")
+
+    def test_parent_run_id_none_passthrough(self) -> None:
+        row = _run_row(parent_run_id=None)
+        run = _row_to_run(row)
+        assert run.parent_run_id is None
+
+    def test_parent_run_id_string_passthrough(self) -> None:
+        row = _run_row(parent_run_id="run-parent")
+        run = _row_to_run(row)
+        assert run.parent_run_id == "run-parent"

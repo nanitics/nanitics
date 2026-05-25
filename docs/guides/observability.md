@@ -204,6 +204,26 @@ Key capabilities beyond `TraceStore`:
 
 > **See also:** `TraceStore`, `PersistentTraceStore`, and `PostgresTraceStore` docstrings for the full protocol surface and data models.
 
+#### Parent/child runs
+
+`RunRecord.parent_run_id` models a specialist (child) run dispatched on behalf of another run. Top-level runs leave the field as `None`; child runs set it to the parent's `id`. The runs table carries a self-referencing foreign key with `ON DELETE CASCADE`, so deleting a parent deletes its children (and, transitively, their descendants).
+
+`list_runs` and `count_runs` take a three-state `parent_run_id` filter: omitted (the default) applies no filter and returns runs at every level; `None` restricts to top-level runs only; a string restricts to children of that parent.
+
+<!-- verify: skip — illustrative fragment; `store` is caller-supplied and the `await` runs inside an async context -->
+```python
+await store.register_run("parent-1", "trace-1", {"task": "research"})
+await store.register_run("child-a", "trace-1", {}, parent_run_id="parent-1")
+await store.register_run("child-b", "trace-2", {}, parent_run_id="parent-1")
+
+top_level = await store.list_runs(parent_run_id=None)        # → [parent-1]
+children = await store.list_runs(parent_run_id="parent-1")   # → [child-a, child-b]
+
+await store.delete_run("parent-1")                            # CASCADE removes both children
+```
+
+The SDK does not enforce `trace_id` parity between parent and child — the caller decides whether children share the parent's trace or each carry their own.
+
 ### Consuming traces from an external agent
 
 `PersistentTraceStore.get_span_tree(trace_id)` returns `list[StoredTraceEvent]` — rows whose `payload` is a plain dict (produced on the write side by `event.model_dump(mode="json")`). Tools that reason over typed events — a bespoke critic, any post-hoc analyser — use the `trace_events_from_stored` helper to round-trip those rows back into the canonical `list[TraceEvent]`:

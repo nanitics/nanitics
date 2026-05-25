@@ -140,6 +140,8 @@ Two timeouts bound the connection:
 - **`discovery_timeout`** (default 30s) — bounds the MCP initialization handshake and `tools/list` combined. On timeout, `LLMProviderError(provider="mcp")` is raised.
 - **`default_call_timeout`** (default 60s) — bounds each `execute()` call. Server-declared per-tool timeouts (rare) in `ToolSchema.timeout_seconds` override this. On timeout, `ToolTimeoutError` is raised.
 
+The stdio transport spawns a child process whose stderr is routed to `sys.stderr` by default. To redirect it elsewhere, pass `MCPClient.stdio(params, errlog=my_stream)`; any writable text stream is accepted and its lifetime is the caller's responsibility. The SSE and Streamable HTTP transports have no child process, so the knob is stdio-only.
+
 ### Rotating credentials
 
 The MCP June 2025 spec mandates OAuth for HTTP transports. OAuth access tokens typically expire every 5–60 minutes, but an MCP session is intended to outlive any single token. The static `headers=` parameter is captured once at construction, so a rotating bearer token passed through `headers` would go stale mid-session — forcing you to exit the `async with`, rebuild the client, and re-run the MCP initialization handshake on every refresh.

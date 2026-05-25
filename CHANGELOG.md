@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`RunRecord.parent_run_id` models hierarchical specialist runs.** A
+  new nullable `parent_run_id: str | None` field on `RunRecord` links a
+  child run to the run that dispatched it. The Postgres v3 migration
+  adds the column with a self-referencing FK and `ON DELETE CASCADE`,
+  plus a partial index on non-null values. `register_run` gains a
+  keyword-only `parent_run_id=None`; `list_runs` and `count_runs` gain
+  a three-state filter (`_UNSET` default → no filter; `None` → top-level
+  only; `str` → children of that parent). The SDK does not enforce
+  `trace_id` parity between parent and child — the caller decides
+  whether they share a trace. `delete_run` cascades to children at the
+  database layer.
+
+- **`MCPClient.stdio(errlog=...)` redirects the child process's stderr.**
+  New keyword-only parameter forwards to upstream `_stdio_client(errlog=…)`
+  when supplied; the upstream `sys.stderr` default is preserved when
+  omitted. Stdio-only — the SSE and Streamable HTTP transports have no
+  child process. The caller owns the stream's lifetime.
+
+- **`PostgresTraceStore.ensure_schema()` raises on sibling-store
+  schema conflicts.** When the version row reports a baseline that
+  must have created the configured `runs_table`, but
+  `information_schema` reports the table is missing,
+  `ensure_schema()` now raises `RuntimeError` with a message naming
+  both `table_name` and `runs_table`. The usual cause is another
+  store instance sharing `table_name` and using a different
+  `runs_table` configuration; the SDK refuses to silently re-run
+  migrations under a different table name.
+
 - **Observatory is drop-in: the prebuilt SPA ships inside the Python
   wheel.** `mount_observatory(app, store, prefix="/observatory")` now
   attaches the JSON API and the embedded UI in one line, with no
