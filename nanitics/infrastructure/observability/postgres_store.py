@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from pydantic import ValidationError
 
 from nanitics.infrastructure.observability.storage import (
+    _UNSET,
     DEFAULT_EVENTS_LIMIT,
     DEFAULT_RUNS_LIMIT,
     RunRecord,
@@ -23,6 +24,7 @@ from nanitics.infrastructure.observability.storage import (
     StoredTraceEvent,
     TraceEventRecord,
     TraceSummaryStats,
+    _UnsetType,
 )
 
 if TYPE_CHECKING:
@@ -129,10 +131,26 @@ def _build_migrations(events_table: str, runs_table: str) -> list[_Migration]:
                 """,
             ],
         ),
+        _Migration(
+            version=3,
+            description="Add parent_run_id to runs for hierarchical specialist runs",
+            up_sql=[
+                f"""
+                ALTER TABLE {runs_table}
+                    ADD COLUMN parent_run_id TEXT NULL
+                        REFERENCES {runs_table}(id) ON DELETE CASCADE
+                """,
+                f"""
+                CREATE INDEX idx_{runs_table}_parent
+                    ON {runs_table} (parent_run_id)
+                    WHERE parent_run_id IS NOT NULL
+                """,
+            ],
+        ),
     ]
 
 
-LATEST_VERSION = 2
+LATEST_VERSION = 3
 
 
 def get_schema_sql(*, table_name: str = "trace_events", runs_table_name: str = "runs") -> str:
@@ -184,6 +202,20 @@ class PostgresTraceStore:
         - **Legacy database:** Tables exist from ``CREATE TABLE IF NOT EXISTS``
           but no version tracking — applies corrective migrations.
         - **Current database:** Already at latest version — no-op.
+
+        v3 adds ``parent_run_id`` to the runs table along with a
+        self-referencing foreign key (``ON DELETE CASCADE``) and a partial
+        index on non-null values. Idempotency guarantees apply: re-running
+        ``ensure_schema`` on a database already at v3 is a no-op.
+
+        Raises:
+            RuntimeError: The schema version row reports a baseline that
+                must have created the configured ``runs_table``, but the
+                table is missing from ``information_schema``. The usual
+                cause is another store instance sharing ``table_name`` and
+                using a different ``runs_table`` configuration; the SDK
+                refuses to silently re-run migrations under a different
+                table name.
 
         Uses a PostgreSQL advisory lock to prevent concurrent migration races
         when multiple application instances start simultaneously.
@@ -240,6 +272,35 @@ class PostgresTraceStore:
                 await conn.execute(f"INSERT INTO {self._version_table} (version) VALUES (0)")
 
         current_version = await conn.fetchval(f"SELECT version FROM {self._version_table}")
+
+        # Schema-sibling guard. The version row reports the schema lineage
+        # for ``self._table`` (events table). If another store instance
+        # shares ``self._table`` but was constructed with a different
+        # ``runs_table`` name, the version row will report a baseline that
+        # claims to have created ``self._runs_table`` while that table does
+        # not actually exist. Surface this loud rather than silently
+        # re-running migrations under a fresh ``runs_table`` name (which
+        # would be the per-pair version-keying redesign the SDK declined).
+        if current_version >= 1:
+            runs_table_exists = await conn.fetchval(
+                """
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_name = $1
+                )
+                """,
+                self._runs_table,
+            )
+            if not runs_table_exists:
+                raise RuntimeError(
+                    f"PostgresTraceStore.ensure_schema: schema version row reports "
+                    f"v{current_version} but configured runs_table {self._runs_table!r} "
+                    f"does not exist. This usually means another PostgresTraceStore "
+                    f"instance sharing table_name={self._table!r} created the version "
+                    f"row under a different runs_table configuration. The current store "
+                    f"will not silently re-run migrations under a different table name — "
+                    f"reconcile the configuration or use a distinct table_name."
+                )
 
         migrations = _build_migrations(self._table, self._runs_table)
 
@@ -453,18 +514,39 @@ class PostgresTraceStore:
     # Run management
     # ------------------------------------------------------------------
 
-    async def register_run(self, run_id: str, trace_id: str, metadata: dict[str, Any]) -> None:
-        """Register a new run with initial 'running' status."""
+    async def register_run(
+        self,
+        run_id: str,
+        trace_id: str,
+        metadata: dict[str, Any],
+        *,
+        parent_run_id: str | None = None,
+    ) -> None:
+        """Register a new run with initial 'running' status.
+
+        ``parent_run_id`` links a specialist (child) run to the run that
+        dispatched it. Pass ``None`` (the default) for top-level runs. The
+        column carries a self-referencing foreign key with ``ON DELETE
+        CASCADE``: deleting a parent run also deletes its children (and,
+        transitively, their descendants). No pre-insert FK existence check
+        is performed — if the referenced ``parent_run_id`` does not exist,
+        Postgres surfaces the FK violation directly.
+
+        The SDK does **not** enforce that the child's ``trace_id`` matches
+        the parent's; the caller decides whether parent and child share a
+        trace or each carry their own.
+        """
         async with self._pool.acquire() as conn:
             await conn.execute(
                 f"""
                 INSERT INTO {self._runs_table}
-                    (id, trace_id, status, started_at, metadata)
-                VALUES ($1, $2, 'running', NOW(), $3)
+                    (id, trace_id, status, started_at, metadata, parent_run_id)
+                VALUES ($1, $2, 'running', NOW(), $3, $4)
                 """,
                 run_id,
                 trace_id,
                 json.dumps(metadata),
+                parent_run_id,
             )
 
     async def update_run_status(
@@ -507,7 +589,8 @@ class PostgresTraceStore:
         """Retrieve a run by ID."""
         row = await self._pool.fetchrow(
             f"""
-            SELECT id, trace_id, status, started_at, completed_at, metadata, error, result
+            SELECT id, trace_id, status, started_at, completed_at, metadata, error, result,
+                   parent_run_id
             FROM {self._runs_table}
             WHERE id = $1
             """,
@@ -525,6 +608,7 @@ class PostgresTraceStore:
         started_after: datetime | None = None,
         started_before: datetime | None = None,
         search: str | None = None,
+        parent_run_id: str | None | _UnsetType = _UNSET,
     ) -> list[str]:
         """Build WHERE conditions and append to *params*. Returns condition list."""
         conditions: list[str] = []
@@ -540,6 +624,12 @@ class PostgresTraceStore:
         if search is not None:
             params.append(f"%{search}%")
             conditions.append(f"metadata::text ILIKE ${len(params)}")
+        if not isinstance(parent_run_id, _UnsetType):
+            if parent_run_id is None:
+                conditions.append("parent_run_id IS NULL")
+            else:
+                params.append(parent_run_id)
+                conditions.append(f"parent_run_id = ${len(params)}")
         return conditions
 
     _SORT_COLUMNS: ClassVar[dict[str, str]] = {
@@ -557,10 +647,19 @@ class PostgresTraceStore:
         started_before: datetime | None = None,
         sort: str = "started_at_desc",
         search: str | None = None,
+        parent_run_id: str | None | _UnsetType = _UNSET,
         limit: int = DEFAULT_RUNS_LIMIT,
         offset: int = 0,
     ) -> list[RunRecord]:
-        """List runs with optional filters, ordered by *sort*."""
+        """List runs with optional filters, ordered by *sort*.
+
+        ``parent_run_id`` is a three-state filter: omitted (the default
+        ``_UNSET`` sentinel) applies no filter and returns runs at every
+        level; ``None`` restricts to top-level runs only
+        (``parent_run_id IS NULL``); a ``str`` restricts to children of
+        that parent. The sentinel default preserves the prior behavior of
+        every existing caller.
+        """
         params: list[object] = []
         conditions = self._build_run_conditions(
             params,
@@ -568,6 +667,7 @@ class PostgresTraceStore:
             started_after=started_after,
             started_before=started_before,
             search=search,
+            parent_run_id=parent_run_id,
         )
 
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
@@ -580,7 +680,8 @@ class PostgresTraceStore:
 
         rows = await self._pool.fetch(
             f"""
-            SELECT id, trace_id, status, started_at, completed_at, metadata, error, result
+            SELECT id, trace_id, status, started_at, completed_at, metadata, error, result,
+                   parent_run_id
             FROM {self._runs_table}
             {where}
             ORDER BY {order_by}
@@ -597,8 +698,13 @@ class PostgresTraceStore:
         started_after: datetime | None = None,
         started_before: datetime | None = None,
         search: str | None = None,
+        parent_run_id: str | None | _UnsetType = _UNSET,
     ) -> int:
-        """Return total count of runs matching the given filters."""
+        """Return total count of runs matching the given filters.
+
+        ``parent_run_id`` follows the same three-state semantics as
+        :meth:`list_runs`.
+        """
         params: list[object] = []
         conditions = self._build_run_conditions(
             params,
@@ -606,6 +712,7 @@ class PostgresTraceStore:
             started_after=started_after,
             started_before=started_before,
             search=search,
+            parent_run_id=parent_run_id,
         )
 
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
@@ -621,7 +728,16 @@ class PostgresTraceStore:
         return row["cnt"] if row else 0
 
     async def delete_run(self, run_id: str) -> bool:
-        """Delete a run and all associated trace events in a transaction."""
+        """Delete a run and all associated trace events in a transaction.
+
+        The runs table carries a self-referencing FK with ``ON DELETE
+        CASCADE`` on ``parent_run_id``: deleting a parent silently deletes
+        its children (and, transitively, descendants). The explicit DELETE
+        on the events table inside this method covers the events of the
+        targeted run only; children's events are left to be cleaned up
+        separately because the events table has no FK driving its own
+        cascade today.
+        """
         async with self._pool.acquire() as conn, conn.transaction():
             row = await conn.fetchrow(
                 f"SELECT id FROM {self._runs_table} WHERE id = $1",
@@ -704,6 +820,7 @@ def _row_to_run(row: asyncpg.Record) -> RunRecord:
         metadata=metadata,
         error=row["error"],
         result=_parse_result(row["result"]),
+        parent_run_id=row["parent_run_id"],
     )
 
 

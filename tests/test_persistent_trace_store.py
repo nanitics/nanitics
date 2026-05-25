@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 from nanitics.infrastructure.observability.levels import TraceLevel
 from nanitics.infrastructure.observability.storage import (
+    _UNSET,
     InMemoryPersistentTraceStore,
     PersistentTraceStore,
     RunRecord,
@@ -14,7 +15,19 @@ from nanitics.infrastructure.observability.storage import (
     StoredTraceEvent,
     TerminationReason,
     TraceEventRecord,
+    _UnsetType,
 )
+
+
+class TestUnsetSentinel:
+    def test_repr_is_human_readable(self) -> None:
+        assert repr(_UNSET) == "_UNSET"
+
+    def test_bool_is_falsy(self) -> None:
+        assert bool(_UNSET) is False
+
+    def test_singleton_identity(self) -> None:
+        assert _UnsetType() is _UNSET
 
 
 def _make_record(
@@ -246,6 +259,61 @@ class TestRunManagement:
         store = InMemoryPersistentTraceStore()
         result = await store.delete_run("nonexistent")
         assert result is False
+
+    async def test_register_run_with_parent_run_id_persists_field(self) -> None:
+        store = InMemoryPersistentTraceStore()
+        await store.register_run("parent", "t", {})
+        await store.register_run("child", "t", {}, parent_run_id="parent")
+        record = await store.get_run("child")
+        assert record is not None
+        assert record.parent_run_id == "parent"
+
+    async def test_list_runs_parent_run_id_filter_three_states(self) -> None:
+        store = InMemoryPersistentTraceStore()
+        await store.register_run("p1", "t", {})
+        await store.register_run("c1", "t", {}, parent_run_id="p1")
+        await store.register_run("c2", "t", {}, parent_run_id="p1")
+
+        # Sentinel default — all three runs returned.
+        all_ids = {r.id for r in await store.list_runs()}
+        assert all_ids == {"p1", "c1", "c2"}
+
+        # ``None`` — top-level only.
+        top_ids = {r.id for r in await store.list_runs(parent_run_id=None)}
+        assert top_ids == {"p1"}
+
+        # String — children of that parent.
+        child_ids = {r.id for r in await store.list_runs(parent_run_id="p1")}
+        assert child_ids == {"c1", "c2"}
+
+    async def test_count_runs_parent_run_id_filter_three_states(self) -> None:
+        store = InMemoryPersistentTraceStore()
+        await store.register_run("p1", "t", {})
+        await store.register_run("c1", "t", {}, parent_run_id="p1")
+        await store.register_run("c2", "t", {}, parent_run_id="p1")
+
+        assert await store.count_runs() == 3
+        assert await store.count_runs(parent_run_id=None) == 1
+        assert await store.count_runs(parent_run_id="p1") == 2
+
+    async def test_delete_run_cascades_to_children(self) -> None:
+        store = InMemoryPersistentTraceStore()
+        await store.register_run("p", "t", {})
+        await store.register_run("c1", "t", {}, parent_run_id="p")
+        await store.register_run("c2", "t", {}, parent_run_id="p")
+
+        assert await store.delete_run("p") is True
+        assert await store.get_run("p") is None
+        assert await store.get_run("c1") is None
+        assert await store.get_run("c2") is None
+
+    async def test_update_run_status_preserves_parent_run_id(self) -> None:
+        store = InMemoryPersistentTraceStore()
+        await store.register_run("child", "t", {}, parent_run_id="parent")
+        await store.update_run_status("child", "completed")
+        record = await store.get_run("child")
+        assert record is not None
+        assert record.parent_run_id == "parent"
 
     async def test_delete_run_preserves_other_runs(self) -> None:
         store = InMemoryPersistentTraceStore()

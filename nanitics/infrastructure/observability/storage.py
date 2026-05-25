@@ -4,7 +4,7 @@ import json
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Any, Final, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
@@ -16,6 +16,32 @@ from nanitics.infrastructure.observability.levels import TraceLevel
 
 RunStatus = Literal["running", "completed", "failed", "suspended", "rejected"]
 """Valid run lifecycle statuses."""
+
+
+class _UnsetType:
+    """Sentinel marker — distinct from ``None`` and any user-supplied value.
+
+    Used by ``list_runs`` / ``count_runs`` to distinguish "do not filter on
+    ``parent_run_id``" (the default) from the legitimate ``None`` value
+    (which means "filter to top-level runs only"). See the run hierarchy
+    section of the observability guide for the three-state semantics.
+    """
+
+    _instance: _UnsetType | None = None
+
+    def __new__(cls) -> _UnsetType:
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:
+        return "_UNSET"
+
+    def __bool__(self) -> bool:
+        return False
+
+
+_UNSET: Final[_UnsetType] = _UnsetType()
 
 DEFAULT_RUNS_LIMIT = 50
 DEFAULT_EVENTS_LIMIT = 100
@@ -187,7 +213,13 @@ class RunResult(BaseModel):
 
 
 class RunRecord(BaseModel):
-    """A registered run with lifecycle state."""
+    """A registered run with lifecycle state.
+
+    ``parent_run_id`` links a specialist (child) run to the run that
+    dispatched it. ``None`` means the run is top-level. See
+    :meth:`PostgresTraceStore.register_run` for the cascade contract and the
+    note on ``trace_id`` non-enforcement between parent and child.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -199,6 +231,7 @@ class RunRecord(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
     result: RunResult | None = None
+    parent_run_id: str | None = None
 
 
 class TraceSummaryStats(BaseModel):
@@ -249,7 +282,14 @@ class PersistentTraceStore(Protocol):
 
     # --- Run management ---
 
-    async def register_run(self, run_id: str, trace_id: str, metadata: dict[str, Any]) -> None:
+    async def register_run(
+        self,
+        run_id: str,
+        trace_id: str,
+        metadata: dict[str, Any],
+        *,
+        parent_run_id: str | None = None,
+    ) -> None:
         """Register a new run with initial 'running' status."""
         ...
 
@@ -276,6 +316,7 @@ class PersistentTraceStore(Protocol):
         started_before: datetime | None = None,
         sort: str = "started_at_desc",
         search: str | None = None,
+        parent_run_id: str | None | _UnsetType = _UNSET,
         limit: int = DEFAULT_RUNS_LIMIT,
         offset: int = 0,
     ) -> list[RunRecord]:
@@ -289,6 +330,7 @@ class PersistentTraceStore(Protocol):
         started_after: datetime | None = None,
         started_before: datetime | None = None,
         search: str | None = None,
+        parent_run_id: str | None | _UnsetType = _UNSET,
     ) -> int:
         """Return total count of runs matching the given filters."""
         ...
@@ -418,13 +460,21 @@ class InMemoryPersistentTraceStore:
 
     # --- Run management ---
 
-    async def register_run(self, run_id: str, trace_id: str, metadata: dict[str, Any]) -> None:
+    async def register_run(
+        self,
+        run_id: str,
+        trace_id: str,
+        metadata: dict[str, Any],
+        *,
+        parent_run_id: str | None = None,
+    ) -> None:
         self._runs[run_id] = RunRecord(
             id=run_id,
             trace_id=trace_id,
             status="running",
             started_at=datetime.now(UTC),
             metadata=metadata,
+            parent_run_id=parent_run_id,
         )
 
     async def update_run_status(
@@ -448,6 +498,7 @@ class InMemoryPersistentTraceStore:
             metadata=run.metadata,
             error=error,
             result=result if result is not None else run.result,
+            parent_run_id=run.parent_run_id,
         )
 
     async def get_run(self, run_id: str) -> RunRecord | None:
@@ -461,6 +512,7 @@ class InMemoryPersistentTraceStore:
         started_before: datetime | None = None,
         sort: str = "started_at_desc",
         search: str | None = None,
+        parent_run_id: str | None | _UnsetType = _UNSET,
         limit: int = DEFAULT_RUNS_LIMIT,
         offset: int = 0,
     ) -> list[RunRecord]:
@@ -469,6 +521,7 @@ class InMemoryPersistentTraceStore:
             started_after=started_after,
             started_before=started_before,
             search=search,
+            parent_run_id=parent_run_id,
         )
         runs = self._sort_runs(runs, sort)
         return runs[offset : offset + limit]
@@ -480,6 +533,7 @@ class InMemoryPersistentTraceStore:
         started_after: datetime | None = None,
         started_before: datetime | None = None,
         search: str | None = None,
+        parent_run_id: str | None | _UnsetType = _UNSET,
     ) -> int:
         return len(
             self._filter_runs(
@@ -487,6 +541,7 @@ class InMemoryPersistentTraceStore:
                 started_after=started_after,
                 started_before=started_before,
                 search=search,
+                parent_run_id=parent_run_id,
             )
         )
 
@@ -497,6 +552,7 @@ class InMemoryPersistentTraceStore:
         started_after: datetime | None = None,
         started_before: datetime | None = None,
         search: str | None = None,
+        parent_run_id: str | None | _UnsetType = _UNSET,
     ) -> list[RunRecord]:
         runs = list(self._runs.values())
         if status is not None:
@@ -508,6 +564,8 @@ class InMemoryPersistentTraceStore:
         if search is not None:
             needle = search.lower()
             runs = [r for r in runs if needle in json.dumps(r.metadata).lower()]
+        if not isinstance(parent_run_id, _UnsetType):
+            runs = [r for r in runs if r.parent_run_id == parent_run_id]
         return runs
 
     @staticmethod
@@ -531,6 +589,9 @@ class InMemoryPersistentTraceStore:
         if run_id not in self._runs:
             return False
         del self._runs[run_id]
+        child_ids = [rid for rid, r in self._runs.items() if r.parent_run_id == run_id]
+        for child_id in child_ids:
+            await self.delete_run(child_id)
         removed_indices = set(self._parent_index.pop(run_id, []))
         if removed_indices:
             # Rebuild events list and remap indices for remaining parents

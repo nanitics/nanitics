@@ -35,7 +35,7 @@ import contextlib
 import warnings
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, Self, TextIO
 
 import httpx
 
@@ -204,13 +204,34 @@ class MCPClient:
         name_filter: Callable[[str], bool] | None = None,
         discovery_timeout: float | None = 30.0,
         default_call_timeout: float | None = 60.0,
+        errlog: TextIO | None = None,
     ) -> MCPClient:
-        """Connect to an MCP server over stdio (spawning the given command)."""
+        """Connect to an MCP server over stdio (spawning the given command).
+
+        Args:
+            parameters: Stdio transport parameters (command, args, env, cwd).
+            name_prefix: Prefix prepended to every discovered tool's name.
+            name_filter: Predicate over server-side tool names; tools for
+                which it returns ``False`` are skipped during discovery.
+            discovery_timeout: Bounds the MCP initialization handshake and
+                ``tools/list`` combined.
+            default_call_timeout: Bounds each ``execute()`` call when the
+                tool's schema does not declare its own timeout.
+            errlog: Optional writable text stream that receives the child
+                process's ``stderr``. ``None`` (the default) preserves the
+                upstream behavior of routing child stderr to
+                ``sys.stderr``. Stdio-only; the SSE and Streamable HTTP
+                transports have no child process and therefore no stderr
+                to redirect. The caller owns the stream's lifetime — the
+                SDK does not open, close, or seek it.
+        """
 
         upstream = parameters._to_upstream()
 
         def _factory() -> contextlib.AbstractAsyncContextManager[tuple[Any, ...]]:
-            return _stdio_client(upstream)
+            if errlog is None:
+                return _stdio_client(upstream)
+            return _stdio_client(upstream, errlog=errlog)
 
         return cls(
             transport_factory=_factory,

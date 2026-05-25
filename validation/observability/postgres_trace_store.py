@@ -172,3 +172,85 @@ async def test_postgres_trace_store_endtoend(traced_emitter: InMemoryEmitter) ->
             assert missing is None, f"get_event on a non-existent id must return None; got {missing!r}"
         finally:
             await _drop_tables(pool, trace_table, runs_table)
+
+
+@pytest.mark.quick
+@requires_postgres
+async def test_postgres_trace_store_parent_child_runs() -> None:
+    """Exercise the v3 parent_run_id schema: register parent + children, filter
+    via the three-state ``parent_run_id`` predicate, delete-cascade the family.
+    """
+    trace_table, runs_table = _unique_names()
+    parent_id = f"pg-parent-{uuid.uuid4().hex[:8]}"
+    child_a_id = f"pg-child-a-{uuid.uuid4().hex[:8]}"
+    child_b_id = f"pg-child-b-{uuid.uuid4().hex[:8]}"
+
+    async with make_postgres_pool() as pool:
+        store = PostgresTraceStore(pool, table_name=trace_table, runs_table=runs_table)
+        try:
+            await run_with_retry(lambda: store.ensure_schema(), max_attempts=2)
+
+            await store.register_run(parent_id, trace_id="trace-parent", metadata={"role": "parent"})
+            await store.register_run(
+                child_a_id, trace_id="trace-parent", metadata={"role": "child"}, parent_run_id=parent_id
+            )
+            await store.register_run(
+                child_b_id, trace_id="trace-child-b", metadata={"role": "child"}, parent_run_id=parent_id
+            )
+
+            # ``parent_run_id=None`` returns only top-level runs.
+            top_level = await store.list_runs(parent_run_id=None)
+            top_level_ids = {r.id for r in top_level}
+            assert parent_id in top_level_ids
+            assert child_a_id not in top_level_ids
+            assert child_b_id not in top_level_ids
+            assert await store.count_runs(parent_run_id=None) >= 1
+
+            # ``parent_run_id=parent_id`` returns the two children.
+            children = await store.list_runs(parent_run_id=parent_id)
+            child_ids = {r.id for r in children}
+            assert child_ids == {child_a_id, child_b_id}, f"unexpected children: {child_ids!r}"
+            assert await store.count_runs(parent_run_id=parent_id) == 2
+
+            # Default (sentinel) returns all runs (parent + 2 children).
+            all_runs = await store.list_runs()
+            all_ids = {r.id for r in all_runs}
+            assert {parent_id, child_a_id, child_b_id}.issubset(all_ids)
+
+            # Round-trip the parent_run_id field on the child rows.
+            child_record = await store.get_run(child_a_id)
+            assert child_record is not None
+            assert child_record.parent_run_id == parent_id
+
+            # Cascade delete: removing the parent drops the children too.
+            assert await store.delete_run(parent_id) is True
+            assert await store.get_run(parent_id) is None
+            assert await store.get_run(child_a_id) is None
+            assert await store.get_run(child_b_id) is None
+        finally:
+            await _drop_tables(pool, trace_table, runs_table)
+
+
+@pytest.mark.quick
+@requires_postgres
+async def test_postgres_trace_store_sibling_conflict_raises() -> None:
+    """Two stores sharing ``table_name`` but with different ``runs_table`` values:
+    the second ``ensure_schema()`` must raise rather than silently re-run
+    migrations under a fresh runs_table name.
+    """
+    trace_table, runs_table_a = _unique_names()
+    _, runs_table_b = _unique_names()
+
+    async with make_postgres_pool() as pool:
+        store_a = PostgresTraceStore(pool, table_name=trace_table, runs_table=runs_table_a)
+        store_b = PostgresTraceStore(pool, table_name=trace_table, runs_table=runs_table_b)
+        try:
+            await run_with_retry(lambda: store_a.ensure_schema(), max_attempts=2)
+            with pytest.raises(RuntimeError) as excinfo:
+                await store_b.ensure_schema()
+            message = str(excinfo.value)
+            assert runs_table_b in message
+            assert trace_table in message
+        finally:
+            await _drop_tables(pool, trace_table, runs_table_a)
+            await _drop_tables(pool, trace_table, runs_table_b)

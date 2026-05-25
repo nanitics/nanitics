@@ -392,6 +392,49 @@ class TestMCPClientFactory:
         assert hasattr(cm, "__aenter__")
         assert hasattr(cm, "__aexit__")
 
+    def test_stdio_factory_omits_errlog_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When ``errlog`` is not supplied, upstream ``_stdio_client`` is invoked
+        positionally so its default (``sys.stderr``) takes effect.
+        """
+        captured: dict[str, Any] = {}
+
+        def _fake_stdio_client(upstream: Any, **kwargs: Any) -> Any:
+            captured["args"] = (upstream,)
+            captured["kwargs"] = kwargs
+            return object()  # sentinel ACM stand-in; not entered
+
+        monkeypatch.setattr(
+            "nanitics.infrastructure.mcp.client._stdio_client",
+            _fake_stdio_client,
+        )
+
+        client = MCPClient.stdio(MCPStdioParameters(command="echo"))
+        client._transport_factory()
+        assert captured["kwargs"] == {}
+
+    def test_stdio_factory_forwards_errlog_when_supplied(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When ``errlog=stream`` is supplied, upstream ``_stdio_client`` receives
+        ``errlog=stream`` as a keyword argument.
+        """
+        import io
+
+        captured: dict[str, Any] = {}
+
+        def _fake_stdio_client(upstream: Any, **kwargs: Any) -> Any:
+            captured["args"] = (upstream,)
+            captured["kwargs"] = kwargs
+            return object()
+
+        monkeypatch.setattr(
+            "nanitics.infrastructure.mcp.client._stdio_client",
+            _fake_stdio_client,
+        )
+
+        sink = io.StringIO()
+        client = MCPClient.stdio(MCPStdioParameters(command="echo"), errlog=sink)
+        client._transport_factory()
+        assert captured["kwargs"] == {"errlog": sink}
+
     def test_sse_factory_invokes_upstream_sse_client(self) -> None:
         client = MCPClient.sse(url="http://example.com/mcp")
         cm = client._transport_factory()
