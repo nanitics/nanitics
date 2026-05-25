@@ -15,6 +15,16 @@ from nanitics.composition.durability.store import (
     CheckpointStore,
     InMemoryCheckpointStore,
 )
+
+try:
+    from nanitics.composition.durability.postgres_checkpoint_store import (
+        PostgresCheckpointStore,
+        get_checkpoint_schema_sql,
+    )
+except ImportError:
+    PostgresCheckpointStore = None  # type: ignore[assignment,misc]
+    get_checkpoint_schema_sql = None  # type: ignore[assignment]
+
 from nanitics.composition.durability.suspension import SuspendExecution
 
 __all__ = [
@@ -23,6 +33,7 @@ __all__ = [
     "CheckpointVersionError",
     "DurableRun",
     "InMemoryCheckpointStore",
+    "PostgresCheckpointStore",
     "ResumeContext",
     "ResumeResult",
     "ResumeService",
@@ -30,4 +41,5 @@ __all__ = [
     "SuspendExecution",
     "SuspendedRun",
     "SuspensionInfo",
+    "get_checkpoint_schema_sql",
 ]

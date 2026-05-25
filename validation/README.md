@@ -163,6 +163,7 @@ the recommended reading order.
 - `durability/checkpoint_suspension.py` — checkpoint suspend/resume under real LLMs.
 - `durability/durable_hitl.py` — `DurableHumanInputProvider` + `PostgresHitlRequestStore` persistence across simulated process restart.
 - `durability/durable_resume_service.py` — `DurableRun` + `ResumeService` end-to-end against real Postgres: suspend, save response, resume, assert final output.
+- `durability/postgres_checkpoint_store.py` — `PostgresCheckpointStore` save/load/delete round-trip against real Postgres; verifies most-recent-wins ordering and composite-index tie-break.
 
 ### Observability
 

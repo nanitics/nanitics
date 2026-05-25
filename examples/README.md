@@ -206,4 +206,4 @@ Checkpoint suspension and the canonical durable resume service.
 | Example | Description | Guide |
 |---|---|---|
 | [durability/checkpoint_suspension.py](durability/checkpoint_suspension.py) | `InMemoryCheckpointStore`, `RunCheckpoint`, `SuspendExecution`, `DurableHumanInputProvider` suspend/resume | [Orchestration](../docs/guides/orchestration.md) |
-| [durability/durable_resume_service.py](durability/durable_resume_service.py) | `DurableRun`, `SuspendedRun`, `ResumeService`, `ResumeContext` — canonical durable HITL with out-of-process handoff and nested suspension | [Human-in-the-Loop](../docs/guides/human-in-the-loop.md) |
+| [durability/durable_resume_service.py](durability/durable_resume_service.py) | `DurableRun`, `SuspendedRun`, `ResumeService`, `ResumeContext` — canonical durable HITL with out-of-process handoff and nested suspension; auto-picks `PostgresHitlRequestStore` + `PostgresCheckpointStore` when `NANITICS_DURABLE_EXAMPLE_DB_URL` is set, else in-memory pair | [Human-in-the-Loop](../docs/guides/human-in-the-loop.md) |

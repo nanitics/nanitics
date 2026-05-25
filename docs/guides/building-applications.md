@@ -300,58 +300,32 @@ The SDK provides in-memory implementations of all stores. For production, implem
 |----------|-------------|---------|
 | `TraceStore` | `InMemoryTraceStore` | Persist and query full traces |
 | `PersistentTraceStore` | `PostgresTraceStore` | Per-event persistence with filtered queries and pagination |
-| `CheckpointStore` | `InMemoryCheckpointStore` | Durable execution checkpoints |
+| `CheckpointStore` | `InMemoryCheckpointStore` / `PostgresCheckpointStore` | Durable execution checkpoints |
 | `LongTermStore` | `InMemoryLongTermStore` | Persistent key-value memory |
 | `EpisodeStore` | `InMemoryEpisodeStore` | Past experience storage |
 | `SemanticStore` | `InMemorySemanticStore` | Embedding-based retrieval |
 | `HumanInputProvider` | `CallbackHumanInputProvider` | Human-in-the-loop integration |
-| `HitlRequestStore` | `InMemoryHitlRequestStore` | Persist HITL requests/responses for durable suspension |
+| `HitlRequestStore` | `InMemoryHitlRequestStore` / `PostgresHitlRequestStore` | Persist HITL requests/responses for durable suspension |
 
 ### Database-Backed CheckpointStore
 
-Checkpoints enable durable execution — the agent can suspend (for HITL, timeouts, etc.) and resume later, even after process restart. Here's the pattern:
+Checkpoints enable durable execution — the agent can suspend (for HITL, timeouts, etc.) and resume later, even after process restart. Use `PostgresCheckpointStore` for the canonical Postgres backend:
 
+<!-- verify: skip — illustrative wiring; `pool` is caller-supplied and the `async with` / `await` run inside an async context -->
 ```python
-from nanitics.composition import RunCheckpoint, SuspensionInfo
+from nanitics.composition import (
+    PostgresCheckpointStore,
+    get_checkpoint_schema_sql,
+)
 
-class PostgresCheckpointStore:
-    def __init__(self, pool) -> None:
-        self._pool = pool
+# Apply schema once at deploy time
+async with pool.acquire() as conn:
+    await conn.execute(get_checkpoint_schema_sql())
 
-    async def save(self, checkpoint: RunCheckpoint) -> None:
-        await self._pool.execute(
-            "INSERT INTO checkpoints (id, run_id, checkpoint_type, "
-            "schema_version, state, suspension_info, created_at) "
-            "VALUES ($1, $2, $3, $4, $5, $6, $7)",
-            checkpoint.checkpoint_id,
-            checkpoint.run_id,
-            checkpoint.checkpoint_type,
-            checkpoint.schema_version,
-            json.dumps(checkpoint.state),
-            json.dumps(checkpoint.suspension_info.model_dump()),
-            checkpoint.created_at,
-        )
-
-    async def load(self, run_id: str) -> RunCheckpoint | None:
-        row = await self._pool.fetchrow(
-            "SELECT * FROM checkpoints WHERE run_id = $1 "
-            "ORDER BY created_at DESC LIMIT 1",
-            run_id,
-        )
-        if row is None:
-            return None
-        return self._row_to_checkpoint(row)
-
-    async def delete(self, checkpoint_id: str) -> None:
-        await self._pool.execute(
-            "DELETE FROM checkpoints WHERE id = $1", checkpoint_id
-        )
-
-    async def delete_for_run(self, run_id: str) -> None:
-        await self._pool.execute(
-            "DELETE FROM checkpoints WHERE run_id = $1", run_id
-        )
+store = PostgresCheckpointStore(pool)
 ```
+
+Pair with `PostgresHitlRequestStore` to land both halves of durable HITL on Postgres. See [examples/durability/durable_resume_service.py](../../examples/durability/durable_resume_service.py) for the full pattern.
 
 ### Event Persistence
 

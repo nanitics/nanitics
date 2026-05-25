@@ -4,6 +4,7 @@ from nanitics.composition.durability import (
     CheckpointVersionError,
     DurableRun,
     InMemoryCheckpointStore,
+    PostgresCheckpointStore,
     ResumeContext,
     ResumeResult,
     ResumeService,
@@ -11,6 +12,7 @@ from nanitics.composition.durability import (
     SuspendedRun,
     SuspendExecution,
     SuspensionInfo,
+    get_checkpoint_schema_sql,
 )
 from nanitics.composition.multi_agent import (
     DEFAULT_CALIBRATED_BID_PROMPT_TEMPLATE,
@@ -225,6 +227,7 @@ __all__ = [
     "PeerSpec",
     "Pipeline",
     "PipelineContractError",
+    "PostgresCheckpointStore",
     "PredicateTrigger",
     "PrioritizedControl",
     "QualityTrigger",
@@ -262,6 +265,7 @@ __all__ = [
     "create_bus_tools",
     "create_handoff_chain",
     "create_orchestrator",
+    "get_checkpoint_schema_sql",
     "handoff_receiver_instructions",
     "handoff_sender_instructions",
     "orchestrator_prompt_section",
