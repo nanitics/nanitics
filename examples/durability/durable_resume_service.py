@@ -28,6 +28,12 @@ Four sections:
    second resume completes the run. Demonstrates that `ResumeService`
    is the single entry point for every response, not a one-shot API.
 
+The persistence pair is picked at startup: if ``NANITICS_DURABLE_EXAMPLE_DB_URL`` is set
+and the ``postgres`` extra is installed, the example wires
+``PostgresHitlRequestStore`` + ``PostgresCheckpointStore`` and applies
+both schemas; otherwise it falls back to the in-memory pair so the
+example stays runnable in CI without a database.
+
 Related guide: docs/guides/human-in-the-loop.md
 """
 
@@ -35,24 +41,31 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 
 from examples.helpers import make_emitter
 from nanitics.composition import (
+    CheckpointStore,
     DurableRun,
     FunctionStep,
     InMemoryCheckpointStore,
+    PostgresCheckpointStore,
     ResumeContext,
     ResumeResult,
     ResumeService,
     Sequential,
     SuspendedRun,
+    get_checkpoint_schema_sql,
 )
 from nanitics.hitl import (
     ApprovalGate,
     DurableHumanInputProvider,
+    HitlRequestStore,
     HumanDecision,
     HumanInputResponse,
     InMemoryHitlRequestStore,
+    PostgresHitlRequestStore,
+    get_hitl_schema_sql,
 )
 
 _RUN_ID = "run-durable-resume-service"
@@ -60,8 +73,8 @@ _RUN_ID = "run-durable-resume-service"
 
 def build_workflow(
     *,
-    hitl_store: InMemoryHitlRequestStore,
-    checkpoint_store: InMemoryCheckpointStore,
+    hitl_store: HitlRequestStore,
+    checkpoint_store: CheckpointStore,
     run_id: str,
 ) -> Sequential:
     """Construct the durable HITL workflow.
@@ -129,13 +142,43 @@ async def external_respond(payload: dict) -> HumanInputResponse:
     )
 
 
-async def main() -> None:
-    # Shared persistence: in production these point at Postgres. Here
-    # the same in-memory instances simulate durable storage across the
-    # "process boundary" between the initial run and the resume.
-    hitl_store = InMemoryHitlRequestStore(run_id=_RUN_ID)
-    checkpoint_store = InMemoryCheckpointStore()
+async def _build_stores() -> tuple[HitlRequestStore, CheckpointStore, object | None]:
+    """Pick the production Postgres pair if available, else in-memory.
 
+    With ``NANITICS_DURABLE_EXAMPLE_DB_URL`` set and the ``postgres`` extra installed,
+    returns ``PostgresHitlRequestStore`` + ``PostgresCheckpointStore``
+    backed by a fresh ``asyncpg`` pool (third tuple element), with
+    both schemas applied once at startup. Otherwise returns the
+    in-memory pair and a ``None`` pool — the example stays runnable
+    in CI without a database.
+    """
+    db_url = os.getenv("NANITICS_DURABLE_EXAMPLE_DB_URL")  # example-scoped to avoid CI / .env collisions
+    if db_url and PostgresCheckpointStore is not None and PostgresHitlRequestStore is not None:
+        import asyncpg
+
+        pool = await asyncpg.create_pool(db_url)
+        async with pool.acquire() as conn:
+            await conn.execute(get_hitl_schema_sql())
+            await conn.execute(get_checkpoint_schema_sql())
+        print("Using PostgresHitlRequestStore + PostgresCheckpointStore")
+        return PostgresHitlRequestStore(pool), PostgresCheckpointStore(pool), pool
+    print("Using in-memory stores (set NANITICS_DURABLE_EXAMPLE_DB_URL + install 'postgres' extra for Postgres)")
+    return InMemoryHitlRequestStore(run_id=_RUN_ID), InMemoryCheckpointStore(), None
+
+
+async def main() -> None:
+    # In production point these at Postgres via NANITICS_DURABLE_EXAMPLE_DB_URL; the
+    # in-memory fallback simulates durable storage across the
+    # "process boundary" between the initial run and the resume.
+    hitl_store, checkpoint_store, pool = await _build_stores()
+    try:
+        await _run(hitl_store, checkpoint_store)
+    finally:
+        if pool is not None:
+            await pool.close()
+
+
+async def _run(hitl_store: HitlRequestStore, checkpoint_store: CheckpointStore) -> None:
     # --- Section 1: Initial run ---
     print("--- Section 1: Initial run ---")
 

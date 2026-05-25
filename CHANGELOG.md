@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`PostgresCheckpointStore` ships the second half of durable HITL on
+  Postgres.** A persistent `CheckpointStore` implementation backed by
+  `asyncpg`, mirroring `PostgresHitlRequestStore`. Stores each
+  `RunCheckpoint` as a single JSONB blob keyed by `checkpoint_id`,
+  with indexed `run_id` and `created_at` columns; `load(run_id)`
+  returns the most recent checkpoint with a deterministic
+  `(created_at DESC, checkpoint_id DESC)` tie-break under
+  same-microsecond writes. Schema applied once via
+  `get_checkpoint_schema_sql()` — no migration framework, no FK to
+  `hitl_requests` (the link is logical via `suspension_info.request_id`
+  inside the blob, so adopters can deploy either store standalone).
+  `delete()` and `delete_for_run()` are silent on missing rows,
+  matching `InMemoryCheckpointStore` semantics. Lazy-imported from
+  `nanitics.composition` and `nanitics.composition.durability` under
+  the existing `postgres` extra; adopters who do not install the extra
+  see `None` for both symbols.
+
 - **`RunRecord.parent_run_id` models hierarchical specialist runs.** A
   new nullable `parent_run_id: str | None` field on `RunRecord` links a
   child run to the run that dispatched it. The Postgres v3 migration

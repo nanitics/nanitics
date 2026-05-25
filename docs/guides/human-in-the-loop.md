@@ -179,6 +179,8 @@ Both `DurableRun.start` and `ResumeService.resume` return `ResumeResult | Suspen
 
 `CallbackHumanInputProvider` is the primary tool for testing. Pass a lambda or function that returns the desired `HumanInputResponse` for each request — auto-approve, auto-reject, or a conditional function that inspects the request and responds accordingly.
 
+For production durable HITL on Postgres, pair `PostgresHitlRequestStore` (`nanitics.hitl`) with `PostgresCheckpointStore` (`nanitics.composition`). Apply both schemas once at deploy via `get_hitl_schema_sql()` and `get_checkpoint_schema_sql()` and pass the resulting stores to `DurableRun` / `ResumeService`. The schemas are independent — no foreign keys between the two tables — so an adopter can deploy either store standalone.
+
 For testing durable flows, `InMemoryHitlRequestStore` and `InMemoryCheckpointStore` provide in-memory implementations of the persistence protocols. Simulate the full suspend/resume cycle by catching `SuspendExecution`, saving a response to the store, and resuming from the checkpoint — the re-executed tool call finds the response via its deterministic `request_id`.
 
 ## Events
