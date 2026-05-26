@@ -134,6 +134,51 @@ class LLMProviderError(LLMError):
         self.provider = provider
 
 
+class MCPAuthError(LLMProviderError):
+    """An MCP HTTP transport returned 401 or 403.
+
+    Subclass of :class:`LLMProviderError` — code paths catching the parent
+    continue to catch this. Raised at two lifecycle points:
+
+    * During ``MCPClient.__aenter__`` when the transport-entry or
+      ``ClientSession.initialize()`` call surfaces a 401/403.
+    * During ``MCPTool.execute`` when the underlying ``call_tool`` POST
+      surfaces a 401/403.
+
+    Only the SSE and Streamable HTTP transports can raise this — stdio has
+    no HTTP layer.
+
+    The ``www_authenticate`` field carries the raw header value. The SDK
+    does not parse it; callers parse per the auth scheme they expect
+    (RFC 6749 Bearer, RFC 7617 Basic, etc.).
+
+    Attributes:
+        status_code: HTTP status code; always 401 or 403.
+        www_authenticate: Raw ``WWW-Authenticate`` header value, or
+            ``None`` if the response omitted the header.
+    """
+
+    www_authenticate: str | None
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int,
+        www_authenticate: str | None = None,
+        trace_id: str | None = None,
+        span_id: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            status_code=status_code,
+            provider="mcp",
+            trace_id=trace_id,
+            span_id=span_id,
+        )
+        self.www_authenticate = www_authenticate
+
+
 class LLMSchemaViolationError(LLMError):
     """The LLM output did not match the expected structured schema.
 
