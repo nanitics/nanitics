@@ -31,6 +31,7 @@ from mcp.types import (
 
 from nanitics.infrastructure.errors import (
     LLMProviderError,
+    MCPAuthError,
     ToolExecutionError,
     ToolTimeoutError,
 )
@@ -40,6 +41,7 @@ from nanitics.infrastructure.llm.protocol import (
     ToolCall,
     ToolSchema,
 )
+from nanitics.infrastructure.mcp._auth_error import _classify_mcp_auth_error
 from nanitics.infrastructure.mcp._tool import MCPTool
 from nanitics.infrastructure.mcp.client import MCPClient, MCPStdioParameters
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter
@@ -248,6 +250,273 @@ class TestMCPTool:
             await tool.execute()
 
         assert exc_info.value.provider == "mcp"
+
+
+# ---------------------------------------------------------------------------
+# TestMCPAuthError — typed 401/403 classification at both raise sites
+# ---------------------------------------------------------------------------
+
+
+def _build_http_status_error(
+    status: int,
+    *,
+    www_auth: str | None = None,
+    www_auth_header_key: str = "www-authenticate",
+) -> httpx.HTTPStatusError:
+    headers = {www_auth_header_key: www_auth} if www_auth is not None else {}
+    request = httpx.Request("GET", "http://example.com/mcp")
+    response = httpx.Response(status, headers=headers, request=request)
+    return httpx.HTTPStatusError("status error", request=request, response=response)
+
+
+class TestMCPAuthError:
+    def test_construct_with_required_status_code(self) -> None:
+        err = MCPAuthError("msg", status_code=401)
+        assert err.status_code == 401
+        assert err.provider == "mcp"
+        assert err.www_authenticate is None
+
+    def test_construct_with_www_authenticate(self) -> None:
+        err = MCPAuthError("msg", status_code=403, www_authenticate='Bearer realm="x"')
+        assert err.www_authenticate == 'Bearer realm="x"'
+        assert err.status_code == 403
+
+    def test_is_subclass_of_llm_provider_error(self) -> None:
+        err = MCPAuthError("m", status_code=401)
+        assert isinstance(err, LLMProviderError)
+
+    def test_to_dict_serializes_auth_fields(self) -> None:
+        err = MCPAuthError(
+            "msg",
+            status_code=401,
+            www_authenticate='Bearer realm="r"',
+        )
+        payload = err.to_dict()
+        assert payload["status_code"] == 401
+        assert payload["www_authenticate"] == 'Bearer realm="r"'
+        assert payload["provider"] == "mcp"
+
+    def test_classifier_finds_401_in_direct_cause(self) -> None:
+        cause = _build_http_status_error(401, www_auth='Bearer realm="r"')
+        try:
+            raise RuntimeError("Session terminated") from cause
+        except RuntimeError as outer:
+            result = _classify_mcp_auth_error(outer)
+        assert result is not None
+        assert result.status_code == 401
+        assert result.www_authenticate == 'Bearer realm="r"'
+
+    def test_classifier_finds_403_in_direct_cause(self) -> None:
+        cause = _build_http_status_error(403)
+        try:
+            raise RuntimeError("Forbidden") from cause
+        except RuntimeError as outer:
+            result = _classify_mcp_auth_error(outer)
+        assert result is not None
+        assert result.status_code == 403
+
+    def test_classifier_finds_401_nested_three_deep(self) -> None:
+        leaf = _build_http_status_error(401)
+        try:
+            raise RuntimeError("mid-1") from leaf
+        except RuntimeError as mid1:
+            try:
+                raise RuntimeError("mid-2") from mid1
+            except RuntimeError as mid2:
+                try:
+                    raise RuntimeError("outer") from mid2
+                except RuntimeError as outer:
+                    result = _classify_mcp_auth_error(outer)
+        assert result is not None
+        assert result.status_code == 401
+
+    def test_classifier_walks_context_when_cause_is_none(self) -> None:
+        leaf = _build_http_status_error(401)
+        # Bare re-raise from inside an except: __context__ is set,
+        # __cause__ is not. Construct by hand so the test does not depend
+        # on Python's chained-raise semantics in a try/except block.
+        outer = RuntimeError("Session terminated")
+        outer.__context__ = leaf
+        result = _classify_mcp_auth_error(outer)
+        assert result is not None
+        assert result.status_code == 401
+
+    def test_classifier_returns_none_for_500(self) -> None:
+        cause = _build_http_status_error(500)
+        try:
+            raise RuntimeError("server error") from cause
+        except RuntimeError as outer:
+            result = _classify_mcp_auth_error(outer)
+        assert result is None
+
+    def test_classifier_returns_none_for_non_httpx_chain(self) -> None:
+        result = _classify_mcp_auth_error(ConnectionError("pipe broke"))
+        assert result is None
+
+    def test_classifier_depth_capped(self) -> None:
+        # 12-deep chain with the 401 at depth 11 (beyond the cap of 10).
+        current: BaseException = _build_http_status_error(401)
+        for i in range(11):
+            try:
+                raise RuntimeError(f"layer-{i}") from current
+            except RuntimeError as exc:
+                current = exc
+        result = _classify_mcp_auth_error(current)
+        assert result is None
+
+    def test_classifier_handles_missing_www_authenticate(self) -> None:
+        cause = _build_http_status_error(401)  # no www-authenticate header
+        try:
+            raise RuntimeError("auth failed") from cause
+        except RuntimeError as outer:
+            result = _classify_mcp_auth_error(outer)
+        assert result is not None
+        assert result.status_code == 401
+        assert result.www_authenticate is None
+
+    def test_classifier_www_authenticate_case_insensitive(self) -> None:
+        # httpx.Headers is case-insensitive, so a capital-cased key still
+        # resolves through .get("www-authenticate").
+        cause = _build_http_status_error(
+            401,
+            www_auth='Bearer realm="r"',
+            www_auth_header_key="WWW-Authenticate",
+        )
+        try:
+            raise RuntimeError("auth failed") from cause
+        except RuntimeError as outer:
+            result = _classify_mcp_auth_error(outer)
+        assert result is not None
+        assert result.www_authenticate == 'Bearer realm="r"'
+
+    def test_classifier_handles_cycle_in_chain(self) -> None:
+        a = RuntimeError("a")
+        b = RuntimeError("b")
+        a.__cause__ = b
+        b.__cause__ = a
+        result = _classify_mcp_auth_error(a)
+        assert result is None
+
+    def test_classifier_handles_malformed_response_headers(self) -> None:
+        # Guard the defensive try/except around response.headers.get: even
+        # if a future upstream change makes ``response.headers`` raise on
+        # access, the classifier still returns a typed MCPAuthError with
+        # ``www_authenticate is None`` rather than letting itself raise.
+        cause = _build_http_status_error(401)
+
+        class _ExplodingHeaders:
+            def get(self, _key: str) -> str | None:
+                raise RuntimeError("headers explode")
+
+        cause.response.headers = _ExplodingHeaders()  # type: ignore[assignment]
+        try:
+            raise RuntimeError("auth failed") from cause
+        except RuntimeError as outer:
+            result = _classify_mcp_auth_error(outer)
+        assert result is not None
+        assert result.status_code == 401
+        assert result.www_authenticate is None
+
+    async def test_aenter_raises_auth_error_on_401(self) -> None:
+        cause = _build_http_status_error(401, www_auth='Bearer realm="r"')
+
+        try:
+            raise RuntimeError("Session terminated") from cause
+        except RuntimeError as wrapped:
+            failure = wrapped
+
+        client = MCPClient._for_testing(
+            transport_factory=_memory_transport_factory(fail_on_enter=failure),
+        )
+        with pytest.raises(MCPAuthError) as exc_info:
+            async with client:
+                pass  # pragma: no cover
+
+        assert exc_info.value.status_code == 401
+        assert exc_info.value.provider == "mcp"
+        assert exc_info.value.www_authenticate == 'Bearer realm="r"'
+        assert exc_info.value.__cause__ is failure
+
+    async def test_aenter_raises_auth_error_on_403(self) -> None:
+        cause = _build_http_status_error(403)
+        try:
+            raise RuntimeError("Forbidden") from cause
+        except RuntimeError as wrapped:
+            failure = wrapped
+
+        client = MCPClient._for_testing(
+            transport_factory=_memory_transport_factory(fail_on_enter=failure),
+        )
+        with pytest.raises(MCPAuthError) as exc_info:
+            async with client:
+                pass  # pragma: no cover
+
+        assert exc_info.value.status_code == 403
+
+    async def test_execute_raises_auth_error_on_401(self) -> None:
+        cause = _build_http_status_error(401, www_auth='Bearer realm="r"')
+
+        try:
+            raise RuntimeError("Session terminated") from cause
+        except RuntimeError as wrapped:
+            outer = wrapped
+
+        async def handler(_name: str, _args: dict[str, Any] | None) -> CallToolResult:
+            raise outer
+
+        tool, _ = _make_tool(name="auth_call", handler=handler)
+
+        with pytest.raises(MCPAuthError) as exc_info:
+            await tool.execute()
+
+        assert exc_info.value.status_code == 401
+        assert exc_info.value.www_authenticate == 'Bearer realm="r"'
+        assert exc_info.value.__cause__ is outer
+
+    async def test_execute_raises_auth_error_on_403(self) -> None:
+        cause = _build_http_status_error(403)
+        try:
+            raise RuntimeError("Forbidden") from cause
+        except RuntimeError as wrapped:
+            outer = wrapped
+
+        async def handler(_name: str, _args: dict[str, Any] | None) -> CallToolResult:
+            raise outer
+
+        tool, _ = _make_tool(name="auth_call", handler=handler)
+
+        with pytest.raises(MCPAuthError) as exc_info:
+            await tool.execute()
+
+        assert exc_info.value.status_code == 403
+
+    async def test_execute_500_still_maps_to_plain_llm_provider_error(self) -> None:
+        cause = _build_http_status_error(500)
+        try:
+            raise RuntimeError("server error") from cause
+        except RuntimeError as wrapped:
+            outer = wrapped
+
+        async def handler(_name: str, _args: dict[str, Any] | None) -> CallToolResult:
+            raise outer
+
+        tool, _ = _make_tool(name="srv_err", handler=handler)
+
+        with pytest.raises(LLMProviderError) as exc_info:
+            await tool.execute()
+
+        assert not isinstance(exc_info.value, MCPAuthError)
+        assert exc_info.value.provider == "mcp"
+
+    async def test_aenter_cancellation_propagates_unclassified(self) -> None:
+        client = MCPClient._for_testing(
+            transport_factory=_memory_transport_factory(
+                fail_on_enter=asyncio.CancelledError(),
+            ),
+        )
+        with pytest.raises(asyncio.CancelledError):
+            async with client:
+                pass  # pragma: no cover
 
 
 # ---------------------------------------------------------------------------

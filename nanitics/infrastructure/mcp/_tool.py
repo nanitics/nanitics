@@ -17,7 +17,8 @@ Design highlights:
   ``CallToolResult.isError`` and upstream ``McpError`` map to
   :class:`~nanitics.infrastructure.errors.ToolExecutionError`; transport
   failures map to :class:`~nanitics.infrastructure.errors.LLMProviderError`
-  with ``provider="mcp"``; timeouts map to
+  with ``provider="mcp"``; HTTP 401/403 on the underlying call map to
+  :class:`~nanitics.infrastructure.errors.MCPAuthError`; timeouts map to
   :class:`~nanitics.infrastructure.errors.ToolTimeoutError`.
 """
 
@@ -32,6 +33,7 @@ from nanitics.infrastructure.errors import (
     ToolTimeoutError,
 )
 from nanitics.infrastructure.llm.protocol import ToolSchema
+from nanitics.infrastructure.mcp._auth_error import _classify_mcp_auth_error
 from nanitics.infrastructure.mcp._translation import call_result_to_tool_result
 from nanitics.strategies.tools.protocol import ToolResult
 
@@ -117,6 +119,9 @@ class MCPTool:
             # a regular ``Exception``).
             raise
         except Exception as exc:
+            auth_err = _classify_mcp_auth_error(exc)
+            if auth_err is not None:
+                raise auth_err from exc
             raise LLMProviderError(
                 f"MCP transport failure during {self._schema.name}: {exc}",
                 provider="mcp",

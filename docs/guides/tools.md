@@ -172,6 +172,8 @@ Decision frame:
 - The provider is **expected to cache internally** and only perform real refresh work near expiry. The SDK does not cache provider returns.
 - Provider exceptions propagate unchanged on the request that triggered the refresh — no fallback to stale credentials, no swallowing. Other in-flight or subsequent requests are unaffected; the session is not poisoned.
 
+When an MCP HTTP server returns 401 or 403, the SDK raises `MCPAuthError` instead of the generic `LLMProviderError`. The error carries `status_code` (always 401 or 403) and `www_authenticate` (the raw `WWW-Authenticate` header value, or `None` if absent). The SDK does not parse the header; adopters parse per the auth scheme they expect. `MCPAuthError` is a subclass of `LLMProviderError`, so existing broad catches keep working.
+
 See `MCPClient.sse` and `MCPClient.streamable_http` for the full per-parameter contract.
 
 ### Scope

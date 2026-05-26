@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`MCPAuthError` distinguishes 401/403 from generic MCP transport
+  failures.** A new exception class under
+  `nanitics.infrastructure.errors` (also re-exported from
+  `nanitics.errors`), subclassing `LLMProviderError`, raised by
+  `MCPClient.__aenter__` and `MCPTool.execute` when the underlying SSE or
+  Streamable HTTP transport surfaces a 401 or 403. Carries
+  `status_code: int` and the raw `www_authenticate: str | None` header
+  value; the SDK does not parse the header. Detection walks `__cause__`
+  and `__context__` chains for an `httpx.HTTPStatusError` (bounded at
+  10 hops). Stdio is unaffected. Existing `except LLMProviderError`
+  catches still fire; the change is purely additive.
+
 - **`PostgresCheckpointStore` ships the second half of durable HITL on
   Postgres.** A persistent `CheckpointStore` implementation backed by
   `asyncpg`, mirroring `PostgresHitlRequestStore`. Stores each

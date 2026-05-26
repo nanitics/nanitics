@@ -40,6 +40,7 @@ from typing import TYPE_CHECKING, Any, Self, TextIO
 import httpx
 
 from nanitics.infrastructure.errors import LLMProviderError
+from nanitics.infrastructure.mcp._auth_error import _classify_mcp_auth_error
 from nanitics.infrastructure.mcp._tool import MCPTool
 from nanitics.infrastructure.mcp._translation import mcp_tool_to_schema
 
@@ -285,6 +286,11 @@ class MCPClient:
                 subsequent requests are unaffected — the session is not
                 poisoned. Adopters who need resilience implement it inside
                 their provider, where the refresh context lives.
+
+                HTTP 401/403 responses raise
+                :class:`~nanitics.infrastructure.errors.MCPAuthError` (a
+                subclass of
+                :class:`~nanitics.infrastructure.errors.LLMProviderError`).
             name_prefix: Prefix prepended to every discovered tool's name.
             name_filter: Predicate over server-side tool names; tools for
                 which it returns ``False`` are skipped during discovery.
@@ -359,6 +365,11 @@ class MCPClient:
                 subsequent requests are unaffected — the session is not
                 poisoned. Adopters who need resilience implement it inside
                 their provider, where the refresh context lives.
+
+                HTTP 401/403 responses raise
+                :class:`~nanitics.infrastructure.errors.MCPAuthError` (a
+                subclass of
+                :class:`~nanitics.infrastructure.errors.LLMProviderError`).
             name_prefix: Prefix prepended to every discovered tool's name.
             name_filter: Predicate over server-side tool names; tools for
                 which it returns ``False`` are skipped during discovery.
@@ -443,13 +454,17 @@ class MCPClient:
                 ) from exc
 
             self._session = self._session_wrapper(raw_session) if self._session_wrapper is not None else raw_session
-        except BaseException:
+        except BaseException as _enter_exc:
             # Roll back anything already pushed onto the stack, then rethrow.
             # `_safe_rollback` suppresses cleanup-phase exceptions so the
             # primary error (LLMProviderError, transport failure, etc.) is
             # what propagates to the caller.
             await _safe_rollback(self._stack)
             self._stack = None
+            if isinstance(_enter_exc, Exception):
+                _auth_err = _classify_mcp_auth_error(_enter_exc)
+                if _auth_err is not None:
+                    raise _auth_err from _enter_exc
             raise
 
         self._entered = True
