@@ -41,6 +41,19 @@ class AgentTool:
             string becomes a TextContentBlock and is prepended to these blocks
             to form multimodal input. When None, the task string passes
             directly to the delegate.
+        thread_key: Opaque key identifying the conversation thread the
+            delegate continues across repeated ``execute`` calls. Every
+            invocation of this ``AgentTool`` forwards the key to the
+            delegate's :meth:`~nanitics.strategies.agents.base.Agent.run`,
+            so a coordinator that calls the same tool more than once sees
+            the delegate accumulate its prior assistant turns, tool
+            calls, and tool results as its own conversation history. The
+            delegate must be configured with a
+            :class:`~nanitics.composition.threads.ThreadStore` for the
+            prefix to be persisted; the key is otherwise accepted and
+            ignored. When ``None`` (the default) the delegate runs
+            stateless across calls. See ``docs/guides/memory.md`` §
+            Behavioral Continuity for the substrate distinction.
     """
 
     def __init__(
@@ -54,6 +67,7 @@ class AgentTool:
         caller_name: str = "",
         cancellation_token: CancellationToken | None = None,
         content_blocks: list[ContentBlock] | None = None,
+        thread_key: str | None = None,
     ) -> None:
         self._agent = agent
         self._emitter = emitter
@@ -63,6 +77,7 @@ class AgentTool:
         self._caller_name = caller_name
         self.cancellation_token = cancellation_token
         self._content_blocks = content_blocks
+        self._thread_key = thread_key
 
     @property
     def schema(self) -> ToolSchema:
@@ -113,7 +128,7 @@ class AgentTool:
         else:
             agent_input = task
 
-        result = await self._agent.bind(self._emitter).run(agent_input)
+        result = await self._agent.bind(self._emitter).run(agent_input, thread_key=self._thread_key)
 
         content = await self._transfer_strategy.extract(result)
 

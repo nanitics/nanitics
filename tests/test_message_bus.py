@@ -930,3 +930,54 @@ def test_max_messages_termination_rejects_non_positive(value: int) -> None:
 def test_max_executions_termination_rejects_non_positive(value: int) -> None:
     with pytest.raises(ValueError, match="max_executions must be positive"):
         MaxExecutionsTermination(max_executions=value)
+
+
+# ──────────────────────────────────────────────────────────
+# thread_key propagation
+# ──────────────────────────────────────────────────────────
+
+
+class TestMessageBusThreadKey:
+    """Per-subscriber behavioral continuity. The thread_key on a
+    ``TopicSubscription`` is independent of bus topic history — the
+    ``MessageHistoryProvider`` injects topic context, while the thread
+    accumulates the subscriber's own prior message-handling turns.
+    """
+
+    def test_subscription_thread_key_defaults_to_none(self) -> None:
+        emitter = make_emitter()
+        agent = make_agent("a", emitter)
+        sub = TopicSubscription(agent=agent, topics=["x"])
+        assert sub.thread_key is None
+
+    def test_subscription_thread_key_stored(self) -> None:
+        emitter = make_emitter()
+        agent = make_agent("a", emitter)
+        sub = TopicSubscription(agent=agent, topics=["x"], thread_key="sub-thread")
+        assert sub.thread_key == "sub-thread"
+
+    async def test_subscriber_thread_accumulates_across_messages(self) -> None:
+        from nanitics.composition import InMemoryThreadStore
+
+        emitter = make_emitter()
+        thread_store = InMemoryThreadStore()
+        subscriber = ReActAgent(
+            name="sub",
+            llm_client=MockLLMClient([make_response("processed-1"), make_response("processed-2")]),
+            emitter=emitter,
+            system_prompt="process messages.",
+            tools=[],
+            thread_store=thread_store,
+        )
+        bus = MessageBus(
+            subscriptions=[
+                TopicSubscription(agent=subscriber, topics=["t"], thread_key="sub-thread"),
+            ],
+            emitter=emitter,
+        )
+        result = await bus.run([make_seed("t", "m1"), make_seed("t", "m2")])
+
+        assert result.total_executions == 2
+        loaded = await thread_store.load("sub-thread")
+        assert sum(1 for m in loaded if m.role == "user") >= 2
+        assert sum(1 for m in loaded if m.role == "assistant") >= 2

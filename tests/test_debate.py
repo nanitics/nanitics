@@ -617,3 +617,64 @@ class TestDebateEvents:
         assert complete_events[0].rounds_completed == 1
         assert complete_events[0].total_arguments == 2
         assert complete_events[0].termination_reason == "max_rounds"
+
+
+# ──────────────────────────────────────────────────────────
+# thread_key propagation
+# ──────────────────────────────────────────────────────────
+
+
+class TestDebaterThreadKey:
+    """Per-debater behavioral continuity. Each debater carries its own
+    thread; its prior rounds' arguments appear as its own assistant
+    turns in the next round, distinct from the transcript already
+    injected as task context."""
+
+    def test_thread_key_defaults_to_none(self) -> None:
+        emitter = make_emitter()
+        agent = make_agent("a", emitter)
+        debater = Debater(agent=agent, position="pro")
+        assert debater.thread_key is None
+
+    def test_thread_key_stored(self) -> None:
+        emitter = make_emitter()
+        agent = make_agent("a", emitter)
+        debater = Debater(agent=agent, position="pro", thread_key="pro-thread")
+        assert debater.thread_key == "pro-thread"
+
+    async def test_per_debater_thread_accumulates_across_rounds(self) -> None:
+        from nanitics.composition import InMemoryThreadStore
+
+        emitter = make_emitter()
+        thread_store = InMemoryThreadStore()
+        pro_agent = ReActAgent(
+            name="pro",
+            llm_client=MockLLMClient([make_response("opening pro"), make_response("rebuttal pro")]),
+            emitter=emitter,
+            system_prompt="argue.",
+            tools=[],
+            thread_store=thread_store,
+        )
+        con_agent = ReActAgent(
+            name="con",
+            llm_client=MockLLMClient([make_response("opening con"), make_response("rebuttal con")]),
+            emitter=emitter,
+            system_prompt="argue.",
+            tools=[],
+            thread_store=thread_store,
+        )
+        debate = Debate(
+            debaters=[
+                Debater(agent=pro_agent, position="pro", thread_key="pro-thread"),
+                Debater(agent=con_agent, position="con", thread_key="con-thread"),
+            ],
+            emitter=emitter,
+            resolution=_StubResolution("pro"),
+            max_rounds=2,
+        )
+        await debate.run("microservices vs monolith")
+
+        pro_loaded = await thread_store.load("pro-thread")
+        con_loaded = await thread_store.load("con-thread")
+        assert sum(1 for m in pro_loaded if m.role == "assistant") == 2
+        assert sum(1 for m in con_loaded if m.role == "assistant") == 2

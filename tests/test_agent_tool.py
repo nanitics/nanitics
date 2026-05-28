@@ -128,7 +128,7 @@ class TestAgentToolExecution:
         agent = _make_agent()
         tool = AgentTool(agent=agent, emitter=emitter, description="desc")
         await tool.execute(task="find papers on AI")
-        agent.run.assert_awaited_once_with("find papers on AI")
+        agent.run.assert_awaited_once_with("find papers on AI", thread_key=None)
 
     async def test_returns_tool_result_with_content(self):
         emitter = _make_emitter()
@@ -277,7 +277,7 @@ class TestAgentToolContentBlocks:
         agent = _make_agent()
         tool = AgentTool(agent=agent, emitter=emitter, description="desc")
         await tool.execute(task="find papers on AI")
-        agent.run.assert_awaited_once_with("find papers on AI")
+        agent.run.assert_awaited_once_with("find papers on AI", thread_key=None)
 
     async def test_assembles_multimodal_input_with_content_blocks(self):
         emitter = _make_emitter()
@@ -294,7 +294,8 @@ class TestAgentToolContentBlocks:
             [
                 TextContentBlock(text="describe this image"),
                 image_block,
-            ]
+            ],
+            thread_key=None,
         )
 
     async def test_delegation_event_stores_original_task_with_content_blocks(self):
@@ -332,7 +333,8 @@ class TestAgentToolContentBlocks:
             [
                 TextContentBlock(text="extract data"),
                 image_block,
-            ]
+            ],
+            thread_key=None,
         )
         # Transfer strategy affects output extraction
         assert tool_result.content == "Result: extracted"
@@ -446,3 +448,87 @@ class TestAgentToolIntegration:
         # knowledge-agent span's parent is the child emitter's root span,
         # which is linked to the AgentTool's emitter span (step-1's span)
         assert knowledge_span.parent_span_id is not None
+
+
+# --- thread_key propagation ---
+
+
+class TestAgentToolThreadKey:
+    """The AgentTool forwards its construction-time ``thread_key`` to the
+    delegate on every ``execute``. Repeated delegations accumulate to the
+    same thread; concurrent same-key delegations fail fast (delegated to
+    the agent's ThreadLocks)."""
+
+    async def test_forwards_thread_key_to_delegate(self) -> None:
+        emitter = _make_emitter()
+        agent = _make_agent()
+        tool = AgentTool(agent=agent, emitter=emitter, description="desc", thread_key="t-1")
+        await tool.execute(task="step one")
+        agent.run.assert_awaited_once_with("step one", thread_key="t-1")
+
+    async def test_default_is_none(self) -> None:
+        emitter = _make_emitter()
+        agent = _make_agent()
+        tool = AgentTool(agent=agent, emitter=emitter, description="desc")
+        await tool.execute(task="step one")
+        agent.run.assert_awaited_once_with("step one", thread_key=None)
+
+    async def test_repeated_executes_use_same_key(self) -> None:
+        emitter = _make_emitter()
+        agent = _make_agent()
+        tool = AgentTool(agent=agent, emitter=emitter, description="desc", thread_key="drafter")
+        await tool.execute(task="draft 1")
+        await tool.execute(task="draft 2 (after critic)")
+        assert agent.run.await_count == 2
+        for call in agent.run.await_args_list:
+            assert call.kwargs == {"thread_key": "drafter"}
+
+    async def test_thread_key_persists_across_runs_in_thread_store(self) -> None:
+        """End-to-end: a real ReActAgent delegate with InMemoryThreadStore
+        accumulates messages across repeated AgentTool delegations."""
+        from nanitics.composition import InMemoryThreadStore
+        from nanitics.strategies.agents.react import ReActAgent
+
+        thread_store = InMemoryThreadStore()
+        delegate_llm = MockLLMClient(
+            responses=[
+                LLMResponse(
+                    content="answer one",
+                    tool_calls=[],
+                    usage=_make_usage(),
+                    model="mock",
+                    stop_reason="end_turn",
+                ),
+                LLMResponse(
+                    content="answer two",
+                    tool_calls=[],
+                    usage=_make_usage(),
+                    model="mock",
+                    stop_reason="end_turn",
+                ),
+            ]
+        )
+        delegate = ReActAgent(
+            name="delegate",
+            llm_client=delegate_llm,
+            emitter=_make_emitter(),
+            system_prompt="answer briefly.",
+            tools=[],
+            thread_store=thread_store,
+        )
+        emitter = _make_emitter()
+        tool = AgentTool(
+            agent=delegate,
+            emitter=emitter,
+            description="desc",
+            thread_key="conv-1",
+        )
+
+        await tool.execute(task="q1")
+        await tool.execute(task="q2")
+
+        loaded = await thread_store.load("conv-1")
+        roles = [m.role for m in loaded]
+        # Two full runs: each contributes user + assistant turn.
+        assert roles.count("user") == 2
+        assert roles.count("assistant") == 2

@@ -28,6 +28,16 @@ class HandoffStep:
             Defaults to ``RawOutputTransfer``.
         name: Step name override. Defaults to ``agent.name``.
         to_agent: Name of the next agent in the chain (for tracing).
+        thread_key: Opaque key identifying the conversation thread this
+            step's agent continues across repeated runs of the same
+            step (e.g., when the same agent appears twice in a
+            drafter→critic→drafter chain). Forwarded to
+            :meth:`~nanitics.strategies.agents.base.Agent.run` on each
+            execution. The agent must be configured with a
+            :class:`~nanitics.composition.threads.ThreadStore` for the
+            prefix to be persisted; the key is otherwise accepted and
+            ignored. ``None`` (the default) runs the step stateless. See
+            ``docs/guides/memory.md`` § Behavioral Continuity.
     """
 
     def __init__(
@@ -38,12 +48,14 @@ class HandoffStep:
         transfer_strategy: ContextTransferStrategy | None = None,
         name: str | None = None,
         to_agent: str = "unknown",
+        thread_key: str | None = None,
     ) -> None:
         self._agent = agent
         self._emitter = emitter
         self._transfer_strategy = transfer_strategy or RawOutputTransfer()
         self._name = name or agent.name
         self._to_agent = to_agent
+        self._thread_key = thread_key
 
     @property
     def name(self) -> str:
@@ -61,7 +73,7 @@ class HandoffStep:
             StepResult with the extracted handoff text and metadata including
             ``agent_name``, ``total_steps``, ``termination_reason``, and ``usage``.
         """
-        result = await self._agent.bind(self._emitter).run(str(input))
+        result = await self._agent.bind(self._emitter).run(str(input), thread_key=self._thread_key)
 
         handoff_text = await self._transfer_strategy.extract(result)
 
@@ -98,6 +110,7 @@ def create_handoff_chain(
     emitter: EventEmitter,
     transfer_strategy: ContextTransferStrategy | None = None,
     cancellation_token: CancellationToken | None = None,
+    thread_keys: list[str | None] | None = None,
 ) -> Sequential:
     """Build a Sequential workflow that chains agents with handoff steps.
 
@@ -112,27 +125,43 @@ def create_handoff_chain(
         transfer_strategy: Strategy for intermediate handoffs.
             Defaults to ``RawOutputTransfer``.
         cancellation_token: Shared cancellation signal.
+        thread_keys: Optional per-step thread keys, parallel to
+            ``agents``. When provided, must have the same length as
+            ``agents``. Each entry is passed as ``thread_key`` to the
+            corresponding ``HandoffStep`` — when the same agent appears
+            twice in the chain (e.g., drafter→critic→drafter) sharing
+            the same key lets the agent see its prior turns. ``None``
+            entries run the step stateless. Agents must be configured
+            with a :class:`~nanitics.composition.threads.ThreadStore` for
+            persistence; otherwise the keys are accepted and ignored.
 
     Returns:
         A ``Sequential`` workflow ready to execute.
 
     Raises:
-        ValueError: If fewer than 2 agents are provided.
+        ValueError: If fewer than 2 agents are provided, or if
+            ``thread_keys`` is provided with a length that does not
+            match ``agents``.
     """
     if len(agents) < 2:
         raise ValueError("Handoff chain requires at least 2 agents")
+
+    if thread_keys is not None and len(thread_keys) != len(agents):
+        raise ValueError(f"thread_keys length ({len(thread_keys)}) must match agents length ({len(agents)})")
 
     steps: list[Step] = []
     for i, agent in enumerate(agents):
         is_last = i == len(agents) - 1
         step_strategy = RawOutputTransfer() if is_last else (transfer_strategy or RawOutputTransfer())
         next_agent = "output" if is_last else agents[i + 1].name
+        step_thread_key = thread_keys[i] if thread_keys is not None else None
         steps.append(
             HandoffStep(
                 agent=agent,
                 emitter=emitter,
                 transfer_strategy=step_strategy,
                 to_agent=next_agent,
+                thread_key=step_thread_key,
             )
         )
 

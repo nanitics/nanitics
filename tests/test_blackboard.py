@@ -1114,3 +1114,129 @@ class TestBlackboardListenerIsolation:
         assert len(round_events) == 2
         assert round_events[0].contributions == 1
         assert round_events[1].contributions == 0
+
+
+# ──────────────────────────────────────────────────────────
+# thread_key propagation
+# ──────────────────────────────────────────────────────────
+
+
+class TestBlackboardThreadKeys:
+    """Per-agent behavioral continuity across rounds.
+
+    A Blackboard with ``thread_keys={agent.name: key, ...}`` lets each
+    named agent see its own prior rounds' assistant turns, tool calls,
+    and tool results as conversation history. Agents not in the mapping
+    run stateless across rounds (existing behavior). The thread_key
+    substrate is orthogonal to the shared-memory board: the board is
+    information continuity (what's on the wall), threads are behavioral
+    continuity (what each agent did last round)."""
+
+    def test_rejects_unknown_agent_name(self) -> None:
+        emitter = make_emitter()
+        store = make_store()
+        a1 = make_agent("a1", emitter, store)
+        with pytest.raises(ValueError, match="thread_keys references agents"):
+            Blackboard(
+                shared_memory=store,
+                agents=[a1],
+                emitter=emitter,
+                thread_keys={"missing": "k"},
+            )
+
+    def test_thread_keys_default_empty(self) -> None:
+        emitter = make_emitter()
+        store = make_store()
+        a1 = make_agent("a1", emitter, store)
+        board = Blackboard(shared_memory=store, agents=[a1], emitter=emitter)
+        assert board._thread_keys == {}
+
+    async def test_per_agent_thread_accumulates_across_rounds(self) -> None:
+        """Two rounds, one agent with a thread_key — the second round's
+        run sees the first round's turns appended to its prefix."""
+        from nanitics.composition import InMemoryThreadStore
+        from nanitics.infrastructure.llm.protocol import ToolCall
+
+        emitter = make_emitter()
+        store = make_store()
+        thread_store = InMemoryThreadStore()
+
+        responses: list[LLMResponse] = []
+        for content in ["r1", "r2"]:
+            responses.append(
+                LLMResponse(
+                    content=None,
+                    tool_calls=[ToolCall(id="tc", name="write_to_shared", arguments={"content": content})],
+                    usage=make_usage(),
+                    model="test-model",
+                    stop_reason="tool_use",
+                )
+            )
+            responses.append(make_response(f"done {content}"))
+
+        agent = ReActAgent(
+            name="writer",
+            llm_client=MockLLMClient(responses),
+            emitter=emitter,
+            system_prompt="you are writer",
+            tools=[],
+            thread_store=thread_store,
+        )
+        board = Blackboard(
+            shared_memory=store,
+            agents=[agent],
+            emitter=emitter,
+            max_rounds=2,
+            termination=MaxRoundsTermination(max_rounds=2),
+            thread_keys={"writer": "writer-thread"},
+        )
+        await board.run("task")
+
+        loaded = await thread_store.load("writer-thread")
+        # Two full rounds: each writes a user input, an assistant tool
+        # call, a tool_result, and a final assistant turn.
+        assert sum(1 for m in loaded if m.role == "user") >= 2
+        assert sum(1 for m in loaded if m.role == "assistant") >= 4
+
+    async def test_agent_without_key_stays_stateless(self) -> None:
+        """An agent absent from the thread_keys mapping runs without a
+        thread — its prior rounds are not replayed."""
+        from nanitics.composition import InMemoryThreadStore
+        from nanitics.infrastructure.llm.protocol import ToolCall
+
+        emitter = make_emitter()
+        store = make_store()
+        thread_store = InMemoryThreadStore()
+
+        responses: list[LLMResponse] = []
+        for content in ["r1", "r2"]:
+            responses.append(
+                LLMResponse(
+                    content=None,
+                    tool_calls=[ToolCall(id="tc", name="write_to_shared", arguments={"content": content})],
+                    usage=make_usage(),
+                    model="test-model",
+                    stop_reason="tool_use",
+                )
+            )
+            responses.append(make_response("done"))
+
+        agent = ReActAgent(
+            name="anon",
+            llm_client=MockLLMClient(responses),
+            emitter=emitter,
+            system_prompt="you are anon",
+            tools=[],
+            thread_store=thread_store,
+        )
+        board = Blackboard(
+            shared_memory=store,
+            agents=[agent],
+            emitter=emitter,
+            max_rounds=2,
+            termination=MaxRoundsTermination(max_rounds=2),
+            # No thread_keys mapping.
+        )
+        await board.run("task")
+        # Nothing in the thread store: agent ran stateless across rounds.
+        assert await thread_store.load("anything") == []

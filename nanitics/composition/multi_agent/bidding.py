@@ -479,6 +479,18 @@ class Bidding:
         min_bid_threshold: Minimum confidence to accept a winner.
             Winners below this threshold are rejected.
         cancellation_token: Cancellation signal.
+        thread_keys: Optional mapping from agent name to thread key.
+            When the winning agent's name is in the mapping, the
+            execution forwards its key — so an agent that wins
+            repeated auctions accumulates its prior wins as
+            conversation history. Agents not in the mapping execute
+            stateless. Each agent must be configured with a
+            :class:`~nanitics.composition.threads.ThreadStore` for the
+            prefix to be persisted.
+
+    Raises:
+        ValueError: If ``thread_keys`` references an agent name not
+            in ``participants``.
     """
 
     def __init__(
@@ -489,7 +501,16 @@ class Bidding:
         allocation_strategy: AllocationStrategy | None = None,
         min_bid_threshold: float | None = None,
         cancellation_token: CancellationToken | None = None,
+        thread_keys: dict[str, str] | None = None,
     ) -> None:
+        if thread_keys is not None:
+            agent_names = {p.agent.name for p in participants}
+            unknown = set(thread_keys) - agent_names
+            if unknown:
+                raise ValueError(
+                    f"thread_keys references agents not in this Bidding: {sorted(unknown)}. "
+                    f"Known agents: {sorted(agent_names)}."
+                )
         self._participants = participants
         self._emitter = emitter
         self._allocation_strategy: AllocationStrategy = (
@@ -497,6 +518,7 @@ class Bidding:
         )
         self._min_bid_threshold = min_bid_threshold
         self._cancellation_token = cancellation_token
+        self._thread_keys = thread_keys or {}
 
     async def run(self, task: str) -> BiddingResult:
         """Run the bidding auction.
@@ -601,7 +623,9 @@ class Bidding:
 
             if winning_agent is not None:
                 try:
-                    agent_result = await winning_agent.bind(self._emitter).run(task)
+                    agent_result = await winning_agent.bind(self._emitter).run(
+                        task, thread_key=self._thread_keys.get(winning_agent.name)
+                    )
                     execution_result = agent_result.output
                 except Exception as exc:
                     execution_result = None

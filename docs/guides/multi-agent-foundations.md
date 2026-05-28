@@ -251,8 +251,87 @@ When combining patterns, be mindful of how they interact:
 
 **Mixing patterns without purpose.** Each communication pattern adds debugging complexity. Don't use broadcast + message bus + peer network when a simple handoff chain would suffice. Pick the simplest pattern that expresses your workflow (see [Pattern Progression](#pattern-progression)).
 
+## Behavioral Continuity in Multi-Agent Patterns
+
+The thread-identity primitive ([Memory § Behavioral Continuity](memory.md#behavioral-continuity)) is opt-in on every multi-agent construct. Each construct exposes a shape for routing thread keys to the agents it owns. None of them require keys; default behavior is unchanged.
+
+| Construct | Where the key lives | Continuity shape |
+|---|---|---|
+| `AgentTool` | Constructor `thread_key` | Repeated delegations by the coordinator accumulate to one specialist thread. Drafter→critic→drafter is a natural fit. |
+| `HandoffStep` / `create_handoff_chain` | Per-step `thread_key` (chain helper takes a `thread_keys` list parallel to `agents`) | Pipelines where the same agent appears more than once share a key to carry behavioral state. |
+| `AgentStep` | Constructor `thread_key` | Plain `Agent` wrapped as a workflow step; same shape as `HandoffStep`. |
+| `PeerSpec` / `PeerNetwork` | `PeerSpec.thread_key` + `PeerNetwork(thread_store=…)`; `network.run(…, thread_key=…)` for per-network-run override | Per-peer-identity: each peer carries its own thread regardless of who called it. |
+| `Blackboard` | `thread_keys: dict[str, str]` (agent name → key) | Each named agent accumulates across rounds; shared memory remains the *information* substrate, threads add the *behavioral* one. |
+| `Broadcast`, `Consensus` | `thread_keys: dict[str, str]` (agent name → key) | Each participating agent carries its own thread across runs (e.g., deliberation rounds in `Consensus`). |
+| `Bidding`, `JudgeRouter` | `thread_keys: dict[str, str]` (agent name → key) | The winning agent's execution forwards the matched key; repeated wins accumulate. |
+| `Supervisor` | `thread_keys: dict[str, str]` (agent name → key) | **RETRY** appends to the supervisee's thread — the agent sees its prior attempt plus the supervisor's feedback as natural turns. **REASSIGN** switches to the new agent's thread (or stateless if unmapped). |
+| `MessageBus` | `TopicSubscription.thread_key` | Per-subscriber behavioral continuity. Orthogonal to `MessageHistoryProvider` (which carries *bus topic* history as injected context). |
+| `Debate` | `Debater.thread_key` | Each debater carries its own thread; prior rounds appear as the debater's own assistant turns, distinct from the transcript block already injected as task context. |
+
+### Recipe: drafter→critic→drafter via repeated AgentTool
+
+```python
+from nanitics import (
+    AgentTool,
+    InMemoryThreadStore,
+    ReActAgent,
+    create_orchestrator,
+)
+
+thread_store = InMemoryThreadStore()
+drafter = ReActAgent(..., thread_store=thread_store)
+critic = ReActAgent(..., thread_store=thread_store)
+
+# The drafter sees its own prior drafts via the shared thread key.
+draft_tool = AgentTool(agent=drafter, ..., thread_key="draft-session-42")
+critique_tool = AgentTool(agent=critic, ..., thread_key="critique-session-42")
+
+coordinator = create_orchestrator(
+    name="iterator",
+    specialists=[draft_tool, critique_tool],
+    ...,
+)
+await coordinator.run("draft a poem about clouds")
+```
+
+### Recipe: persistent peers
+
+```python
+peers = [
+    PeerSpec(name="planner", ..., thread_key="planner-thread"),
+    PeerSpec(name="executor", ..., thread_key="executor-thread"),
+]
+network = PeerNetwork(
+    peers=peers,
+    emitter=emitter,
+    thread_store=InMemoryThreadStore(),
+)
+# Subsequent network.run calls accumulate per peer.
+await network.run("planner", "plan the migration")
+await network.run("planner", "refine plan based on yesterday's progress")
+```
+
+### Recipe: supervisor RETRY appends
+
+```python
+sup = Supervisor(
+    triggers=[QualityTrigger(evaluator)],
+    emitter=emitter,
+    thread_keys={"worker": "worker-thread"},
+)
+# A RETRY appends the feedback-augmented task to "worker-thread", so
+# the worker sees its prior attempt and the reviewer's feedback as
+# natural conversation turns.
+result = await sup.supervise(worker, "summarize this report")
+```
+
+### What is **not** addressed by thread keys
+
+Threads are **behavioral continuity** (the agent's own prior turns). For **information continuity** — facts the agent should know but not believe it produced — keep using the memory primitives (`WorkingMemory`, `SharedMemory`, `EpisodeStore`, etc.). The substrates compose: a peer can carry both a `thread_key` and a `WorkingMemory`. See [Memory § Behavioral Continuity](memory.md#behavioral-continuity) for the substrate distinction.
+
 ## See Also
 
 - [Multi-Agent Coordination](multi-agent-coordination.md) — higher-level patterns (orchestrator, supervisor, blackboard, bidding, debate, consensus) built on these foundations
 - [Orchestration](orchestration.md) — workflow composition patterns (sequential, parallel, DAG, loop, map-reduce, conditional)
 - [Observability](observability.md) — tracing and event monitoring for multi-agent systems
+- [Memory § Behavioral Continuity](memory.md#behavioral-continuity) — substrate and concept behind `thread_key`

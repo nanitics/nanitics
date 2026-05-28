@@ -229,6 +229,23 @@ class Supervisor:
         emitter: Event emitter for supervision events.
         max_retries: Maximum retry attempts before giving up.
         agents: Registry of named agents for reassignment.
+        thread_keys: Optional mapping from agent name to thread key.
+            Drives behavioral continuity across supervised attempts:
+
+            * **RETRY** appends to the same thread — the supervisee
+              sees its prior attempt, the supervisor's feedback (as a
+              new ``user`` turn carrying the feedback-augmented task),
+              and produces a fresh response. This is the load-bearing
+              shape of supervision: the supervisee learns *"I tried,
+              the supervisor said X, now I respond."*
+            * **REASSIGN** switches to the assigned agent's own thread
+              key (or stateless if unmapped). The new agent does not
+              inherit the prior supervisee's thread.
+
+            Agents not in the mapping run stateless. Each agent must
+            be configured with a
+            :class:`~nanitics.composition.threads.ThreadStore` for the
+            prefix to be persisted.
     """
 
     def __init__(
@@ -238,11 +255,13 @@ class Supervisor:
         emitter: EventEmitter,
         max_retries: int = 2,
         agents: dict[str, Agent] | None = None,
+        thread_keys: dict[str, str] | None = None,
     ) -> None:
         self._triggers = triggers
         self._emitter = emitter
         self._max_retries = max_retries
         self._agents = agents or {}
+        self._thread_keys = thread_keys or {}
 
     async def supervise(self, agent: Agent, task: str) -> SupervisionResult:
         """Run an agent under supervision.
@@ -264,7 +283,9 @@ class Supervisor:
         interventions: list[SupervisionDecision] = []
 
         while True:
-            result = await current_agent.bind(self._emitter).run(current_task)
+            result = await current_agent.bind(self._emitter).run(
+                current_task, thread_key=self._thread_keys.get(current_agent.name)
+            )
             attempts += 1
 
             decision = await self._check_triggers(result, task)

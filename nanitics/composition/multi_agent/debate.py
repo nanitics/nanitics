@@ -58,12 +58,24 @@ class Debater(BaseModel):
     Attributes:
         agent: The agent that will argue the position.
         position: The position to argue (e.g. "for microservices").
+        thread_key: Opaque key identifying this debater's conversation
+            thread. When set, the debater carries its own behavioral
+            continuity across rounds — its prior arguments appear as
+            assistant turns in its own conversation, distinct from the
+            ``\n## Debate so far`` block that already conveys the full
+            transcript as task context. This lets a debater reason
+            from *"I previously argued X"* rather than only from *"the
+            transcript shows X was argued."* The agent must be
+            configured with a
+            :class:`~nanitics.composition.threads.ThreadStore` for the
+            prefix to be persisted.
     """
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     agent: Agent
     position: str
+    thread_key: str | None = None
 
 
 class DebateResult(BaseModel):
@@ -278,7 +290,7 @@ class Debate:
                         "Defend your position, address counterpoints, and strengthen your case."
                     )
 
-                result = await debater.agent.bind(self._emitter).run(formatted_task)
+                result = await debater.agent.bind(self._emitter).run(formatted_task, thread_key=debater.thread_key)
                 argument = Argument(
                     round=round_num,
                     agent_name=debater.agent.name,

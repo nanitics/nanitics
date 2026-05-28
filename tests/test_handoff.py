@@ -255,3 +255,120 @@ class TestHandoffChainIntegration:
         analyst_input = str(analyst_client.calls[0]["messages"])
         assert "## Handoff Context" in analyst_input
         assert "key findings here" in analyst_input
+
+
+# ── thread_key propagation ────────────────────────────────
+
+
+class TestHandoffStepThreadKey:
+    """HandoffStep forwards its ``thread_key`` to the wrapped agent on
+    every execution. ``create_handoff_chain``'s ``thread_keys`` list
+    distributes per-step keys parallel to ``agents`` and lets the same
+    agent appearing twice in the chain accumulate prior turns."""
+
+    def test_thread_key_defaults_to_none(self) -> None:
+        emitter = make_emitter()
+        agent = make_agent("a", [make_response()], emitter)
+        step = HandoffStep(agent=agent, emitter=emitter)
+        assert step._thread_key is None
+
+    def test_thread_key_stored(self) -> None:
+        emitter = make_emitter()
+        agent = make_agent("a", [make_response()], emitter)
+        step = HandoffStep(agent=agent, emitter=emitter, thread_key="t-1")
+        assert step._thread_key == "t-1"
+
+    async def test_thread_key_appends_to_store(self) -> None:
+        from nanitics.composition import InMemoryThreadStore
+
+        thread_store = InMemoryThreadStore()
+        emitter = make_emitter()
+        agent = ReActAgent(
+            name="drafter",
+            llm_client=MockLLMClient([make_response("draft v1")]),
+            emitter=emitter,
+            system_prompt="draft.",
+            tools=[],
+            thread_store=thread_store,
+        )
+        step = HandoffStep(agent=agent, emitter=emitter, thread_key="t-1")
+        await step.execute("write something")
+
+        loaded = await thread_store.load("t-1")
+        assert any(m.role == "user" and "write something" in str(m.content) for m in loaded)
+        assert any(m.role == "assistant" for m in loaded)
+
+    def test_create_handoff_chain_rejects_mismatched_thread_keys_length(self) -> None:
+        emitter = make_emitter()
+        a = make_agent("a", [make_response()], emitter)
+        b = make_agent("b", [make_response()], emitter)
+        with pytest.raises(ValueError, match="thread_keys length"):
+            create_handoff_chain(
+                name="chain",
+                agents=[a, b],
+                emitter=emitter,
+                thread_keys=["only-one"],
+            )
+
+    def test_create_handoff_chain_distributes_thread_keys(self) -> None:
+        emitter = make_emitter()
+        a = make_agent("a", [make_response()], emitter)
+        b = make_agent("b", [make_response()], emitter)
+        c = make_agent("c", [make_response()], emitter)
+        chain = create_handoff_chain(
+            name="chain",
+            agents=[a, b, c],
+            emitter=emitter,
+            thread_keys=["k-a", None, "k-c"],
+        )
+        steps = list(chain._steps)
+        assert isinstance(steps[0], HandoffStep)
+        assert isinstance(steps[1], HandoffStep)
+        assert isinstance(steps[2], HandoffStep)
+        assert steps[0]._thread_key == "k-a"
+        assert steps[1]._thread_key is None
+        assert steps[2]._thread_key == "k-c"
+
+    def test_create_handoff_chain_no_thread_keys_means_all_none(self) -> None:
+        emitter = make_emitter()
+        a = make_agent("a", [make_response()], emitter)
+        b = make_agent("b", [make_response()], emitter)
+        chain = create_handoff_chain(name="chain", agents=[a, b], emitter=emitter)
+        for step in chain._steps:
+            assert isinstance(step, HandoffStep)
+            assert step._thread_key is None
+
+    async def test_same_agent_twice_with_shared_key_accumulates(self) -> None:
+        """drafter→critic→drafter: the second drafter step sees the first
+        drafter's prior turns when both steps share a thread_key."""
+        from nanitics.composition import InMemoryThreadStore
+
+        thread_store = InMemoryThreadStore()
+        emitter = make_emitter()
+
+        # One drafter agent appearing twice in the chain, sharing the
+        # same thread_key. The critic uses its own thread (or none).
+        drafter = ReActAgent(
+            name="drafter",
+            llm_client=MockLLMClient([make_response("draft v1"), make_response("draft v2")]),
+            emitter=emitter,
+            system_prompt="draft.",
+            tools=[],
+            thread_store=thread_store,
+        )
+        critic = make_agent("critic", [make_response("critique")], emitter)
+
+        chain = create_handoff_chain(
+            name="iterate",
+            agents=[drafter, critic, drafter],
+            emitter=emitter,
+            thread_keys=["drafter-thread", None, "drafter-thread"],
+        )
+        result = await chain.execute("write a poem")
+        # The chain runs all three steps. Final step is the second drafter.
+        assert result.output == "draft v2"
+
+        # The drafter's thread carries messages from both drafter runs.
+        loaded = await thread_store.load("drafter-thread")
+        assistant_turns = [m for m in loaded if m.role == "assistant"]
+        assert len(assistant_turns) == 2
