@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Discoverability pass for the threads/memory substrate.** Closes
+  the threads/memory maturation arc shipped over PRs #83–#87 with the
+  examples and migration content a new consumer searches for first.
+  The substrate distinction stays the same: `WorkingMemory`,
+  `LongTermStore`, `SemanticStore`, `EpisodeStore`, and `SharedMemory`
+  are *information continuity* — content the agent reads through a
+  provider-injected, namespaced `<nanitics:context>` envelope and
+  reasons over as external data; `thread_key` + `ThreadStore` is
+  *behavioral continuity* — the agent's own prior assistant turns,
+  tool calls, and tool results replayed unwrapped into the next run's
+  message list. Five new runnable, mocked examples make the substrate
+  searchable from `examples/`:
+  `examples/multi_agent/threads_drafter_critic_pipeline.py` (the same
+  drafter at positions 0 and 2 in `create_handoff_chain` via
+  `thread_keys`), `examples/multi_agent/threads_persistent_peers.py`
+  (`PeerSpec.thread_key` across sequential `network.run` calls),
+  `examples/multi_agent/threads_repeated_agent_tool.py` (one
+  `AgentTool(thread_key=...)` dispatched twice in one outer run),
+  `examples/multi_agent/threads_orchestrator_stateful_specialist.py`
+  (a stateful specialist threaded through `create_orchestrator`), and
+  `examples/memory/working_memory_vs_threads.py` (the haiku-revision
+  scenario run twice — once via journaling into `WorkingMemory`, once
+  via `thread_key` — with assertions on the `<nanitics:context
+  provider="working_memory">` wrapper in the former and its absence in
+  the latter). A new migration guide at
+  [`docs/guides/migrating-from-working-memory-workaround.md`](docs/guides/migrating-from-working-memory-workaround.md)
+  walks consumers off the `WorkingMemory`-as-fake-transcript pattern
+  symptom-first; the substrate-comparison recipe inline in
+  `docs/guides/memory.md` § "Behavioral Continuity" shows the two
+  surfaces composing on a single agent. Per-construct behavioral-
+  continuity recipes already live inline in
+  `docs/guides/multi-agent-foundations.md` § "Behavioral Continuity
+  in Multi-Agent Patterns" and are not duplicated. No new SDK code in
+  this pass.
+
 - **Multi-agent thread propagation.** Every multi-agent construct now
   routes `thread_key` to the agents it owns, so behavioral continuity
   composes through delegation, pipelines, peer networks, blackboards,

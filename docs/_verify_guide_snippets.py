@@ -42,6 +42,8 @@ TARGET_GUIDES = [
     "core-concepts.md",
     "getting-started.md",
     "human-in-the-loop.md",
+    "memory.md",
+    "migrating-from-working-memory-workaround.md",
     "multi-agent-coordination.md",
     "observability.md",
     "observatory-integration.md",
