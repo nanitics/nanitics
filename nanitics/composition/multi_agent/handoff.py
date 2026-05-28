@@ -100,6 +100,7 @@ class HandoffStep:
                 "termination_reason": result.termination_reason,
                 "usage": result.usage.model_dump(),
             },
+            usage=result.usage,
         )
 
 

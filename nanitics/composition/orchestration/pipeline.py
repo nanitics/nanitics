@@ -8,12 +8,13 @@ from pydantic import BaseModel, ValidationError
 from nanitics.composition.durability.models import RunCheckpoint
 from nanitics.composition.durability.store import CheckpointStore
 from nanitics.composition.durability.suspension import SuspendExecution
-from nanitics.composition.orchestration.protocol import Step, StepResult
+from nanitics.composition.orchestration.protocol import Step, StepResult, _sum_usage
 from nanitics.composition.orchestration.workflow import Workflow
 from nanitics.infrastructure.errors import NaniticsError
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
     ExecutionSuspendedEvent,
+    Usage,
     WorkflowStepCompleteEvent,
     WorkflowStepDefinition,
 )
@@ -143,7 +144,12 @@ class Pipeline(Workflow):
 
     Like ``Sequential``, but each stage can declare input and output Pydantic
     models. Violations raise ``PipelineContractError`` with details about which
-    stage failed and whether it was an input or output violation.
+    stage failed and whether it was an input or output violation. The returned
+    ``StepResult.usage`` is the aggregated sum across every stage's
+    ``usage`` (``None`` only when every stage contributed ``None``). On a
+    cancellation mid-flight, the partial aggregate of the completed stages
+    is returned. On resume from a checkpoint, stage usages are reconstructed
+    from the checkpoint state and folded into the final sum.
 
     Args:
         name: Workflow identifier.
@@ -213,9 +219,12 @@ class Pipeline(Workflow):
             state = resume_from.state
             start_index = state["suspended_stage_index"]
             current_input = state["last_output"]
-            intermediate_results = {
-                k: StepResult(output=d["output"], metadata=d["metadata"]) for k, d in state["completed_results"].items()
-            }
+            restored: dict[str, StepResult] = {}
+            for k, d in state["completed_results"].items():
+                usage_dict = d.get("usage")
+                restored_usage = Usage.model_validate(usage_dict) if usage_dict is not None else None
+                restored[k] = StepResult(output=d["output"], metadata=d["metadata"], usage=restored_usage)
+            intermediate_results = restored
             self._emit_resumed(resume_from, self._stages[start_index].name)
 
         for index in range(start_index, len(self._stages)):
@@ -229,6 +238,7 @@ class Pipeline(Workflow):
                         "terminated": "cancelled",
                         "total_steps_executed": index,
                     },
+                    usage=_sum_usage(r.usage for r in intermediate_results.values()),
                 )
 
             stage.validate_input(current_input, index)
@@ -245,7 +255,12 @@ class Pipeline(Workflow):
                         "orchestrator_type": "pipeline",
                         "suspended_stage_index": index,
                         "completed_results": {
-                            k: {"output": v.output, "metadata": v.metadata} for k, v in intermediate_results.items()
+                            k: {
+                                "output": v.output,
+                                "metadata": v.metadata,
+                                "usage": v.usage.model_dump() if v.usage is not None else None,
+                            }
+                            for k, v in intermediate_results.items()
                         },
                         "last_output": current_input,
                         "original_input": input,
@@ -291,4 +306,5 @@ class Pipeline(Workflow):
                 "intermediate_results": intermediate_results,
                 "total_steps_executed": len(self._stages),
             },
+            usage=_sum_usage(r.usage for r in intermediate_results.values()),
         )

@@ -6,11 +6,12 @@ from typing import Any
 from nanitics.composition.durability.models import RunCheckpoint
 from nanitics.composition.durability.store import CheckpointStore
 from nanitics.composition.durability.suspension import SuspendExecution
-from nanitics.composition.orchestration.protocol import Step, StepResult
+from nanitics.composition.orchestration.protocol import Step, StepResult, _sum_usage
 from nanitics.composition.orchestration.workflow import Workflow
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
     ExecutionSuspendedEvent,
+    Usage,
     WorkflowStepCompleteEvent,
     WorkflowStepDefinition,
 )
@@ -23,6 +24,12 @@ class Sequential(Workflow):
 
     The final result contains the last step's output and metadata with
     ``intermediate_results`` (step name → ``StepResult``) and ``total_steps_executed``.
+    The returned ``StepResult.usage`` is the aggregated sum across every
+    sub-step's ``usage`` (``None`` only when every sub-step contributed
+    ``None``). On a cancellation mid-flight, the partial aggregate of the
+    completed steps is returned. On resume from a checkpoint, sub-step
+    usages are reconstructed from the checkpoint state and folded into the
+    final sum.
 
     Args:
         name: Workflow identifier.
@@ -82,7 +89,11 @@ class Sequential(Workflow):
             start_index = state["suspended_step_index"]
             current_input = state["last_output"]
             for step_name, d in state["completed_results"].items():
-                intermediate_results[step_name] = StepResult(output=d["output"], metadata=d["metadata"])
+                usage_dict = d.get("usage")
+                restored_usage = Usage.model_validate(usage_dict) if usage_dict is not None else None
+                intermediate_results[step_name] = StepResult(
+                    output=d["output"], metadata=d["metadata"], usage=restored_usage
+                )
             self._emit_resumed(resume_from, self._steps[start_index].name)
 
         for index in range(start_index, len(self._steps)):
@@ -102,6 +113,7 @@ class Sequential(Workflow):
                         "terminated": "cancelled",
                         "total_steps_executed": index,
                     },
+                    usage=_sum_usage(r.usage for r in intermediate_results.values()),
                 )
 
             try:
@@ -121,7 +133,12 @@ class Sequential(Workflow):
                         "orchestrator_type": "sequential",
                         "suspended_step_index": index,
                         "completed_results": {
-                            k: {"output": v.output, "metadata": v.metadata} for k, v in intermediate_results.items()
+                            k: {
+                                "output": v.output,
+                                "metadata": v.metadata,
+                                "usage": v.usage.model_dump() if v.usage is not None else None,
+                            }
+                            for k, v in intermediate_results.items()
                         },
                         "last_output": current_input,
                         "original_input": input,
@@ -165,4 +182,5 @@ class Sequential(Workflow):
                 "intermediate_results": dict(intermediate_results),
                 "total_steps_executed": len(self._steps),
             },
+            usage=_sum_usage(r.usage for r in intermediate_results.values()),
         )

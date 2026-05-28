@@ -7,7 +7,7 @@ from pydantic import BaseModel, ValidationError
 from nanitics.composition.durability.models import SuspensionInfo
 from nanitics.composition.durability.suspension import SuspendExecution
 from nanitics.composition.orchestration.adapters import AgentStep, FunctionStep
-from nanitics.composition.orchestration.protocol import Step, StepResult
+from nanitics.composition.orchestration.protocol import Step, StepResult, _sum_usage
 from nanitics.composition.orchestration.workflow import Workflow
 from nanitics.infrastructure import MockLLMClient
 from nanitics.infrastructure.observability.emitter import InMemoryEmitter as ConcreteInMemoryEmitter
@@ -18,6 +18,7 @@ from nanitics.infrastructure.observability.events import (
     RunSuspendedEvent,
     SpanEndEvent,
     SpanStartEvent,
+    Usage,
     WorkflowCompleteEvent,
     WorkflowErrorEvent,
     WorkflowStartEvent,
@@ -116,16 +117,64 @@ class TestStepResult:
         result = StepResult()
         assert result.output is None
         assert result.metadata == {}
+        assert result.usage is None
 
     def test_with_values(self) -> None:
         result = StepResult(output="hello", metadata={"key": "value"})
         assert result.output == "hello"
         assert result.metadata == {"key": "value"}
+        assert result.usage is None
 
     def test_frozen(self) -> None:
         result = StepResult(output="x")
         with pytest.raises(ValidationError):
             result.output = "y"
+
+    def test_usage_field_typed(self) -> None:
+        result = StepResult(output="ok", usage=Usage(input_tokens=1, output_tokens=2))
+        assert result.usage is not None
+        assert result.usage.input_tokens == 1
+        assert result.usage.output_tokens == 2
+        assert result.usage.total_tokens == 3
+
+
+class TestSumUsage:
+    def test_empty_iterable_returns_none(self) -> None:
+        assert _sum_usage([]) is None
+
+    def test_all_none_returns_none(self) -> None:
+        assert _sum_usage([None, None]) is None
+
+    def test_single_usage_returns_equal(self) -> None:
+        u = Usage(input_tokens=3, output_tokens=4)
+        result = _sum_usage([u])
+        assert result == u
+
+    def test_mixed_usage_and_none_sums_present_only(self) -> None:
+        result = _sum_usage([Usage(input_tokens=1, output_tokens=2), None, Usage(input_tokens=3, output_tokens=4)])
+        assert result is not None
+        assert result.input_tokens == 4
+        assert result.output_tokens == 6
+        assert result.cache_creation_input_tokens is None
+        assert result.cache_read_input_tokens is None
+
+    def test_cache_fields_sum_only_present(self) -> None:
+        result = _sum_usage(
+            [
+                Usage(input_tokens=1, output_tokens=2, cache_creation_input_tokens=10),
+                Usage(input_tokens=1, output_tokens=2),
+                Usage(input_tokens=1, output_tokens=2, cache_creation_input_tokens=5, cache_read_input_tokens=7),
+            ]
+        )
+        assert result is not None
+        assert result.cache_creation_input_tokens == 15
+        assert result.cache_read_input_tokens == 7
+
+    def test_cache_fields_none_when_all_absent(self) -> None:
+        result = _sum_usage([Usage(input_tokens=1, output_tokens=2), Usage(input_tokens=3, output_tokens=4)])
+        assert result is not None
+        assert result.cache_creation_input_tokens is None
+        assert result.cache_read_input_tokens is None
 
 
 # ── Workflow ABC Tests ─────────────────────────────────────
@@ -273,6 +322,49 @@ class TestAgentStep:
         assert result.metadata["total_steps"] == 2
         assert result.metadata["termination_reason"] == "complete"
 
+    async def test_populates_typed_usage_field(self) -> None:
+        from tests.testing_helpers import make_usage
+
+        client = MockLLMClient([make_response(usage=make_usage(input_tokens=11, output_tokens=7))])
+        emitter = make_emitter()
+        agent = ReasoningAgent(
+            name="usage-agent",
+            llm_client=client,
+            emitter=emitter,
+            system_prompt="test",
+        )
+        step = AgentStep(agent)
+        result = await step.execute("task")
+        assert result.usage == Usage(input_tokens=11, output_tokens=7)
+        assert result.metadata["usage"] == result.usage.model_dump()
+
+    async def test_populates_typed_usage_with_parsed_output(self) -> None:
+        from tests.testing_helpers import make_usage
+
+        class Out(BaseModel):
+            x: int
+
+        client = MockLLMClient(
+            [
+                make_response("draft", usage=make_usage(input_tokens=2, output_tokens=3)),
+                make_response('{"x": 1}', usage=make_usage(input_tokens=4, output_tokens=5)),
+            ]
+        )
+        emitter = make_emitter()
+        agent = ReActAgent(
+            name="parsed-agent",
+            llm_client=client,
+            emitter=emitter,
+            system_prompt="test",
+            tools=[],
+            output_schema=Out,
+        )
+        step = AgentStep(agent)
+        result = await step.execute("task")
+        assert result.usage is not None
+        assert result.usage.input_tokens == 6
+        assert result.metadata["usage"] == result.usage.model_dump()
+
     async def test_preserves_text_output_when_no_parsed(self) -> None:
         client = MockLLMClient([make_response("plain text output")])
         emitter = make_emitter()
@@ -330,6 +422,74 @@ class TestFunctionStep:
         step = FunctionStep(name="void", fn=void)
         result = await step.execute("ignored")
         assert result.output is None
+
+    async def test_usage_defaults_to_none_for_plain_return(self) -> None:
+        async def plain(x):
+            return "value"
+
+        step = FunctionStep(name="plain-usage", fn=plain)
+        result = await step.execute("ignored")
+        assert result.usage is None
+
+    async def test_usage_passthrough_when_function_returns_stepresult(self) -> None:
+        async def with_usage(x):
+            return StepResult(output=x, usage=Usage(input_tokens=5, output_tokens=10))
+
+        step = FunctionStep(name="passthrough", fn=with_usage)
+        result = await step.execute("x")
+        assert result.usage == Usage(input_tokens=5, output_tokens=10)
+
+
+# ── Bound Step Usage Tests ────────────────────────────────
+
+
+class TestBoundAgentStepUsage:
+    async def test_bound_agent_step_populates_usage(self) -> None:
+        from nanitics.composition.orchestration.sequential import Sequential
+        from tests.testing_helpers import make_usage
+
+        client = MockLLMClient([make_response("out", usage=make_usage(input_tokens=8, output_tokens=4))])
+        emitter = make_emitter()
+        agent = ReasoningAgent(
+            name="bound-agent",
+            llm_client=client,
+            emitter=emitter,
+            system_prompt="test",
+        )
+        seq = Sequential(name="bound-seq", steps=[AgentStep(agent)], emitter=emitter)
+        result = await seq.execute("task")
+        intermediate = result.metadata["intermediate_results"]
+        bound_step_result = intermediate["bound-agent"]
+        assert bound_step_result.usage == Usage(input_tokens=8, output_tokens=4)
+        assert bound_step_result.metadata["usage"] == bound_step_result.usage.model_dump()
+
+
+class TestBoundHandoffStepUsage:
+    async def test_bound_handoff_step_populates_usage(self) -> None:
+        from nanitics.composition.multi_agent.handoff import HandoffStep
+        from nanitics.composition.orchestration.sequential import Sequential
+        from nanitics.composition.orchestration.workflow import _BoundHandoffStep
+        from tests.testing_helpers import make_usage
+
+        client = MockLLMClient([make_response("hand-out", usage=make_usage(input_tokens=2, output_tokens=9))])
+        emitter = make_emitter()
+        agent = ReActAgent(
+            name="handoff-agent",
+            llm_client=client,
+            emitter=emitter,
+            system_prompt="test",
+            tools=[],
+        )
+        step = HandoffStep(agent=agent, emitter=emitter)
+        seq = Sequential(name="hs-seq", steps=[step], emitter=emitter)
+        result = await seq.execute("task")
+        intermediate = result.metadata["intermediate_results"]
+        bound_step_result = intermediate["handoff-agent"]
+        assert bound_step_result.usage == Usage(input_tokens=2, output_tokens=9)
+
+        # Also verify the bound step type is exercised.
+        bound = seq._bind_step(step)
+        assert isinstance(bound, _BoundHandoffStep)
 
 
 # ── Run Lifecycle Tests ────────────────────────────────────

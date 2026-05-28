@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from nanitics.infrastructure.errors import NaniticsError
 
-CHECKPOINT_SCHEMA_VERSION = 1
+CHECKPOINT_SCHEMA_VERSION = 2
 
 
 class CheckpointVersionError(NaniticsError):

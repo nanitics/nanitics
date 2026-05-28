@@ -447,6 +447,13 @@ class _BoundAgentStep:
     ``Agent._set_resume_state`` on its first ``execute`` call and then
     clears its local copy ("consume-once"), so an intra-run retry would
     not re-inject stale state.
+
+    .. deprecated:: 0.5.0
+        Reading token usage from ``StepResult.metadata["usage"]`` (the
+        dict mirror) is deprecated. Use the typed :attr:`StepResult.usage`
+        field instead. The dict mirror is retained alongside the typed
+        field for backwards compatibility and will be removed in 1.0.0.
+        See ``docs/migrations/step-result-usage.md``.
     """
 
     def __init__(
@@ -479,8 +486,8 @@ class _BoundAgentStep:
         }
         if result.parsed is not None:
             metadata["text_output"] = result.output
-            return StepResult(output=result.parsed, metadata=metadata)
-        return StepResult(output=result.output, metadata=metadata)
+            return StepResult(output=result.parsed, metadata=metadata, usage=result.usage)
+        return StepResult(output=result.output, metadata=metadata, usage=result.usage)
 
 
 class _BoundHandoffStep:
@@ -491,6 +498,13 @@ class _BoundHandoffStep:
     the bound handle and emits the ``HandoffEvent`` on the workflow's
     per-call child emitter rather than the ``HandoffStep``'s stored
     static emitter.
+
+    .. deprecated:: 0.5.0
+        Reading token usage from ``StepResult.metadata["usage"]`` (the
+        dict mirror) is deprecated. Use the typed :attr:`StepResult.usage`
+        field instead. The dict mirror is retained alongside the typed
+        field for backwards compatibility and will be removed in 1.0.0.
+        See ``docs/migrations/step-result-usage.md``.
     """
 
     def __init__(self, step: Step, bound: Any, emitter: EventEmitter) -> None:
@@ -530,6 +544,7 @@ class _BoundHandoffStep:
                 "termination_reason": result.termination_reason,
                 "usage": result.usage.model_dump(),
             },
+            usage=result.usage,
         )
 
 

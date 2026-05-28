@@ -1,15 +1,20 @@
 import pytest
 
+from nanitics.composition.durability.models import RunCheckpoint, SuspensionInfo
+from nanitics.composition.orchestration.adapters import AgentStep, FunctionStep
 from nanitics.composition.orchestration.protocol import Step, StepResult
 from nanitics.composition.orchestration.sequential import Sequential
+from nanitics.infrastructure import MockLLMClient
 from nanitics.infrastructure.observability.events import (
+    Usage,
     WorkflowCompleteEvent,
     WorkflowErrorEvent,
     WorkflowStartEvent,
     WorkflowStepCompleteEvent,
 )
 from nanitics.safety import CancellationToken
-from tests.testing_helpers import make_emitter, make_step
+from nanitics.strategies import ReasoningAgent
+from tests.testing_helpers import make_emitter, make_response, make_step, make_usage
 
 # ── Helpers ────────────────────────────────────────────────
 
@@ -220,3 +225,175 @@ class TestSequentialEvents:
         error_events = [e for e in emitter.events if isinstance(e, WorkflowErrorEvent)]
         assert len(error_events) == 1
         assert error_events[0].error_type == "ValueError"
+
+
+# ── Usage Aggregation Tests ────────────────────────────────
+
+
+def _make_agent_step(name: str, input_tokens: int, output_tokens: int, emitter):
+    client = MockLLMClient([make_response("ok", usage=make_usage(input_tokens, output_tokens))])
+    agent = ReasoningAgent(
+        name=name,
+        llm_client=client,
+        emitter=emitter,
+        system_prompt="test",
+    )
+    return AgentStep(agent)
+
+
+class TestSequentialUsageAggregation:
+    async def test_three_agent_steps_sum_usage(self) -> None:
+        emitter = make_emitter()
+        seq = Sequential(
+            name="agg",
+            steps=[
+                _make_agent_step("a", 1, 2, emitter),
+                _make_agent_step("b", 3, 4, emitter),
+                _make_agent_step("c", 5, 6, emitter),
+            ],
+            emitter=emitter,
+        )
+        result = await seq.execute("task")
+        assert result.usage == Usage(input_tokens=9, output_tokens=12)
+
+    async def test_mixed_agent_and_function_steps(self) -> None:
+        emitter = make_emitter()
+
+        async def passthrough(x):
+            return x
+
+        seq = Sequential(
+            name="mix",
+            steps=[
+                _make_agent_step("a", 2, 3, emitter),
+                FunctionStep(name="noop", fn=passthrough),
+                _make_agent_step("b", 4, 5, emitter),
+            ],
+            emitter=emitter,
+        )
+        result = await seq.execute("task")
+        assert result.usage == Usage(input_tokens=6, output_tokens=8)
+
+    async def test_all_function_steps_yields_none_usage(self) -> None:
+        emitter = make_emitter()
+
+        async def passthrough(x):
+            return x
+
+        seq = Sequential(
+            name="fns",
+            steps=[
+                FunctionStep(name="a", fn=passthrough),
+                FunctionStep(name="b", fn=passthrough),
+                FunctionStep(name="c", fn=passthrough),
+            ],
+            emitter=emitter,
+        )
+        result = await seq.execute("task")
+        assert result.usage is None
+
+    async def test_cancellation_returns_partial_usage(self) -> None:
+        emitter = make_emitter()
+        token = CancellationToken()
+
+        client = MockLLMClient([make_response("ok", usage=make_usage(7, 8))])
+        agent = ReasoningAgent(
+            name="first",
+            llm_client=client,
+            emitter=emitter,
+            system_prompt="test",
+        )
+
+        async def cancel_then_pass(x):
+            token.cancel()
+            return x
+
+        seq = Sequential(
+            name="partial",
+            steps=[
+                AgentStep(agent),
+                FunctionStep(name="canceller", fn=cancel_then_pass),
+                _make_agent_step("would-not-run", 100, 200, emitter),
+            ],
+            emitter=emitter,
+            cancellation_token=token,
+        )
+        result = await seq.execute("task")
+        assert result.metadata["terminated"] == "cancelled"
+        assert result.usage == Usage(input_tokens=7, output_tokens=8)
+
+
+class TestSequentialUsageCheckpointResume:
+    async def test_resume_with_usage_in_checkpoint(self) -> None:
+        emitter = make_emitter()
+
+        seq = Sequential(
+            name="resume",
+            steps=[
+                _make_agent_step("s1", 1, 1, emitter),
+                _make_agent_step("s2", 2, 2, emitter),
+            ],
+            emitter=emitter,
+        )
+
+        checkpoint = RunCheckpoint(
+            run_id="run-1",
+            checkpoint_type="orchestration",
+            state={
+                "orchestrator_type": "sequential",
+                "suspended_step_index": 1,
+                "completed_results": {
+                    "s1": {
+                        "output": "ok",
+                        "metadata": {},
+                        "usage": Usage(input_tokens=10, output_tokens=20).model_dump(),
+                    },
+                },
+                "last_output": "ok",
+                "original_input": "task",
+            },
+            suspension_info=SuspensionInfo(
+                suspension_id="sid",
+                request_id="rid",
+                request_type="hitl",
+                prompt="p",
+            ),
+        )
+        result = await seq.execute("task", resume_from=checkpoint)
+        assert result.usage == Usage(input_tokens=12, output_tokens=22)
+
+    async def test_resume_pre_bump_checkpoint_missing_usage_key(self) -> None:
+        emitter = make_emitter()
+
+        seq = Sequential(
+            name="resume-pre",
+            steps=[
+                _make_agent_step("s1", 1, 1, emitter),
+                _make_agent_step("s2", 3, 5, emitter),
+            ],
+            emitter=emitter,
+        )
+
+        # Synthesized "pre-bump" checkpoint dict: state has no "usage" key.
+        checkpoint = RunCheckpoint(
+            run_id="run-2",
+            checkpoint_type="orchestration",
+            state={
+                "orchestrator_type": "sequential",
+                "suspended_step_index": 1,
+                "completed_results": {
+                    "s1": {"output": "ok", "metadata": {}},
+                },
+                "last_output": "ok",
+                "original_input": "task",
+            },
+            suspension_info=SuspensionInfo(
+                suspension_id="sid",
+                request_id="rid",
+                request_type="hitl",
+                prompt="p",
+            ),
+        )
+        result = await seq.execute("task", resume_from=checkpoint)
+        # Restored step contributes None (missing key); only post-resume agent counts.
+        assert result.usage == Usage(input_tokens=3, output_tokens=5)

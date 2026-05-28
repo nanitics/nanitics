@@ -95,10 +95,12 @@ class TestSupervisionResult:
             total_attempts=1,
             interventions=[],
             final_agent="agent-a",
+            usage=result.usage,
         )
         assert sr.accepted is True
         assert sr.total_attempts == 1
         assert sr.final_agent == "agent-a"
+        assert sr.usage == result.usage
 
 
 # ── QualityTrigger Tests ──────────────────────────────────
@@ -794,3 +796,153 @@ class TestSupervisorThreadKey:
         # Backup's thread carries its own attempt — not a continuation
         # of the worker's thread.
         assert sum(1 for m in backup_msgs if m.role == "assistant") == 1
+
+
+# ── Per-attempt usage aggregation ─────────────────────────
+
+
+def _agent_with_usage(name: str, emitter: InMemoryEmitter, usages: list[Usage]) -> ReActAgent:
+    responses = [
+        LLMResponse(
+            content=f"out-{i}",
+            tool_calls=[],
+            usage=u,
+            model="m",
+            stop_reason="end_turn",
+        )
+        for i, u in enumerate(usages)
+    ]
+    return ReActAgent(
+        name=name,
+        llm_client=MockLLMClient(responses),
+        emitter=emitter,
+        system_prompt="answer",
+        tools=[],
+    )
+
+
+class TestSupervisorUsageAggregation:
+    async def test_single_accept_equals_attempt_usage(self) -> None:
+        emitter = InMemoryEmitter(trace_id="t")
+        agent = _agent_with_usage("a", emitter, [Usage(input_tokens=3, output_tokens=4)])
+        sup = Supervisor(triggers=[], emitter=emitter)
+        sr = await sup.supervise(agent, "task")
+        assert sr.usage == Usage(input_tokens=3, output_tokens=4)
+        assert sr.result.usage == sr.usage
+
+    async def test_retry_then_accept_sums_two_attempts(self) -> None:
+        emitter = InMemoryEmitter(trace_id="t")
+        agent = _agent_with_usage(
+            "a",
+            emitter,
+            [
+                Usage(input_tokens=1, output_tokens=2),
+                Usage(input_tokens=5, output_tokens=7),
+            ],
+        )
+        calls = {"n": 0}
+
+        def predicate(_r, _t):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return SupervisionDecision(
+                    action=SupervisionAction.RETRY,
+                    trigger_name="once",
+                    feedback="redo",
+                )
+            return None
+
+        sup = Supervisor(
+            triggers=[PredicateTrigger(name="once", predicate=predicate)],
+            emitter=emitter,
+        )
+        sr = await sup.supervise(agent, "task")
+        assert sr.usage == Usage(input_tokens=6, output_tokens=9)
+        # final attempt's usage only:
+        assert sr.result.usage == Usage(input_tokens=5, output_tokens=7)
+
+    async def test_retry_give_up_sums_all_attempts(self) -> None:
+        emitter = InMemoryEmitter(trace_id="t")
+        agent = _agent_with_usage(
+            "a",
+            emitter,
+            [
+                Usage(input_tokens=1, output_tokens=1),
+                Usage(input_tokens=1, output_tokens=1),
+            ],
+        )
+
+        def always_retry(_r, _t):
+            return SupervisionDecision(action=SupervisionAction.RETRY, trigger_name="always", feedback="x")
+
+        sup = Supervisor(
+            triggers=[PredicateTrigger(name="always", predicate=always_retry)],
+            emitter=emitter,
+            max_retries=1,
+        )
+        sr = await sup.supervise(agent, "task")
+        assert sr.accepted is False
+        assert sr.usage == Usage(input_tokens=2, output_tokens=2)
+
+    async def test_reassign_sums_across_agents(self) -> None:
+        emitter = InMemoryEmitter(trace_id="t")
+        worker = _agent_with_usage("worker", emitter, [Usage(input_tokens=2, output_tokens=3)])
+        backup = _agent_with_usage("backup", emitter, [Usage(input_tokens=4, output_tokens=5)])
+        calls = {"n": 0}
+
+        def predicate(_r, _t):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return SupervisionDecision(
+                    action=SupervisionAction.REASSIGN,
+                    trigger_name="reassign-once",
+                    reassign_to="backup",
+                )
+            return None
+
+        sup = Supervisor(
+            triggers=[PredicateTrigger(name="reassign-once", predicate=predicate)],
+            emitter=emitter,
+            agents={"backup": backup},
+        )
+        sr = await sup.supervise(worker, "task")
+        assert sr.accepted is True
+        assert sr.usage == Usage(input_tokens=6, output_tokens=8)
+
+    async def test_reassign_to_unknown_returns_partial_sum(self) -> None:
+        emitter = InMemoryEmitter(trace_id="t")
+        agent = _agent_with_usage("a", emitter, [Usage(input_tokens=2, output_tokens=2)])
+
+        def predicate(_r, _t):
+            return SupervisionDecision(
+                action=SupervisionAction.REASSIGN,
+                trigger_name="bad-reassign",
+                reassign_to="nope",
+            )
+
+        sup = Supervisor(
+            triggers=[PredicateTrigger(name="bad-reassign", predicate=predicate)],
+            emitter=emitter,
+        )
+        sr = await sup.supervise(agent, "task")
+        assert sr.accepted is False
+        assert sr.usage == Usage(input_tokens=2, output_tokens=2)
+
+    async def test_escalate_returns_single_attempt_usage(self) -> None:
+        emitter = InMemoryEmitter(trace_id="t")
+        agent = _agent_with_usage("a", emitter, [Usage(input_tokens=9, output_tokens=11)])
+
+        def predicate(_r, _t):
+            return SupervisionDecision(
+                action=SupervisionAction.ESCALATE,
+                trigger_name="escalate-now",
+                feedback="bad",
+            )
+
+        sup = Supervisor(
+            triggers=[PredicateTrigger(name="escalate-now", predicate=predicate)],
+            emitter=emitter,
+        )
+        sr = await sup.supervise(agent, "task")
+        assert sr.accepted is False
+        assert sr.usage == Usage(input_tokens=9, output_tokens=11)

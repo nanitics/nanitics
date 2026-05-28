@@ -6,8 +6,9 @@ from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict
 
+from nanitics.composition.orchestration.protocol import _sum_usage
 from nanitics.infrastructure.observability.emitter import EventEmitter
-from nanitics.infrastructure.observability.events import SupervisionEvent
+from nanitics.infrastructure.observability.events import SupervisionEvent, Usage
 from nanitics.strategies.agents.base import Agent, AgentResult
 from nanitics.strategies.agents.evaluation import (
     EvaluationContext,
@@ -54,6 +55,10 @@ class SupervisionResult(BaseModel):
         total_attempts: Total number of agent runs performed.
         interventions: All intervention decisions made during supervision.
         final_agent: Name of the agent that produced the final result.
+        usage: Total token usage across **every** attempt the Supervisor
+            ran during this ``supervise()`` call (accepted attempt plus
+            all retried/reassigned attempts). Distinct from
+            ``result.usage``, which is the final attempt's usage only.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -63,6 +68,7 @@ class SupervisionResult(BaseModel):
     total_attempts: int
     interventions: list[SupervisionDecision]
     final_agent: str
+    usage: Usage
 
 
 # ── Trigger Protocol ───────────────────────────────────────
@@ -281,12 +287,14 @@ class Supervisor:
         attempts = 0
         retries_remaining = self._max_retries
         interventions: list[SupervisionDecision] = []
+        per_attempt_usages: list[Usage | None] = []
 
         while True:
             result = await current_agent.bind(self._emitter).run(
                 current_task, thread_key=self._thread_keys.get(current_agent.name)
             )
             attempts += 1
+            per_attempt_usages.append(result.usage)
 
             decision = await self._check_triggers(result, task)
 
@@ -300,12 +308,15 @@ class Supervisor:
                     accept_decision,
                     attempts,
                 )
+                aggregated = _sum_usage(per_attempt_usages)
+                assert aggregated is not None  # at least one attempt always ran
                 return SupervisionResult(
                     result=result,
                     accepted=True,
                     total_attempts=attempts,
                     interventions=interventions,
                     final_agent=current_agent.name,
+                    usage=aggregated,
                 )
 
             interventions.append(decision)
@@ -313,12 +324,15 @@ class Supervisor:
 
             if decision.action == SupervisionAction.RETRY:
                 if retries_remaining <= 0:
+                    aggregated = _sum_usage(per_attempt_usages)
+                    assert aggregated is not None
                     return SupervisionResult(
                         result=result,
                         accepted=False,
                         total_attempts=attempts,
                         interventions=interventions,
                         final_agent=current_agent.name,
+                        usage=aggregated,
                     )
                 retries_remaining -= 1
                 current_task = f"{task}\n\n## Feedback from review\n{decision.feedback}"
@@ -326,12 +340,15 @@ class Supervisor:
             elif decision.action == SupervisionAction.REASSIGN:
                 target = self._agents.get(decision.reassign_to or "")
                 if target is None:
+                    aggregated = _sum_usage(per_attempt_usages)
+                    assert aggregated is not None
                     return SupervisionResult(
                         result=result,
                         accepted=False,
                         total_attempts=attempts,
                         interventions=interventions,
                         final_agent=current_agent.name,
+                        usage=aggregated,
                     )
                 current_agent = target
                 current_task = task
@@ -339,12 +356,15 @@ class Supervisor:
                     current_task = f"{task}\n\n## Feedback from review\n{decision.feedback}"
 
             elif decision.action == SupervisionAction.ESCALATE:
+                aggregated = _sum_usage(per_attempt_usages)
+                assert aggregated is not None
                 return SupervisionResult(
                     result=result,
                     accepted=False,
                     total_attempts=attempts,
                     interventions=interventions,
                     final_agent=current_agent.name,
+                    usage=aggregated,
                 )
 
     async def _check_triggers(self, result: AgentResult, task: str) -> SupervisionDecision | None:

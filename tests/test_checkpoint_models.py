@@ -142,4 +142,4 @@ class TestCheckpointVersionError:
 class TestSchemaVersion:
     def test_constant_is_int(self) -> None:
         assert isinstance(CHECKPOINT_SCHEMA_VERSION, int)
-        assert CHECKPOINT_SCHEMA_VERSION == 1
+        assert CHECKPOINT_SCHEMA_VERSION == 2
