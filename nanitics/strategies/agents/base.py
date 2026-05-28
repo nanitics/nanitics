@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict, Field
 
+from nanitics.capabilities.context.tool_result import ToolResultPolicy
 from nanitics.capabilities.errors.handler import ErrorHandler
 from nanitics.strategies.agents.bound import BoundAgent, RunContext
 from nanitics.strategies.agents.context import ContextContent, ContextManagement, ContextProvider
@@ -128,6 +129,12 @@ class Agent(ABC):
         error_handler: Strategy for recovering from LLM and tool errors.
         context_manager: Manages the context window (truncation,
             summarization) when conversations grow long.
+        tool_result_policy: Bounds the size of individual tool results
+            before they enter the message list. Applied at the
+            :class:`~nanitics.strategies.tools.ToolRegistry` dispatch
+            seam in tool-bearing subclasses. Defaults to ``None``
+            (no policy applied). Symmetric to ``context_manager`` but
+            for the tool-result side of the message list.
         context_providers: Inject additional context before each LLM call.
         output_evaluator: Quality gate that can trigger output revision.
         prompt_contributors: Components that add sections to the system
@@ -155,6 +162,7 @@ class Agent(ABC):
         cancellation_token: CancellationToken | None = None,
         error_handler: ErrorHandling | None = None,
         context_manager: ContextManagement | None = None,
+        tool_result_policy: ToolResultPolicy | None = None,
         context_providers: list[ContextProvider] | None = None,
         output_evaluator: OutputEvaluator | None = None,
         prompt_contributors: list[SystemPromptContributor] | None = None,
@@ -198,6 +206,7 @@ class Agent(ABC):
         self._cancellation_token = cancellation_token
         self._error_handler: ErrorHandling = error_handler if error_handler is not None else ErrorHandler()
         self._context_manager = context_manager
+        self._tool_result_policy = tool_result_policy
         self._context_providers = context_providers
         self._output_evaluator = output_evaluator
         self._streaming = streaming

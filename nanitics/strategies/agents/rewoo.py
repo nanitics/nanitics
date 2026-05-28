@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel, ConfigDict
 
+from nanitics.capabilities.context.token_counter import EstimateTokenCounter
+from nanitics.capabilities.context.tool_result import ToolResultPolicy
 from nanitics.infrastructure.llm.protocol import LLMClient, Message
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
@@ -151,6 +153,8 @@ class ReWOOAgent(Agent):
         cancellation_token: External cancellation signal.
         output_evaluator: Quality gate for the solver's final answer.
         context_manager: Context window management.
+        tool_result_policy: Bounds the size of individual tool results
+            before they enter the message list. Defaults to ``None``.
         context_providers: Inject context before each LLM call.
         prompt_contributors: Additional system prompt sections.
         output_schema: Pydantic model for structured solver output. When
@@ -173,6 +177,7 @@ class ReWOOAgent(Agent):
         cancellation_token: CancellationToken | None = None,
         output_evaluator: OutputEvaluator | None = None,
         context_manager: ContextManagement | None = None,
+        tool_result_policy: ToolResultPolicy | None = None,
         context_providers: list[ContextProvider] | None = None,
         prompt_contributors: list[SystemPromptContributor] | None = None,
         output_schema: type[BaseModel] | None = None,
@@ -184,11 +189,16 @@ class ReWOOAgent(Agent):
             system_prompt=system_prompt,
             cancellation_token=cancellation_token,
             context_manager=context_manager,
+            tool_result_policy=tool_result_policy,
             context_providers=context_providers,
             output_evaluator=output_evaluator,
             prompt_contributors=prompt_contributors,
         )
-        self._tool_registry = ToolRegistry(emitter_provider=lambda: self._emitter)
+        self._tool_registry = ToolRegistry(
+            emitter_provider=lambda: self._emitter,
+            tool_result_policy=tool_result_policy,
+            token_counter=EstimateTokenCounter() if tool_result_policy is not None else None,
+        )
         self._tool_registry.register_all(tools)
         self._plan_store = plan_store
         self._max_observation_length = max_observation_length
@@ -241,6 +251,8 @@ class ReWOOAgent(Agent):
     async def _execute(self, input: AgentInput, *, thread_key: str | None = None) -> AgentResult:
         from nanitics.capabilities.planning.models import Plan, PlanStatus, PlanStep, StepStatus
 
+        if self._tool_result_policy is not None:
+            self._tool_result_policy.reset()
         usages: list[Usage] = []
         all_messages: list[Message] = []
         step_number = 0

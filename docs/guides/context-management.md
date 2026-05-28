@@ -88,6 +88,54 @@ The `threshold` parameter controls when management triggers, expressed as a frac
 
 The threshold interacts with `reserve_tokens`: a 200K limit with 8K reserve and 0.9 threshold triggers at ~173K total tokens. If your agent produces long tool outputs in bursts, a lower threshold gives more headroom.
 
+## Tool-Result Policies
+
+`ContextManager` bounds the *whole message list* before each LLM call. `ToolResultPolicy` bounds the *individual tool result* at the point it is produced — before it ever enters the message list. The two layers compose orthogonally and are configured on the agent independently.
+
+Reach for a tool-result policy when:
+
+- An individual tool can return enough output to blow the budget on its own (database dumps, large file reads, verbose HTTP responses).
+- You want the agent to *see* that a tool returned too much and recover, rather than silently slicing the result.
+- You want a per-tool-call budget that's independent of conversation length.
+
+Three implementations ship in `nanitics.context`:
+
+```python
+from nanitics.context import (
+    ErrorOnLargeToolResult,
+    TruncateToolResult,
+    SummarizeToolResult,
+)
+from nanitics.strategies import ReActAgent
+
+# Recommended default: surface the failure to the LLM as a correction prompt.
+agent = ReActAgent(
+    name="my-agent",
+    llm_client=llm,
+    emitter=emitter,
+    system_prompt="…",
+    tools=[my_tool],
+    tool_result_policy=ErrorOnLargeToolResult(max_tokens=4_000),
+)
+
+# Opt-in data loss: head/tail slice.
+tool_result_policy = TruncateToolResult(max_tokens=4_000, head_tokens=500)
+
+# Opt-in LLM compression. Falls back to truncate if the summary fails
+# or is still over budget.
+tool_result_policy = SummarizeToolResult(max_tokens=4_000, llm_client=llm)
+```
+
+**Start with `ErrorOnLargeToolResult`.** It surfaces the failure through the existing error-handling capability, so the LLM is told the result was too large and can reformulate the call (narrower query, smaller page size, different tool). Reach for `TruncateToolResult` or `SummarizeToolResult` only when the failure isn't actionable — for example, when the tool's output is intrinsically large and the agent has no narrower call available.
+
+**The policy hooks at `ToolRegistry.dispatch`.** Wrapper-suppressed results (`ToolResult(..., executed=False)` from approval wrappers and similar) skip the policy because they were not freshly produced. Existing per-tool input/output caps (e.g. `file_read._DEFAULT_MAX_BYTES`) stay in place as defense-in-depth on the tool boundary; the policy is the token-budget enforcer.
+
+**CodeAct caveat.** `CodeActAgent.tool_result_policy` only governs *registry-dispatched* tools passed via `tools=`. CodeAct's primary sandbox-execution path produces an `ExecutionResult` (not a `ToolResult`) and continues to use its own `max_observation_length` cap.
+
+**Observability.** Each impl emits `ToolResultPolicyAppliedEvent` when a transformation occurs (no event on a pass-through). The `action` field discriminates `"truncated"`, `"summarized"`, or `"errored"`. The `SummarizeToolResult` fallback path emits a single event with `action="truncated"` and `fell_back=True`.
+
+> **See also:** [examples/context/tool_result_policy.py](../../examples/context/tool_result_policy.py)
+
 ## Composition with Other Capabilities
 
 Context management interacts with several other SDK capabilities:

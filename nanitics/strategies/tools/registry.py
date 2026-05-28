@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Callable, Iterable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from nanitics.infrastructure.errors import (
     ToolError,
@@ -24,6 +24,10 @@ from .context import ToolContext, _current_tool_context
 from .function_tool import FunctionTool
 from .protocol import Tool, ToolResult
 
+if TYPE_CHECKING:
+    from nanitics.capabilities.context.token_counter import TokenCounter
+    from nanitics.capabilities.context.tool_result import ToolResultPolicy
+
 
 class ToolRegistry:
     """Manages a collection of tools and dispatches LLM tool calls.
@@ -40,6 +44,15 @@ class ToolRegistry:
         emitter: Event emitter for tool invocation and result events.
         tool_state: Per-run state dict injected into ``ToolContext.state``
             for every tool invocation.
+        tool_result_policy: Optional
+            :class:`~nanitics.capabilities.context.ToolResultPolicy`
+            applied to every freshly-produced :class:`ToolResult` after
+            successful execution and before the result is returned to the
+            caller. Defaults to ``None`` (no policy applied — existing
+            behavior). When set, ``token_counter`` is required.
+        token_counter: Token counter used by the policy for budget
+            arithmetic. Required when ``tool_result_policy`` is set; the
+            constructor raises :class:`ValueError` otherwise.
     """
 
     def __init__(
@@ -48,11 +61,17 @@ class ToolRegistry:
         tool_state: dict[str, Any] | None = None,
         *,
         emitter_provider: Callable[[], EventEmitter | None] | None = None,
+        tool_result_policy: ToolResultPolicy | None = None,
+        token_counter: TokenCounter | None = None,
     ) -> None:
+        if tool_result_policy is not None and token_counter is None:
+            raise ValueError("`token_counter` is required when `tool_result_policy` is set")
         self._tools: dict[str, Tool] = {}
         self._static_emitter = emitter
         self._emitter_provider = emitter_provider
         self._tool_state = tool_state or {}
+        self._tool_result_policy = tool_result_policy
+        self._token_counter = token_counter
 
     @property
     def _emitter(self) -> EventEmitter | None:
@@ -269,6 +288,33 @@ class ToolRegistry:
         # registry to suppress both events. The result is still returned to
         # the caller so its content can be surfaced to the LLM.
         if result.executed:
+            if self._tool_result_policy is not None:
+                from nanitics.capabilities.context.tool_result import ToolResultContext
+
+                # The policy may raise ToolResultTooLargeError (a ToolError
+                # subclass). The existing except ToolError branch above
+                # does not cover this raise — we route it through the same
+                # emit-paired-and-reraise shape here so the trace records
+                # an invoke/result pair with success=False.
+                try:
+                    result = await self._tool_result_policy.apply(
+                        result,
+                        ToolResultContext(
+                            tool_call=tool_call,
+                            token_counter=self._token_counter,  # type: ignore[arg-type]
+                            emitter=self._emitter,
+                        ),
+                    )
+                except ToolError as e:
+                    duration_ms = (time.perf_counter() - start) * 1000
+                    self._emit_invoke(tool_call)
+                    self._emit_result(
+                        tool_call,
+                        success=False,
+                        error=str(e),
+                        duration_ms=duration_ms,
+                    )
+                    raise
             duration_ms = (time.perf_counter() - start) * 1000
             self._emit_invoke(tool_call)
             self._emit_result(

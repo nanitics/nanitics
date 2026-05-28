@@ -26,6 +26,7 @@ from nanitics.infrastructure.errors import (
     ToolExecutionError,
     ToolNotFoundError,
     ToolParameterError,
+    ToolResultTooLargeError,
     ToolTimeoutError,
 )
 from nanitics.infrastructure.llm import (
@@ -165,6 +166,7 @@ from nanitics.infrastructure.observability import (
     ToolInfo,
     ToolInvokeEvent,
     ToolResultEvent,
+    ToolResultPolicyAppliedEvent,
     Trace,
     TraceCollector,
     TracedExecutor,
@@ -354,6 +356,8 @@ __all__ = [
     "ToolNotFoundError",
     "ToolParameterError",
     "ToolResultEvent",
+    "ToolResultPolicyAppliedEvent",
+    "ToolResultTooLargeError",
     "ToolSchema",
     "ToolTimeoutError",
     "Trace",
