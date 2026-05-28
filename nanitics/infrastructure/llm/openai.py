@@ -10,8 +10,11 @@ from typing import Any
 from pydantic import BaseModel
 
 from nanitics.infrastructure.errors import (
+    LLMAuthenticationError,
     LLMContextLengthError,
+    LLMOverloadedError,
     LLMProviderError,
+    LLMQuotaExhaustedError,
     LLMRateLimitError,
     LLMSchemaViolationError,
 )
@@ -41,6 +44,27 @@ except ImportError as _err:  # pragma: no cover
     ) from _err
 
 __all__ = ["OpenAILLMClient"]
+
+
+def _extract_openai_error_type(e: Exception) -> str | None:
+    """Return ``body.error.type`` from an OpenAI SDK exception, defensively.
+
+    OpenAI error responses follow the shape
+    ``{"error": {"type": str, "code": str, "message": str, ...}}``. The
+    ``body`` attribute can be ``None``, a non-dict, or partially populated.
+    Returns ``None`` for anything other than a well-formed ``error.type``
+    string.
+    """
+    body = getattr(e, "body", None) or {}
+    if not isinstance(body, dict):
+        return None
+    err_obj = body.get("error")
+    if not isinstance(err_obj, dict):
+        return None
+    err_type = err_obj.get("type")
+    if not isinstance(err_type, str):
+        return None
+    return err_type
 
 
 class OpenAILLMClient:
@@ -161,6 +185,19 @@ class OpenAILLMClient:
                     return await self._stream_request(kwargs, on_token)
                 return await self._standard_request(kwargs)
             except openai.RateLimitError as e:
+                # OpenAI 429 with ``error.type == "insufficient_quota"`` is a
+                # billing-state condition, not a transient rate-limit —
+                # retrying never recovers within the budget window. Route
+                # to ``LLMQuotaExhaustedError`` (FATAL); other 429 shapes
+                # preserve the existing ``LLMRateLimitError`` retry path.
+                err_type = _extract_openai_error_type(e)
+                if err_type == "insufficient_quota":
+                    raise LLMQuotaExhaustedError(
+                        str(e),
+                        status_code=e.status_code,
+                        provider="openai",
+                        provider_error_type="insufficient_quota",
+                    ) from e
                 retry_after: float | None = None
                 response = getattr(e, "response", None)
                 if response is not None:
@@ -180,11 +217,34 @@ class OpenAILLMClient:
                 code = getattr(e, "code", None)
                 if code == "context_length_exceeded":
                     raise LLMContextLengthError(str(e)) from e
-                raise LLMProviderError(str(e), status_code=e.status_code, provider="openai") from e
+                raise LLMProviderError(
+                    str(e),
+                    status_code=e.status_code,
+                    provider="openai",
+                    provider_error_type=_extract_openai_error_type(e),
+                ) from e
             except openai.AuthenticationError as e:
-                raise LLMProviderError(str(e), status_code=e.status_code, provider="openai") from e
+                raise LLMAuthenticationError(
+                    str(e),
+                    status_code=e.status_code,
+                    provider="openai",
+                    provider_error_type=_extract_openai_error_type(e),
+                ) from e
             except openai.APIStatusError as e:
-                raise LLMProviderError(str(e), status_code=e.status_code, provider="openai") from e
+                err_type = _extract_openai_error_type(e)
+                if err_type == "overloaded_error":
+                    raise LLMOverloadedError(
+                        str(e),
+                        status_code=e.status_code,
+                        provider="openai",
+                        provider_error_type="overloaded_error",
+                    ) from e
+                raise LLMProviderError(
+                    str(e),
+                    status_code=e.status_code,
+                    provider="openai",
+                    provider_error_type=err_type,
+                ) from e
             except openai.APIConnectionError as e:
                 raise LLMProviderError(str(e), provider="openai") from e
 

@@ -5,8 +5,11 @@ from nanitics.infrastructure.errors import (
     AgentIterationLimitError,
     EmbeddingProviderError,
     EmbeddingRateLimitError,
+    LLMAuthenticationError,
     LLMContextLengthError,
+    LLMOverloadedError,
     LLMProviderError,
+    LLMQuotaExhaustedError,
     LLMRateLimitError,
     LLMSchemaViolationError,
     ToolError,
@@ -122,3 +125,43 @@ class TestClassifyError:
     def test_embedding_provider_error_401_is_fatal(self) -> None:
         error = EmbeddingProviderError("unauthorized", status_code=401, provider="voyage")
         assert classify_error(error) == ErrorCategory.FATAL
+
+    def test_llm_authentication_error_is_fatal(self) -> None:
+        error = LLMAuthenticationError("Invalid API key", status_code=401, provider="anthropic")
+        assert classify_error(error) == ErrorCategory.FATAL
+
+    def test_llm_quota_exhausted_error_is_fatal(self) -> None:
+        # Deliberate change from pre-Phase behaviour: an Anthropic
+        # 429-with-insufficient_quota now routes to FATAL via the typed
+        # subclass instead of RETRYABLE via LLMRateLimitError.
+        error = LLMQuotaExhaustedError(
+            "Quota exhausted",
+            status_code=429,
+            provider="anthropic",
+            provider_error_type="insufficient_quota",
+        )
+        assert classify_error(error) == ErrorCategory.FATAL
+
+    def test_llm_overloaded_error_is_retryable(self) -> None:
+        error = LLMOverloadedError(
+            "Overloaded",
+            status_code=529,
+            provider="anthropic",
+            provider_error_type="overloaded_error",
+        )
+        assert classify_error(error) == ErrorCategory.RETRYABLE
+
+    def test_raw_llm_provider_error_429_still_falls_through_to_status_branch(self) -> None:
+        # Regression guard: the new subclass branches must consume *only*
+        # their own subclasses. A raw LLMProviderError(status_code=429),
+        # with no subclass identity, must still classify via the existing
+        # status-code branch (FATAL for 4xx). This test will fail if a
+        # future change accidentally reorders the new branches above the
+        # parent check in a way that captures the parent class itself.
+        error = LLMProviderError("rate limited", status_code=429, provider="anthropic")
+        assert classify_error(error) == ErrorCategory.FATAL
+
+    def test_raw_llm_provider_error_500_still_falls_through_to_status_branch(self) -> None:
+        # Regression guard for the 5xx branch on the raw parent class.
+        error = LLMProviderError("server error", status_code=500, provider="anthropic")
+        assert classify_error(error) == ErrorCategory.RETRYABLE

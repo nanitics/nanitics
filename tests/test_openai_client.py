@@ -12,8 +12,11 @@ import pytest
 from pydantic import BaseModel
 
 from nanitics.errors import (
+    LLMAuthenticationError,
     LLMContextLengthError,
+    LLMOverloadedError,
     LLMProviderError,
+    LLMQuotaExhaustedError,
     LLMRateLimitError,
     LLMSchemaViolationError,
 )
@@ -29,7 +32,7 @@ from nanitics.infrastructure.llm._openai_format import (
     _to_openai_messages,
     _to_openai_tools,
 )
-from nanitics.infrastructure.llm.openai import OpenAILLMClient
+from nanitics.infrastructure.llm.openai import OpenAILLMClient, _extract_openai_error_type
 from nanitics.tracing import (
     ImageContentBlock,
     Message,
@@ -692,16 +695,21 @@ class TestOpenAILLMClient:
     async def test_authentication_error_mapping(self) -> None:
         client = self._make_client()
         response = _make_error_response(401)
-        exc = openai.AuthenticationError(message="Invalid API key", response=response, body=None)
+        exc = openai.AuthenticationError(
+            message="Invalid API key",
+            response=response,
+            body={"error": {"type": "invalid_request_error", "code": "invalid_api_key"}},
+        )
 
         with patch.object(client._client.chat.completions, "create", new=AsyncMock(side_effect=exc)):
-            with pytest.raises(LLMProviderError) as exc_info:
+            with pytest.raises(LLMAuthenticationError) as exc_info:
                 await client.generate(
                     system_prompt="test",
                     messages=[Message(role="user", content="hi")],
                 )
             assert exc_info.value.provider == "openai"
             assert exc_info.value.status_code == 401
+            assert exc_info.value.provider_error_type == "invalid_request_error"
 
     async def test_api_status_error_mapping(self) -> None:
         client = self._make_client()
@@ -771,6 +779,139 @@ class TestOpenAILLMClient:
         assert result.usage.total_tokens == 150
         assert result.usage.cache_creation_input_tokens is None
         assert result.usage.cache_read_input_tokens is None
+
+
+# --- Typed Error Subclass Mapping Tests (Phase: typed-llm-error-subclasses) ---
+
+
+class TestExtractOpenAIErrorType:
+    def test_missing_body(self) -> None:
+        exc = MagicMock(spec=[])
+        assert _extract_openai_error_type(exc) is None
+
+    def test_body_is_none(self) -> None:
+        exc = MagicMock()
+        exc.body = None
+        assert _extract_openai_error_type(exc) is None
+
+    def test_body_is_non_dict(self) -> None:
+        exc = MagicMock()
+        exc.body = "not-a-dict"
+        assert _extract_openai_error_type(exc) is None
+
+    def test_body_dict_without_error_key(self) -> None:
+        exc = MagicMock()
+        exc.body = {"other": "x"}
+        assert _extract_openai_error_type(exc) is None
+
+    def test_body_dict_with_non_dict_error(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": "x"}
+        assert _extract_openai_error_type(exc) is None
+
+    def test_body_dict_with_non_string_error_type(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": {"type": 42}}
+        assert _extract_openai_error_type(exc) is None
+
+    def test_happy_path(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": {"type": "insufficient_quota"}}
+        assert _extract_openai_error_type(exc) == "insufficient_quota"
+
+
+class TestOpenAITypedErrorMapping:
+    def _make_client(self) -> OpenAILLMClient:
+        return OpenAILLMClient(model="gpt-4o-mini", api_key="test-key")
+
+    async def test_rate_limit_with_insufficient_quota_routes_to_quota_exhausted(self) -> None:
+        client = self._make_client()
+        response = _make_error_response(429)
+        exc = openai.RateLimitError(
+            message="Quota exhausted",
+            response=response,
+            body={"error": {"type": "insufficient_quota", "message": "x"}},
+        )
+        with patch.object(client._client.chat.completions, "create", new=AsyncMock(side_effect=exc)):
+            with pytest.raises(LLMQuotaExhaustedError) as exc_info:
+                await client.generate(
+                    system_prompt="test",
+                    messages=[Message(role="user", content="hi")],
+                )
+            assert exc_info.value.provider == "openai"
+            assert exc_info.value.status_code == 429
+            assert exc_info.value.provider_error_type == "insufficient_quota"
+
+    async def test_rate_limit_without_quota_signal_routes_to_rate_limit(self) -> None:
+        # Regression: a plain 429 without insufficient_quota in the body
+        # continues to route through LLMRateLimitError (RETRYABLE).
+        client = self._make_client()
+        response = _make_error_response(429, headers={"retry-after": "5"})
+        exc = openai.RateLimitError(
+            message="Slow down",
+            response=response,
+            body={"error": {"type": "rate_limit_exceeded"}},
+        )
+        with patch.object(client._client.chat.completions, "create", new=AsyncMock(side_effect=exc)):
+            with pytest.raises(LLMRateLimitError) as exc_info:
+                await client.generate(
+                    system_prompt="test",
+                    messages=[Message(role="user", content="hi")],
+                )
+            assert exc_info.value.retry_after == 5.0
+
+    async def test_bad_request_non_context_includes_provider_error_type(self) -> None:
+        client = self._make_client()
+        response = _make_error_response(400)
+        exc = openai.BadRequestError(
+            message="invalid",
+            response=response,
+            body={"error": {"type": "invalid_request_error", "code": "invalid_value"}},
+        )
+        with patch.object(client._client.chat.completions, "create", new=AsyncMock(side_effect=exc)):
+            with pytest.raises(LLMProviderError) as exc_info:
+                await client.generate(
+                    system_prompt="test",
+                    messages=[Message(role="user", content="hi")],
+                )
+            assert type(exc_info.value) is LLMProviderError
+            assert exc_info.value.provider_error_type == "invalid_request_error"
+
+    async def test_api_status_overloaded_error_routes_to_overloaded(self) -> None:
+        client = self._make_client()
+        response = _make_error_response(503)
+        exc = openai.APIStatusError(
+            message="Overloaded",
+            response=response,
+            body={"error": {"type": "overloaded_error", "message": "x"}},
+        )
+        with patch.object(client._client.chat.completions, "create", new=AsyncMock(side_effect=exc)):
+            with pytest.raises(LLMOverloadedError) as exc_info:
+                await client.generate(
+                    system_prompt="test",
+                    messages=[Message(role="user", content="hi")],
+                )
+            assert exc_info.value.provider == "openai"
+            assert exc_info.value.status_code == 503
+            assert exc_info.value.provider_error_type == "overloaded_error"
+
+    async def test_api_status_non_overloaded_routes_to_provider_error(self) -> None:
+        client = self._make_client()
+        response = _make_error_response(503)
+        exc = openai.APIStatusError(
+            message="Server",
+            response=response,
+            body={"error": {"type": "server_error", "message": "x"}},
+        )
+        with patch.object(client._client.chat.completions, "create", new=AsyncMock(side_effect=exc)):
+            with pytest.raises(LLMProviderError) as exc_info:
+                await client.generate(
+                    system_prompt="test",
+                    messages=[Message(role="user", content="hi")],
+                )
+            assert type(exc_info.value) is LLMProviderError
+            assert exc_info.value.status_code == 503
+            assert exc_info.value.provider_error_type == "server_error"
 
 
 # --- Structured Output Tests ---

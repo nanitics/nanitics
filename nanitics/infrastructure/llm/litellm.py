@@ -39,8 +39,11 @@ from typing import Any
 from pydantic import BaseModel
 
 from nanitics.infrastructure.errors import (
+    LLMAuthenticationError,
     LLMContextLengthError,
+    LLMOverloadedError,
     LLMProviderError,
+    LLMQuotaExhaustedError,
     LLMRateLimitError,
     LLMSchemaViolationError,
 )
@@ -64,6 +67,56 @@ try:
     import litellm
 except ImportError as _err:  # pragma: no cover
     raise ImportError("LiteLLMClient requires the 'litellm' extra: pip install nanitics[litellm]") from _err
+
+
+def _extract_litellm_error_type(e: Exception) -> str | None:
+    """Return ``body.error.type`` from a LiteLLM exception, defensively.
+
+    LiteLLM normalizes upstream errors and (when available) carries the
+    upstream body on ``e.body``. The shape mirrors OpenAI's
+    ``{"error": {"type": str, ...}}``. Returns ``None`` for missing or
+    malformed bodies.
+    """
+    body = getattr(e, "body", None) or {}
+    if not isinstance(body, dict):
+        return None
+    err_obj = body.get("error")
+    if not isinstance(err_obj, dict):
+        return None
+    err_type = err_obj.get("type")
+    if not isinstance(err_type, str):
+        return None
+    return err_type
+
+
+def _extract_litellm_quota_signal(e: Exception) -> str | None:
+    """Return a positive quota signal from a LiteLLM exception body, or ``None``.
+
+    Recognized signals:
+    - OpenAI-shape ``error.type == "insufficient_quota"`` → returns
+      ``"insufficient_quota"``.
+    - Gemini-shape ``error.status == "RESOURCE_EXHAUSTED"`` → returns
+      ``"RESOURCE_EXHAUSTED"`` (LiteLLM forwards the upstream status code
+      under ``error.status``).
+
+    A return value of ``None`` means "no positive quota signal" — the
+    caller should NOT route to ``LLMQuotaExhaustedError``. Per the Phase's
+    Gemini sparse-body rationale, absence of a positive signal stays on
+    the existing ``LLMRateLimitError`` path.
+    """
+    body = getattr(e, "body", None) or {}
+    if not isinstance(body, dict):
+        return None
+    err_obj = body.get("error")
+    if not isinstance(err_obj, dict):
+        return None
+    err_type = err_obj.get("type")
+    if isinstance(err_type, str) and err_type == "insufficient_quota":
+        return "insufficient_quota"
+    err_status = err_obj.get("status")
+    if isinstance(err_status, str) and err_status == "RESOURCE_EXHAUSTED":
+        return "RESOURCE_EXHAUSTED"
+    return None
 
 
 class LiteLLMClient:
@@ -174,6 +227,20 @@ class LiteLLMClient:
                     return await self._stream_request(kwargs, on_token)
                 return await self._standard_request(kwargs)
             except litellm.RateLimitError as e:
+                # LiteLLM normalizes OpenAI's ``insufficient_quota`` and
+                # Gemini's ``RESOURCE_EXHAUSTED`` into ``RateLimitError``
+                # while preserving the upstream signal on ``body.error``.
+                # A positive signal routes to ``LLMQuotaExhaustedError``
+                # (FATAL); a sparse body falls back to ``LLMRateLimitError``
+                # (RETRYABLE), preserving existing behaviour.
+                quota_signal = _extract_litellm_quota_signal(e)
+                if quota_signal is not None:
+                    raise LLMQuotaExhaustedError(
+                        str(e),
+                        status_code=getattr(e, "status_code", 429),
+                        provider="litellm",
+                        provider_error_type=quota_signal,
+                    ) from e
                 retry_after: float | None = None
                 response = getattr(e, "response", None)
                 if response is not None:
@@ -190,21 +257,73 @@ class LiteLLMClient:
                 # one branch up). A residual ``BadRequestError`` therefore
                 # never represents overflow — surface it as a provider error
                 # with no substring fallback.
-                raise LLMProviderError(str(e), status_code=getattr(e, "status_code", 400), provider="litellm") from e
+                raise LLMProviderError(
+                    str(e),
+                    status_code=getattr(e, "status_code", 400),
+                    provider="litellm",
+                    provider_error_type=_extract_litellm_error_type(e),
+                ) from e
             except litellm.AuthenticationError as e:
-                raise LLMProviderError(str(e), status_code=getattr(e, "status_code", 401), provider="litellm") from e
+                raise LLMAuthenticationError(
+                    str(e),
+                    status_code=getattr(e, "status_code", 401),
+                    provider="litellm",
+                    provider_error_type=_extract_litellm_error_type(e),
+                ) from e
             except litellm.PermissionDeniedError as e:
-                raise LLMProviderError(str(e), status_code=getattr(e, "status_code", 403), provider="litellm") from e
+                # LiteLLM's PermissionDeniedError is a 403 from an auth
+                # provider; mirrors the "credentials rejected" category
+                # along with AuthenticationError. Body inspection is not
+                # needed — the upstream client already routed by class.
+                raise LLMAuthenticationError(
+                    str(e),
+                    status_code=getattr(e, "status_code", 403),
+                    provider="litellm",
+                    provider_error_type=_extract_litellm_error_type(e),
+                ) from e
             except litellm.NotFoundError as e:
-                raise LLMProviderError(str(e), status_code=getattr(e, "status_code", 404), provider="litellm") from e
+                raise LLMProviderError(
+                    str(e),
+                    status_code=getattr(e, "status_code", 404),
+                    provider="litellm",
+                    provider_error_type=_extract_litellm_error_type(e),
+                ) from e
             except litellm.UnprocessableEntityError as e:
-                raise LLMProviderError(str(e), status_code=getattr(e, "status_code", 422), provider="litellm") from e
+                raise LLMProviderError(
+                    str(e),
+                    status_code=getattr(e, "status_code", 422),
+                    provider="litellm",
+                    provider_error_type=_extract_litellm_error_type(e),
+                ) from e
             except litellm.InternalServerError as e:
-                raise LLMProviderError(str(e), status_code=getattr(e, "status_code", 500), provider="litellm") from e
+                raise LLMProviderError(
+                    str(e),
+                    status_code=getattr(e, "status_code", 500),
+                    provider="litellm",
+                    provider_error_type=_extract_litellm_error_type(e),
+                ) from e
             except litellm.APIConnectionError as e:
                 raise LLMProviderError(str(e), status_code=None, provider="litellm") from e
             except litellm.APIError as e:
-                raise LLMProviderError(str(e), status_code=getattr(e, "status_code", None), provider="litellm") from e
+                # Overload routing: an explicit 529 status (Anthropic's
+                # "Overloaded" code, forwarded by LiteLLM) or an
+                # ``overloaded_error`` body type routes to
+                # ``LLMOverloadedError`` (RETRYABLE).
+                err_type = _extract_litellm_error_type(e)
+                status_code = getattr(e, "status_code", None)
+                if status_code == 529 or err_type == "overloaded_error":
+                    raise LLMOverloadedError(
+                        str(e),
+                        status_code=status_code,
+                        provider="litellm",
+                        provider_error_type=err_type,
+                    ) from e
+                raise LLMProviderError(
+                    str(e),
+                    status_code=status_code,
+                    provider="litellm",
+                    provider_error_type=err_type,
+                ) from e
 
         llm_response = await self._with_deadline(_api_call())
 

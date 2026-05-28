@@ -7,8 +7,11 @@ from nanitics.infrastructure.errors import (
     AgentIterationLimitError,
     EmbeddingProviderError,
     EmbeddingRateLimitError,
+    LLMAuthenticationError,
     LLMContextLengthError,
+    LLMOverloadedError,
     LLMProviderError,
+    LLMQuotaExhaustedError,
     LLMRateLimitError,
     LLMSchemaViolationError,
     ToolError,
@@ -45,10 +48,13 @@ def classify_error(error: Exception) -> ErrorCategory:
     """Classify an error into a recovery category using the default rule set.
 
     Maps the SDK error hierarchy to ErrorCategory values:
-    - RETRYABLE: rate limits, server errors (5xx), tool timeouts
+    - RETRYABLE: rate limits, server errors (5xx), tool timeouts,
+      provider overload (:class:`LLMOverloadedError`)
     - CORRECTABLE: bad tool parameters, wrong tool name, schema violations,
       and any other ``ToolError`` subclass
-    - FATAL: context length exceeded, budget exhausted, client errors (4xx)
+    - FATAL: context length exceeded, budget exhausted, client errors (4xx),
+      provider auth failures (:class:`LLMAuthenticationError`), and
+      provider quota exhaustion (:class:`LLMQuotaExhaustedError`)
 
     ``ToolError`` itself defaults to CORRECTABLE so app-defined typed
     subclasses route through the correction loop without per-class
@@ -62,8 +68,21 @@ def classify_error(error: Exception) -> ErrorCategory:
 
     Returns:
         The ErrorCategory determining recovery strategy.
+        :class:`LLMQuotaExhaustedError` is intentionally classified as
+        FATAL (not RETRYABLE) — quota exhaustion is a billing-state
+        condition that retry cannot resolve within the budget window.
     """
     if isinstance(error, LLMRateLimitError):
+        return ErrorCategory.RETRYABLE
+
+    # Typed subclasses of LLMProviderError are checked *before* the parent
+    # branch — Python's isinstance matches the first true branch and the
+    # parent's status-code fallback would otherwise reclassify them.
+    if isinstance(error, LLMAuthenticationError):
+        return ErrorCategory.FATAL
+    if isinstance(error, LLMQuotaExhaustedError):
+        return ErrorCategory.FATAL
+    if isinstance(error, LLMOverloadedError):
         return ErrorCategory.RETRYABLE
 
     if isinstance(error, LLMProviderError):

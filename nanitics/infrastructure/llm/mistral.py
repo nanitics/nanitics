@@ -10,8 +10,11 @@ from typing import Any
 from pydantic import BaseModel
 
 from nanitics.infrastructure.errors import (
+    LLMAuthenticationError,
     LLMContextLengthError,
+    LLMOverloadedError,
     LLMProviderError,
+    LLMQuotaExhaustedError,
     LLMRateLimitError,
     LLMSchemaViolationError,
 )
@@ -167,11 +170,43 @@ def _parse_response(data: dict[str, Any], model: str) -> LLMResponse:
     )
 
 
+def _extract_mistral_error_code(body: str) -> str | None:
+    """Return ``code`` from a Mistral error body, or ``None``.
+
+    Mistral follows OpenAI's error schema and returns
+    ``{"code": str, "message": str, ...}``. The body is the raw HTTP
+    response text — parse defensively, returning ``None`` for non-JSON,
+    non-dict, or missing/non-string ``code``.
+    """
+    try:
+        parsed = json.loads(body)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    raw_code = parsed.get("code")
+    if not isinstance(raw_code, str):
+        return None
+    return raw_code
+
+
 def _handle_error(exc: httpx.HTTPStatusError) -> None:
     status = exc.response.status_code
     body = exc.response.text
+    code = _extract_mistral_error_code(body)
 
     if status == 429:
+        # Mistral 429 with a structured quota code routes to FATAL
+        # ``LLMQuotaExhaustedError`` — retrying against an exhausted
+        # quota never recovers within the budget window. Other 429
+        # shapes preserve the existing rate-limit retry path.
+        if code in {"insufficient_quota", "quota_exceeded"}:
+            raise LLMQuotaExhaustedError(
+                body,
+                status_code=429,
+                provider="mistral",
+                provider_error_type=code,
+            ) from exc
         retry_after: float | None = None
         raw = exc.response.headers.get("retry-after")
         if raw is not None:
@@ -180,30 +215,52 @@ def _handle_error(exc: httpx.HTTPStatusError) -> None:
         raise LLMRateLimitError(body, retry_after=retry_after) from exc
 
     if status == 401:
-        raise LLMProviderError(body, status_code=status, provider="mistral") from exc
+        raise LLMAuthenticationError(
+            body,
+            status_code=401,
+            provider="mistral",
+            provider_error_type=code,
+        ) from exc
 
     if status == 400:
         # Structured-first classification: Mistral follows OpenAI's error
         # schema, returning ``{"code": "context_length_exceeded", ...}`` for
         # overflow. Parse the body as JSON and read the structured code;
         # fall back to ``LLMProviderError`` for any non-JSON or other code.
-        parsed_code: str | None = None
-        try:
-            parsed = json.loads(body)
-        except (json.JSONDecodeError, ValueError):
-            parsed = None
-        if isinstance(parsed, dict):
-            raw_code = parsed.get("code")
-            if isinstance(raw_code, str):
-                parsed_code = raw_code
-        if parsed_code == "context_length_exceeded":
+        if code == "context_length_exceeded":
             raise LLMContextLengthError(body) from exc
-        raise LLMProviderError(body, status_code=status, provider="mistral") from exc
+        raise LLMProviderError(
+            body,
+            status_code=status,
+            provider="mistral",
+            provider_error_type=code,
+        ) from exc
 
     if status >= 500:
-        raise LLMProviderError(body, status_code=status, provider="mistral") from exc
+        # Mistral does not document a dedicated overload code as of
+        # writing; ``code == "overloaded"`` is the positive-signal
+        # predicate. Absence of the signal leaves the existing
+        # ``LLMProviderError`` raise in place.
+        if code == "overloaded":
+            raise LLMOverloadedError(
+                body,
+                status_code=status,
+                provider="mistral",
+                provider_error_type="overloaded",
+            ) from exc
+        raise LLMProviderError(
+            body,
+            status_code=status,
+            provider="mistral",
+            provider_error_type=code,
+        ) from exc
 
-    raise LLMProviderError(body, status_code=status, provider="mistral") from exc
+    raise LLMProviderError(
+        body,
+        status_code=status,
+        provider="mistral",
+        provider_error_type=code,
+    ) from exc
 
 
 class MistralLLMClient:
