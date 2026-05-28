@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Per-step and per-workflow-run token usage propagation.** `StepResult`
+  gained a first-class, typed `usage: Usage | None` field populated by
+  `AgentStep`, `_BoundAgentStep`, `_BoundHandoffStep`, and `HandoffStep`.
+  `Sequential` and `Pipeline` runners now attach an aggregated `usage` to
+  their returned `StepResult` (the sum across every sub-step's `usage`,
+  with `None` only when every sub-step contributed `None`); recursive
+  aggregation through `WorkflowStep` follows by construction. The
+  cancellation-mid-flight branch returns the partial aggregate of what
+  was actually spent; resume from a checkpoint reconstructs sub-step
+  usages from checkpoint state (pre-bump checkpoints with no `"usage"`
+  key resume cleanly, contributing `None`). `SupervisionResult` gained a
+  non-optional `usage: Usage` field — the sum across **every** attempt
+  the `Supervisor` ran during a single `supervise()` call (distinct from
+  `result.usage`, the final attempt only). Checkpoint
+  `CHECKPOINT_SCHEMA_VERSION` bumped from 1 to 2 to carry the new
+  `"usage"` entry in `state["completed_results"][name]` for both
+  Sequential and Pipeline. Loop, MapReduce, DAG, and Conditional remain
+  out of scope — they continue to return `StepResult.usage = None` and
+  will be addressed in a Phase 2 follow-up.
+
+### Deprecations
+
+- **Deprecated:** `StepResult.metadata["usage"]` dict mirror written by
+  `AgentStep`, `_BoundAgentStep`, `_BoundHandoffStep`, and `HandoffStep`.
+  Use `StepResult.usage` (the typed field) instead. Removed in 1.0.0. See
+  [docs/migrations/step-result-usage.md](docs/migrations/step-result-usage.md).
+
 - **Discoverability pass for the threads/memory substrate.** Closes
   the threads/memory maturation arc shipped over PRs #83–#87 with the
   examples and migration content a new consumer searches for first.

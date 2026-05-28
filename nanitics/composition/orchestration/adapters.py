@@ -19,6 +19,13 @@ class AgentStep:
     ``metadata["text_output"]``. Without ``output_schema``, the step output is
     the text response as before.
 
+    .. deprecated:: 0.5.0
+        Reading token usage from ``StepResult.metadata["usage"]`` (the dict
+        mirror) is deprecated. Use the typed :attr:`StepResult.usage` field
+        instead. The dict mirror is retained alongside the typed field for
+        backwards compatibility and will be removed in 1.0.0. See
+        ``docs/migrations/step-result-usage.md``.
+
     Args:
         agent: The agent to execute as a workflow step.
         thread_key: Opaque key identifying the conversation thread this
@@ -53,8 +60,8 @@ class AgentStep:
         }
         if result.parsed is not None:
             metadata["text_output"] = result.output
-            return StepResult(output=result.parsed, metadata=metadata)
-        return StepResult(output=result.output, metadata=metadata)
+            return StepResult(output=result.parsed, metadata=metadata, usage=result.usage)
+        return StepResult(output=result.output, metadata=metadata, usage=result.usage)
 
 
 class WorkflowStep:
@@ -87,8 +94,11 @@ class WorkflowStep:
 class FunctionStep:
     """Wraps an async function as a Step.
 
-    If the function returns a ``StepResult``, it is used directly. Otherwise,
-    the return value is wrapped in ``StepResult(output=...)``.
+    If the function returns a ``StepResult``, it is used directly — including
+    its ``usage`` field, which passes through unchanged (whether ``None`` or
+    a populated ``Usage``). Otherwise, the return value is wrapped in
+    ``StepResult(output=...)`` and the resulting ``usage`` defaults to
+    ``None``, since a plain function has no LLM call to attribute tokens to.
 
     Args:
         name: Step name used in events and trace spans.

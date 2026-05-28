@@ -537,3 +537,35 @@ class TestNestedWorkflowEventHierarchy:
 
         # DAG starts first
         assert start_names.index("outer-dag") < start_names.index("inner-pipeline")
+
+
+# ── Recursive usage aggregation ───────────────────────────
+
+
+class TestRecursiveUsageAggregation:
+    async def test_workflow_step_folds_inner_aggregate_into_outer(self) -> None:
+        from nanitics.composition.orchestration.adapters import AgentStep, WorkflowStep
+        from nanitics.infrastructure import MockLLMClient
+        from nanitics.infrastructure.observability.events import Usage
+        from nanitics.strategies import ReasoningAgent
+        from tests.testing_helpers import make_response, make_usage
+
+        emitter = make_emitter()
+
+        def agent_step(name: str, in_t: int, out_t: int):
+            client = MockLLMClient([make_response("ok", usage=make_usage(in_t, out_t))])
+            return AgentStep(ReasoningAgent(name=name, llm_client=client, emitter=emitter, system_prompt="t"))
+
+        inner = Sequential(
+            name="inner",
+            steps=[agent_step("a", 1, 2), agent_step("b", 3, 4)],
+            emitter=emitter,
+        )
+        outer = Sequential(
+            name="outer",
+            steps=[WorkflowStep(inner), agent_step("c", 5, 6)],
+            emitter=emitter,
+        )
+        result = await outer.execute("task")
+        # Inner aggregates to (4,6); outer folds inner aggregate + outer agent (5,6) = (9,12).
+        assert result.usage == Usage(input_tokens=9, output_tokens=12)

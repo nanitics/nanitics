@@ -421,3 +421,151 @@ class TestPipelineStageDirectExecute:
         stage = Stage(make_step("direct"))
         result = await stage.execute("hello")
         assert result.output == "hello"
+
+
+# ── Usage Aggregation Tests ────────────────────────────────
+
+
+from nanitics.composition.durability.models import RunCheckpoint
+from nanitics.composition.orchestration.adapters import AgentStep, FunctionStep
+from nanitics.infrastructure import MockLLMClient
+from nanitics.infrastructure.observability.events import Usage
+from nanitics.strategies import ReasoningAgent
+from tests.testing_helpers import make_response, make_usage
+
+
+def _make_pipeline_agent_step(name: str, input_tokens: int, output_tokens: int, emitter):
+    client = MockLLMClient([make_response("ok", usage=make_usage(input_tokens, output_tokens))])
+    agent = ReasoningAgent(
+        name=name,
+        llm_client=client,
+        emitter=emitter,
+        system_prompt="test",
+    )
+    return AgentStep(agent)
+
+
+class TestPipelineUsageAggregation:
+    async def test_two_agent_stages_sum_usage(self) -> None:
+        emitter = make_emitter()
+        pipe = Pipeline(
+            name="agg-pipe",
+            stages=[
+                Stage(_make_pipeline_agent_step("a", 1, 2, emitter)),
+                Stage(_make_pipeline_agent_step("b", 3, 4, emitter)),
+            ],
+            emitter=emitter,
+        )
+        result = await pipe.execute("task")
+        assert result.usage == Usage(input_tokens=4, output_tokens=6)
+
+    async def test_agent_and_function_stage_only_agent_counts(self) -> None:
+        emitter = make_emitter()
+
+        async def passthrough(x):
+            return x
+
+        pipe = Pipeline(
+            name="mix-pipe",
+            stages=[
+                Stage(_make_pipeline_agent_step("a", 7, 8, emitter)),
+                Stage(FunctionStep(name="noop", fn=passthrough)),
+            ],
+            emitter=emitter,
+        )
+        result = await pipe.execute("task")
+        assert result.usage == Usage(input_tokens=7, output_tokens=8)
+
+    async def test_cancellation_returns_partial_usage(self) -> None:
+        emitter = make_emitter()
+        token = CancellationToken()
+
+        client = MockLLMClient([make_response("ok", usage=make_usage(11, 13))])
+        agent = ReasoningAgent(name="a", llm_client=client, emitter=emitter, system_prompt="test")
+
+        async def cancel_then_pass(x):
+            token.cancel()
+            return x
+
+        pipe = Pipeline(
+            name="cancel-pipe",
+            stages=[
+                Stage(AgentStep(agent)),
+                Stage(FunctionStep(name="canceller", fn=cancel_then_pass)),
+                Stage(_make_pipeline_agent_step("would-not-run", 100, 200, emitter)),
+            ],
+            emitter=emitter,
+            cancellation_token=token,
+        )
+        result = await pipe.execute("task")
+        assert result.metadata["terminated"] == "cancelled"
+        assert result.usage == Usage(input_tokens=11, output_tokens=13)
+
+    async def test_resume_pre_bump_checkpoint_missing_usage_key(self) -> None:
+        emitter = make_emitter()
+
+        pipe = Pipeline(
+            name="resume-pre-pipe",
+            stages=[
+                Stage(_make_pipeline_agent_step("s1", 1, 1, emitter)),
+                Stage(_make_pipeline_agent_step("s2", 3, 5, emitter)),
+            ],
+            emitter=emitter,
+        )
+        checkpoint = RunCheckpoint(
+            run_id="run-p",
+            checkpoint_type="orchestration",
+            state={
+                "orchestrator_type": "pipeline",
+                "suspended_stage_index": 1,
+                "completed_results": {
+                    "s1": {"output": "ok", "metadata": {}},
+                },
+                "last_output": "ok",
+                "original_input": "task",
+            },
+            suspension_info=SuspensionInfo(
+                suspension_id="sid",
+                request_id="rid",
+                request_type="hitl",
+                prompt="p",
+            ),
+        )
+        result = await pipe.execute("task", resume_from=checkpoint)
+        assert result.usage == Usage(input_tokens=3, output_tokens=5)
+
+    async def test_resume_with_usage_in_checkpoint(self) -> None:
+        emitter = make_emitter()
+        pipe = Pipeline(
+            name="resume-pipe",
+            stages=[
+                Stage(_make_pipeline_agent_step("s1", 1, 1, emitter)),
+                Stage(_make_pipeline_agent_step("s2", 2, 2, emitter)),
+            ],
+            emitter=emitter,
+        )
+        checkpoint = RunCheckpoint(
+            run_id="run-p2",
+            checkpoint_type="orchestration",
+            state={
+                "orchestrator_type": "pipeline",
+                "suspended_stage_index": 1,
+                "completed_results": {
+                    "s1": {
+                        "output": "ok",
+                        "metadata": {},
+                        "usage": Usage(input_tokens=4, output_tokens=6).model_dump(),
+                    },
+                },
+                "last_output": "ok",
+                "original_input": "task",
+            },
+            suspension_info=SuspensionInfo(
+                suspension_id="sid",
+                request_id="rid",
+                request_type="hitl",
+                prompt="p",
+            ),
+        )
+        result = await pipe.execute("task", resume_from=checkpoint)
+        assert result.usage == Usage(input_tokens=6, output_tokens=8)

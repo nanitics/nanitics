@@ -121,7 +121,7 @@ class TestSequentialSuspension:
         assert cp is not None
         assert cp.state["orchestrator_type"] == "sequential"
         assert cp.state["suspended_step_index"] == 1
-        assert cp.state["completed_results"] == {"s1": {"output": 6, "metadata": {}}}
+        assert cp.state["completed_results"] == {"s1": {"output": 6, "metadata": {}, "usage": None}}
         assert cp.state["last_output"] == 6
 
     async def test_suspension_emits_events(self) -> None:
@@ -261,8 +261,8 @@ class TestSequentialSuspension:
         assert cp is not None
         assert cp.state["suspended_step_index"] == 2
         assert cp.state["completed_results"] == {
-            "s1": {"output": 1, "metadata": {}},
-            "s2": {"output": 2, "metadata": {}},
+            "s1": {"output": 1, "metadata": {}, "usage": None},
+            "s2": {"output": 2, "metadata": {}, "usage": None},
         }
 
     async def test_without_checkpoint_store_propagates(self) -> None:
