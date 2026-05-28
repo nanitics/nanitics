@@ -109,6 +109,7 @@ Context assembly, truncation, and summarization.
 | Example | Description | Guide |
 |---|---|---|
 | [context/context_management.py](context/context_management.py) | `ContextManager`, `EstimateTokenCounter`, `TruncationPolicy`, `SummarizationPolicy`, message grouping | [Context Management](../docs/guides/context-management.md) |
+| [context/tool_result_policy.py](context/tool_result_policy.py) | `ToolResultPolicy`, `ErrorOnLargeToolResult` (recommended default), `TruncateToolResult`, `SummarizeToolResult` — bounding individual tool results before they enter the message list | [Context Management](../docs/guides/context-management.md#tool-result-policies) |
 
 ## Control
 

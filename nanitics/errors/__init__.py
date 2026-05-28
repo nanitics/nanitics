@@ -40,6 +40,7 @@ from nanitics.infrastructure.errors import (
     ToolExecutionError,
     ToolNotFoundError,
     ToolParameterError,
+    ToolResultTooLargeError,
     ToolTimeoutError,
 )
 from nanitics.infrastructure.observability import MalformedStoredEventError
@@ -82,6 +83,7 @@ __all__ = [
     "ToolExecutionError",
     "ToolNotFoundError",
     "ToolParameterError",
+    "ToolResultTooLargeError",
     "ToolTimeoutError",
     "WorkflowCancelledError",
     "classify_error",

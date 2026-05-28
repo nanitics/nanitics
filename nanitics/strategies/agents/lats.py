@@ -7,6 +7,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from nanitics.capabilities.context.token_counter import EstimateTokenCounter
+from nanitics.capabilities.context.tool_result import ToolResultPolicy
 from nanitics.infrastructure.llm.instrumented import InstrumentedLLMClient
 from nanitics.infrastructure.llm.protocol import LLMClient, Message, ToolCall
 from nanitics.infrastructure.observability.emitter import EventEmitter
@@ -135,6 +137,8 @@ class LATSAgent(Agent):
             as new episodes.
         cancellation_token: External cancellation signal.
         context_manager: Context window management.
+        tool_result_policy: Bounds the size of individual tool results
+            before they enter the message list. Defaults to ``None``.
         context_providers: Inject context before each LLM call.
         prompt_contributors: Additional system prompt sections.
         tool_state: Per-run state dict injected into tools via
@@ -159,6 +163,7 @@ class LATSAgent(Agent):
         episode_store: EpisodeStore | None = None,
         cancellation_token: CancellationToken | None = None,
         context_manager: ContextManagement | None = None,
+        tool_result_policy: ToolResultPolicy | None = None,
         context_providers: list[ContextProvider] | None = None,
         prompt_contributors: list[SystemPromptContributor] | None = None,
         tool_state: dict[str, Any] | None = None,
@@ -181,6 +186,7 @@ class LATSAgent(Agent):
             system_prompt=system_prompt,
             cancellation_token=cancellation_token,
             context_manager=context_manager,
+            tool_result_policy=tool_result_policy,
             context_providers=context_providers,
             output_evaluator=node_evaluator,
             prompt_contributors=prompt_contributors,
@@ -188,6 +194,8 @@ class LATSAgent(Agent):
         self._tool_registry = ToolRegistry(
             tool_state=tool_state,
             emitter_provider=lambda: self._emitter,
+            tool_result_policy=tool_result_policy,
+            token_counter=EstimateTokenCounter() if tool_result_policy is not None else None,
         )
         self._tool_registry.register_all(tools)
         self._max_iterations = max_iterations
@@ -607,6 +615,8 @@ class LATSAgent(Agent):
 
     async def _execute(self, input: AgentInput, *, thread_key: str | None = None) -> AgentResult:
         self._nodes.clear()
+        if self._tool_result_policy is not None:
+            self._tool_result_policy.reset()
         usages: list[Usage] = []
         tool_schemas = self._tool_registry.list_schemas()
         task_text = _input_to_text(input)

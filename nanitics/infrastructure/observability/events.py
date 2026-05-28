@@ -299,6 +299,46 @@ class ContextSummarizationEvent(BaseEvent):
     summarization_input: str
 
 
+class ToolResultPolicyAppliedEvent(BaseEvent):
+    """Emitted when a ``ToolResultPolicy`` produced a transformed result.
+
+    Not emitted on no-op pass-throughs (when the result fits within the
+    configured budget). Emitted exactly once per
+    :meth:`~nanitics.strategies.tools.registry.ToolRegistry.dispatch` call
+    that ran the policy and produced a transformation (or errored).
+
+    Symmetric to :class:`ContextTruncationEvent` /
+    :class:`ContextSummarizationEvent` for tool results.
+
+    Attributes:
+        tool_call_id: ID of the originating ``ToolCall``.
+        tool_name: Name of the tool whose result was transformed.
+        policy_class: Class name of the policy that produced the event,
+            e.g. ``"TruncateToolResult"``.
+        action: Discriminator for the transformation —
+            ``"truncated"`` (slice), ``"summarized"`` (LLM compression),
+            or ``"errored"`` (budget exceeded, raising).
+        original_tokens: Token count of the result before transformation.
+        final_tokens: Token count after transformation. ``0`` when
+            ``action == "errored"`` (no result was produced).
+        fell_back: ``True`` when :class:`SummarizeToolResult` fell back
+            to truncate semantics after the LLM call failed or returned
+            content still over budget. ``False`` otherwise.
+        error: Populated on ``"errored"`` or when ``fell_back`` is True.
+            ``None`` otherwise.
+    """
+
+    event_type: Literal["tool.result_policy_applied"] = "tool.result_policy_applied"
+    tool_call_id: str
+    tool_name: str
+    policy_class: str
+    action: Literal["truncated", "summarized", "errored"]
+    original_tokens: int
+    final_tokens: int
+    fell_back: bool = False
+    error: str | None = None
+
+
 class ContextContribution(BaseModel):
     """Information about a single context provider's contribution during assembly."""
 

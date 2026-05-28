@@ -7,6 +7,8 @@ from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from nanitics.composition.threads.store import ThreadLocks, ThreadStore
+from nanitics.capabilities.context.token_counter import EstimateTokenCounter
+from nanitics.capabilities.context.tool_result import ToolResultPolicy
 from nanitics.infrastructure.errors import AgentIterationLimitError, AgentToolCallLimitError
 from nanitics.infrastructure.llm.protocol import LLMClient, Message, ToolCall
 from nanitics.infrastructure.observability.emitter import EventEmitter
@@ -65,6 +67,10 @@ class ReActAgent(Agent):
         cancellation_token: External cancellation signal.
         error_handler: Error recovery strategy.
         context_manager: Context window management.
+        tool_result_policy: Bounds the size of individual tool results
+            before they enter the message list. Applied at the
+            :class:`~nanitics.strategies.tools.ToolRegistry` dispatch
+            seam. Defaults to ``None``.
         context_providers: Inject context before each LLM call.
         working_memory: Structured scratchpad the agent can read and
             update across steps.
@@ -93,6 +99,7 @@ class ReActAgent(Agent):
         cancellation_token: CancellationToken | None = None,
         error_handler: ErrorHandling | None = None,
         context_manager: ContextManagement | None = None,
+        tool_result_policy: ToolResultPolicy | None = None,
         context_providers: list[ContextProvider] | None = None,
         working_memory: WorkingMemory | None = None,
         output_evaluator: OutputEvaluator | None = None,
@@ -121,6 +128,7 @@ class ReActAgent(Agent):
             cancellation_token=cancellation_token,
             error_handler=error_handler,
             context_manager=context_manager,
+            tool_result_policy=tool_result_policy,
             context_providers=context_providers,
             output_evaluator=output_evaluator,
             prompt_contributors=contributors if contributors else None,
@@ -131,6 +139,8 @@ class ReActAgent(Agent):
         self._tool_registry = ToolRegistry(
             tool_state=tool_state,
             emitter_provider=lambda: self._emitter,
+            tool_result_policy=tool_result_policy,
+            token_counter=EstimateTokenCounter() if tool_result_policy is not None else None,
         )
         self._tool_registry.register_all(tools)
         self._limiter = IterationLimiter(max_iterations)
@@ -199,6 +209,8 @@ class ReActAgent(Agent):
             self._tool_call_limiter.reset()
         if self._context_manager is not None:
             self._context_manager.reset()
+        if self._tool_result_policy is not None:
+            self._tool_result_policy.reset()
         if self._working_memory is not None:
             self._working_memory.reset()
         messages: list[Message] = []

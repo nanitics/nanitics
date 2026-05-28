@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`ToolResultPolicy` — bounded tool output, symmetric to `ContextManagement`.**
+  New protocol `ToolResultPolicy` (under `nanitics.context`) with three
+  default implementations: `ErrorOnLargeToolResult` (recommended default —
+  raises `ToolResultTooLargeError`, surfaced through the agent's
+  error-handling capability as a correction prompt for the LLM),
+  `TruncateToolResult` (opt-in head/tail slice with marker), and
+  `SummarizeToolResult` (opt-in LLM summarization with truncate-on-failure
+  fallback). The policy hooks at a single seam in `ToolRegistry.dispatch`,
+  applied after a tool's `execute()` returns and before the result enters
+  the message list. Composes orthogonally with `ContextManager`: this
+  layer bounds individual tool results; `ContextManager` bounds the total
+  message list. `Agent`, `ReActAgent`, `LATSAgent`, `ReWOOAgent`, and
+  `CodeActAgent` each gain a `tool_result_policy: ToolResultPolicy | None = None`
+  kwarg (default `None` — strictly additive, no behaviour change unless
+  wired). New `ToolResultTooLargeError(ToolError)` under `nanitics.errors`
+  and `ToolResultPolicyAppliedEvent` under `nanitics.tracing` for
+  observability (action discriminator: `"truncated"` / `"summarized"` /
+  `"errored"`). When reaching for a policy, start with
+  `ErrorOnLargeToolResult` — surfacing the failure to the LLM is more
+  actionable than silent data loss. See [docs/guides/context-management.md](docs/guides/context-management.md#tool-result-policies)
+  and [examples/context/tool_result_policy.py](examples/context/tool_result_policy.py).
+
 ## [0.5.0] - 2026-05-28
 
 ### Added

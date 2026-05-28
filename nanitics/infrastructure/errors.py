@@ -512,6 +512,41 @@ class ToolTimeoutError(ToolError):
         self.timeout_seconds = timeout_seconds
 
 
+class ToolResultTooLargeError(ToolError):
+    """Raised when a tool result exceeds the configured token budget.
+
+    Surfaced by :class:`~nanitics.capabilities.context.ErrorOnLargeToolResult`
+    through the registry's existing ``except ToolError`` branch, so the
+    agent's :class:`~nanitics.capabilities.errors.ErrorHandler` converts it
+    into a correction prompt for the LLM exactly like any other
+    :class:`ToolError`.
+
+    Attributes:
+        tool_name: The tool whose result exceeded the budget.
+        result_tokens: Token count of the returned result.
+        max_tokens: The configured budget the result exceeded.
+    """
+
+    tool_name: str
+    result_tokens: int
+    max_tokens: int
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        tool_name: str,
+        result_tokens: int,
+        max_tokens: int,
+        trace_id: str | None = None,
+        span_id: str | None = None,
+    ) -> None:
+        super().__init__(message, trace_id=trace_id, span_id=span_id)
+        self.tool_name = tool_name
+        self.result_tokens = result_tokens
+        self.max_tokens = max_tokens
+
+
 # --- Agent Errors ---
 
 
