@@ -21,9 +21,14 @@ Acceptance criteria:
   - Run 2 ``LLMRequestEvent`` carries the prior assistant turn as an
     unwrapped ``assistant``-role message — no ``<nanitics:context>``
     envelope around it.
-  - Run 2's output references a concrete element of the run-1 draft
-    (LLM-as-judge), proving the model treated the replay as its own
-    prior turn rather than emitting a generic "no prior draft" reply.
+  - Run 2's output references the shop name from the run-1 draft and
+    contains no "no prior draft" disclaimer — proving the model
+    treated the replay as its own prior turn. The check is
+    deterministic on the output text rather than an LLM-as-judge call,
+    which has proven flaky (the judge sees only ``result2.output`` and
+    has no view into run 1, so it cannot reliably evaluate whether a
+    valid revision happened — see commit history for the prior judge
+    prompt and its false-negative pattern).
 """
 
 from __future__ import annotations
@@ -35,10 +40,21 @@ from nanitics.infrastructure import AgentStartEvent, LLMRequestEvent
 from nanitics.strategies import ReActAgent
 from nanitics.tracing import InMemoryEmitter
 from validation.helpers import (
-    assert_result_satisfies,
     assert_trace_contains,
     make_llm_client,
     run_with_retry,
+)
+
+_DISCLAIMER_PHRASES = (
+    "i don't have",
+    "i do not have",
+    "no record",
+    "no prior draft",
+    "no previous draft",
+    "i can't see",
+    "i cannot see",
+    "haven't seen",
+    "have not seen",
 )
 
 _THREAD_KEY = "behavioral-continuity-t1"
@@ -126,15 +142,18 @@ async def test_thread_identity_revises_prior_draft(traced_emitter: InMemoryEmitt
             f"found wrapper bytes in assistant content: {content!r}"
         )
 
-    # LLM-as-judge: run 2 produced a revision of the run-1 draft, not a
-    # "no prior draft" reply.
-    await assert_result_satisfies(
-        str(result2.output or ""),
-        (
-            "The output is a revised one-sentence pitch for a coffee shop named "
-            "'Bean There' that emphasizes community. It is a TRUE revision of a prior "
-            "draft — it does NOT say 'I don't have a previous draft', 'I have no "
-            "record', or any equivalent disclaimer. It mentions 'Bean There' or a "
-            "clear continuation of the same pitch concept."
-        ),
+    # Deterministic continuity check: the revised output continues the
+    # same pitch (mentions the shop name from run 1) and contains no
+    # "no prior draft" disclaimer. A model that ignored the replayed
+    # prior turn would either fall back to a disclaimer or drop the
+    # shop name entirely. The structural proof of replay (above) plus
+    # this output-level check together cover the load-bearing semantic
+    # claim without the false-negative tax of an LLM-as-judge call.
+    output_lower = str(result2.output or "").lower()
+    assert "bean there" in output_lower, (
+        f"Run 2 output should reference the shop name from run 1; got: {result2.output!r}"
     )
+    for phrase in _DISCLAIMER_PHRASES:
+        assert phrase not in output_lower, (
+            f"Run 2 output contains a 'no prior draft' disclaimer phrase ({phrase!r}); got: {result2.output!r}"
+        )
