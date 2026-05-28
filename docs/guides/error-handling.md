@@ -20,9 +20,11 @@ Every error is classified into one of three categories that determine recovery b
 
 | Category | Meaning | Recovery | Examples |
 |----------|---------|----------|----------|
-| `RETRYABLE` | Transient infrastructure failure | Automatic retry with backoff | Rate limits, server errors (5xx), timeouts |
+| `RETRYABLE` | Transient infrastructure failure | Automatic retry with backoff | Rate limits, server errors (5xx), timeouts, provider overload (`LLMOverloadedError`) |
 | `CORRECTABLE` | The agent made a mistake | Self-correction prompt | Bad tool parameters, wrong tool name, schema violations |
-| `FATAL` | Unrecoverable | Raise or degrade | Context length exceeded, budget exhausted, 4xx client errors |
+| `FATAL` | Unrecoverable | Raise or degrade | Context length exceeded, budget exhausted, 4xx client errors, auth failure (`LLMAuthenticationError`), quota exhaustion (`LLMQuotaExhaustedError`) |
+
+> `LLMQuotaExhaustedError` is classified **FATAL** even though it surfaces from an upstream 429: quota exhaustion is a billing-state condition that retry cannot resolve within the budget window. Callers that previously substring-matched the message text for `"insufficient_quota"` or `"credit balance"` to detect this can now catch the typed subclass directly.
 
 The built-in `classify_error` function maps every error in the SDK hierarchy to one of these categories. To override classification, implement the `ErrorClassifier` protocol — a callable that takes an `Exception` and returns an `ErrorCategory`.
 
@@ -83,6 +85,9 @@ NaniticsError
 │   ├── LLMRateLimitError        — retryable
 │   ├── LLMContextLengthError    — fatal
 │   ├── LLMProviderError         — retryable (5xx) or fatal (4xx)
+│   │   ├── LLMAuthenticationError — fatal (credentials rejected)
+│   │   ├── LLMQuotaExhaustedError — fatal (billing state, not transient)
+│   │   └── LLMOverloadedError     — retryable (transient capacity pressure)
 │   └── LLMSchemaViolationError  — correctable
 ├── EmbeddingError
 │   ├── EmbeddingRateLimitError  — retryable

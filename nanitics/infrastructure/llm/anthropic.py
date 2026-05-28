@@ -10,8 +10,11 @@ from typing import Any
 from pydantic import BaseModel
 
 from nanitics.infrastructure.errors import (
+    LLMAuthenticationError,
     LLMContextLengthError,
+    LLMOverloadedError,
     LLMProviderError,
+    LLMQuotaExhaustedError,
     LLMRateLimitError,
     LLMSchemaViolationError,
 )
@@ -35,6 +38,47 @@ except ImportError as _err:  # pragma: no cover
     ) from _err
 
 STRUCTURED_OUTPUT_TOOL_NAME = "structured_output"
+
+
+def _extract_anthropic_error_type(e: Exception) -> str | None:
+    """Return ``body.error.type`` from an Anthropic SDK exception, defensively.
+
+    Anthropic SDK exceptions carry a ``body`` attribute that *should* be a
+    dict shaped as ``{"error": {"type": str, "message": str, ...}}``, but in
+    practice it can be ``None``, a non-dict, or partially populated.
+    Returns ``None`` for anything other than a well-formed ``error.type``
+    string. Mirrors the defensive ``body = getattr(e, "body", None) or {}``
+    pattern used elsewhere in this module.
+    """
+    body = getattr(e, "body", None) or {}
+    if not isinstance(body, dict):
+        return None
+    err_obj = body.get("error")
+    if not isinstance(err_obj, dict):
+        return None
+    err_type = err_obj.get("type")
+    if not isinstance(err_type, str):
+        return None
+    return err_type
+
+
+def _extract_anthropic_error_message(e: Exception) -> str:
+    """Return ``body.error.message`` from an Anthropic SDK exception, or ``""``.
+
+    Used for the anchored-phrase predicates (``"prompt is too long"``,
+    ``"credit balance"``) that Anthropic returns in the error message
+    when no dedicated structured code exists.
+    """
+    body = getattr(e, "body", None) or {}
+    if not isinstance(body, dict):
+        return ""
+    err_obj = body.get("error")
+    if not isinstance(err_obj, dict):
+        return ""
+    err_message = err_obj.get("message", "")
+    if not isinstance(err_message, str):
+        return ""
+    return err_message
 
 
 def _content_block_to_anthropic(block: ContentBlock) -> dict[str, Any]:
@@ -298,6 +342,20 @@ class AnthropicLLMClient:
                 provider="anthropic",
             ) from None
         except anthropic.RateLimitError as e:
+            # Anthropic 429: distinguish a true transient rate-limit from
+            # quota exhaustion. ``error.type == "insufficient_quota"`` is
+            # the structured signal — burning retry budget against an
+            # exhausted account never recovers, so quota routes to
+            # ``LLMQuotaExhaustedError`` (FATAL) instead of the
+            # rate-limit retry path.
+            err_type = _extract_anthropic_error_type(e)
+            if err_type == "insufficient_quota":
+                raise LLMQuotaExhaustedError(
+                    str(e),
+                    status_code=429,
+                    provider="anthropic",
+                    provider_error_type="insufficient_quota",
+                ) from e
             retry_after = None
             if hasattr(e, "response") and e.response is not None:
                 raw = e.response.headers.get("retry-after")
@@ -312,17 +370,61 @@ class AnthropicLLMClient:
             # the documented anchored phrase ``"prompt is too long"``. Any
             # other invalid_request_error surfaces as ``LLMProviderError``.
             # See Anthropic API error reference for the exact phrasing.
-            body = getattr(e, "body", None) or {}
-            err_obj = body.get("error", {}) if isinstance(body, dict) else {}
-            err_type = err_obj.get("type") if isinstance(err_obj, dict) else None
-            err_message = err_obj.get("message", "") if isinstance(err_obj, dict) else ""
+            #
+            # A second anchored phrase, ``"Your credit balance is too low"``,
+            # is Anthropic's signal for billing-state exhaustion under 400
+            # responses — routes to ``LLMQuotaExhaustedError`` for symmetry
+            # with the 429 / 403 billing paths.
+            err_type = _extract_anthropic_error_type(e)
+            err_message = _extract_anthropic_error_message(e)
             if err_type == "invalid_request_error" and "prompt is too long" in err_message:
                 raise LLMContextLengthError(str(e)) from e
-            raise LLMProviderError(str(e), status_code=e.status_code, provider="anthropic") from e
+            if err_type == "invalid_request_error" and "credit balance is too low" in err_message:
+                raise LLMQuotaExhaustedError(
+                    str(e),
+                    status_code=e.status_code,
+                    provider="anthropic",
+                    provider_error_type="invalid_request_error",
+                ) from e
+            raise LLMProviderError(
+                str(e),
+                status_code=e.status_code,
+                provider="anthropic",
+                provider_error_type=err_type,
+            ) from e
         except anthropic.AuthenticationError as e:
-            raise LLMProviderError(str(e), status_code=e.status_code, provider="anthropic") from e
+            raise LLMAuthenticationError(
+                str(e),
+                status_code=e.status_code,
+                provider="anthropic",
+                provider_error_type=_extract_anthropic_error_type(e),
+            ) from e
         except anthropic.APIStatusError as e:
-            raise LLMProviderError(str(e), status_code=e.status_code, provider="anthropic") from e
+            err_type = _extract_anthropic_error_type(e)
+            err_message = _extract_anthropic_error_message(e)
+            # Anthropic 403 with a credit-balance signal is a billing-state
+            # condition (FATAL), not a generic 4xx — route to quota.
+            if e.status_code == 403 and "credit balance" in err_message:
+                raise LLMQuotaExhaustedError(
+                    str(e),
+                    status_code=403,
+                    provider="anthropic",
+                    provider_error_type=err_type,
+                ) from e
+            # Anthropic 529 is the documented "Overloaded" status.
+            if e.status_code == 529:
+                raise LLMOverloadedError(
+                    str(e),
+                    status_code=529,
+                    provider="anthropic",
+                    provider_error_type=err_type,
+                ) from e
+            raise LLMProviderError(
+                str(e),
+                status_code=e.status_code,
+                provider="anthropic",
+                provider_error_type=err_type,
+            ) from e
         except anthropic.APIConnectionError as e:
             raise LLMProviderError(str(e), provider="anthropic") from e
 

@@ -7,9 +7,13 @@ from nanitics.infrastructure.errors import (
     AgentError,
     AgentEscalationError,
     AgentIterationLimitError,
+    EmbeddingProviderError,
+    LLMAuthenticationError,
     LLMContextLengthError,
     LLMError,
+    LLMOverloadedError,
     LLMProviderError,
+    LLMQuotaExhaustedError,
     LLMRateLimitError,
     LLMSchemaViolationError,
     NaniticsError,
@@ -73,6 +77,22 @@ class TestLLMErrors:
         assert err.status_code == 500
         assert err.provider == "anthropic"
 
+    def test_provider_error_with_provider_error_type(self):
+        err = LLMProviderError(
+            "Server error",
+            status_code=500,
+            provider="openai",
+            provider_error_type="server_error",
+        )
+        assert err.provider_error_type == "server_error"
+        d = err.to_dict()
+        assert d["provider_error_type"] == "server_error"
+
+    def test_provider_error_provider_error_type_defaults_to_none(self):
+        err = LLMProviderError("err", status_code=500, provider="openai")
+        assert err.provider_error_type is None
+        assert err.to_dict()["provider_error_type"] is None
+
     def test_schema_violation_error(self):
         err = LLMSchemaViolationError("Bad schema", expected_schema='{"type": "object"}', received='{"bad": 1}')
         d = err.to_dict()
@@ -95,6 +115,145 @@ class TestLLMErrors:
     def test_nanitics_error_catch_pattern(self):
         with pytest.raises(NaniticsError):
             raise LLMRateLimitError("limit")
+
+
+class TestTypedLLMProviderSubclasses:
+    """Cover the three typed subclasses of LLMProviderError."""
+
+    def test_authentication_error_construction(self):
+        err = LLMAuthenticationError(
+            "Invalid API key",
+            status_code=401,
+            provider="anthropic",
+            provider_error_type="authentication_error",
+        )
+        assert err.message == "Invalid API key"
+        assert err.status_code == 401
+        assert err.provider == "anthropic"
+        assert err.provider_error_type == "authentication_error"
+
+    def test_authentication_error_defaults(self):
+        err = LLMAuthenticationError("Invalid API key")
+        assert err.status_code is None
+        assert err.provider is None
+        assert err.provider_error_type is None
+
+    def test_quota_exhausted_error_construction(self):
+        err = LLMQuotaExhaustedError(
+            "Quota exhausted",
+            status_code=429,
+            provider="anthropic",
+            provider_error_type="insufficient_quota",
+        )
+        assert err.message == "Quota exhausted"
+        assert err.status_code == 429
+        assert err.provider == "anthropic"
+        assert err.provider_error_type == "insufficient_quota"
+
+    def test_quota_exhausted_error_defaults(self):
+        err = LLMQuotaExhaustedError("Quota exhausted")
+        assert err.status_code is None
+        assert err.provider is None
+        assert err.provider_error_type is None
+
+    def test_overloaded_error_construction(self):
+        err = LLMOverloadedError(
+            "Service overloaded",
+            status_code=529,
+            provider="anthropic",
+            provider_error_type="overloaded_error",
+        )
+        assert err.message == "Service overloaded"
+        assert err.status_code == 529
+        assert err.provider == "anthropic"
+        assert err.provider_error_type == "overloaded_error"
+
+    def test_overloaded_error_defaults(self):
+        err = LLMOverloadedError("Service overloaded")
+        assert err.status_code is None
+        assert err.provider is None
+        assert err.provider_error_type is None
+
+    def test_authentication_error_is_provider_error(self):
+        err = LLMAuthenticationError("x", status_code=401, provider="anthropic")
+        assert isinstance(err, LLMProviderError)
+        assert isinstance(err, LLMError)
+        assert isinstance(err, NaniticsError)
+
+    def test_quota_exhausted_error_is_provider_error(self):
+        err = LLMQuotaExhaustedError("x", status_code=429, provider="anthropic")
+        assert isinstance(err, LLMProviderError)
+        assert isinstance(err, LLMError)
+        assert isinstance(err, NaniticsError)
+
+    def test_overloaded_error_is_provider_error(self):
+        err = LLMOverloadedError("x", status_code=529, provider="anthropic")
+        assert isinstance(err, LLMProviderError)
+        assert isinstance(err, LLMError)
+        assert isinstance(err, NaniticsError)
+
+    def test_authentication_to_dict(self):
+        err = LLMAuthenticationError(
+            "Invalid",
+            status_code=401,
+            provider="openai",
+            provider_error_type="invalid_api_key",
+        )
+        d = err.to_dict()
+        assert d["message"] == "Invalid"
+        assert d["status_code"] == 401
+        assert d["provider"] == "openai"
+        assert d["provider_error_type"] == "invalid_api_key"
+
+    def test_quota_exhausted_to_dict(self):
+        err = LLMQuotaExhaustedError(
+            "Quota",
+            status_code=429,
+            provider="openai",
+            provider_error_type="insufficient_quota",
+        )
+        d = err.to_dict()
+        assert d["status_code"] == 429
+        assert d["provider"] == "openai"
+        assert d["provider_error_type"] == "insufficient_quota"
+
+    def test_overloaded_to_dict(self):
+        err = LLMOverloadedError(
+            "Overloaded",
+            status_code=529,
+            provider="anthropic",
+            provider_error_type="overloaded_error",
+        )
+        d = err.to_dict()
+        assert d["status_code"] == 529
+        assert d["provider"] == "anthropic"
+        assert d["provider_error_type"] == "overloaded_error"
+
+    def test_parent_catch_pattern(self):
+        # Catching the parent class still catches the new subclasses.
+        with pytest.raises(LLMProviderError):
+            raise LLMAuthenticationError("x", status_code=401, provider="anthropic")
+        with pytest.raises(LLMProviderError):
+            raise LLMQuotaExhaustedError("x", status_code=429, provider="anthropic")
+        with pytest.raises(LLMProviderError):
+            raise LLMOverloadedError("x", status_code=529, provider="anthropic")
+
+
+class TestEmbeddingProviderErrorField:
+    def test_provider_error_type_populated(self):
+        err = EmbeddingProviderError(
+            "err",
+            status_code=500,
+            provider="voyage",
+            provider_error_type="server_error",
+        )
+        assert err.provider_error_type == "server_error"
+        assert err.to_dict()["provider_error_type"] == "server_error"
+
+    def test_provider_error_type_defaults_to_none(self):
+        err = EmbeddingProviderError("err", status_code=500, provider="voyage")
+        assert err.provider_error_type is None
+        assert err.to_dict()["provider_error_type"] is None
 
 
 class TestToolErrors:

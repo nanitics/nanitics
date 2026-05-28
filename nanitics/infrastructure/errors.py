@@ -115,10 +115,22 @@ class LLMProviderError(LLMError):
     Attributes:
         status_code: HTTP status code, if available.
         provider: Provider name (e.g. "anthropic"), if available.
+        provider_error_type: Raw provider-side error-type string from the
+            response body (e.g. ``"insufficient_quota"``,
+            ``"overloaded_error"``, ``"PERMISSION_DENIED"``). Populated by
+            adapter classifiers when the provider returns a structured
+            ``error.type`` / ``code`` field, ``None`` otherwise. **Diagnostic
+            only** — use this field for logging, telemetry, and human
+            surfacing. Do not branch control flow on its value; providers
+            reword these strings without notice. Switch on the typed
+            subclass hierarchy (:class:`LLMAuthenticationError`,
+            :class:`LLMQuotaExhaustedError`, :class:`LLMOverloadedError`,
+            etc.) for category-aware recovery.
     """
 
     status_code: int | None
     provider: str | None
+    provider_error_type: str | None
 
     def __init__(
         self,
@@ -126,12 +138,119 @@ class LLMProviderError(LLMError):
         *,
         status_code: int | None = None,
         provider: str | None = None,
+        provider_error_type: str | None = None,
         trace_id: str | None = None,
         span_id: str | None = None,
     ) -> None:
         super().__init__(message, trace_id=trace_id, span_id=span_id)
         self.status_code = status_code
         self.provider = provider
+        self.provider_error_type = provider_error_type
+
+
+class LLMAuthenticationError(LLMProviderError):
+    """Provider rejected the credentials presented.
+
+    Classified as FATAL. Retry will not recover — the key must be
+    rotated, the account must be unblocked, or the caller's credential
+    flow needs human attention.
+
+    Raised by adapters on Anthropic 401, OpenAI ``invalid_api_key`` /
+    401, LiteLLM ``AuthenticationError`` / ``PermissionDeniedError``,
+    Mistral 401, and Gemini ``PERMISSION_DENIED`` when the upstream
+    signal indicates an auth failure (vs. a quota/billing condition,
+    which routes to :class:`LLMQuotaExhaustedError`).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        provider: str | None = None,
+        provider_error_type: str | None = None,
+        trace_id: str | None = None,
+        span_id: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            status_code=status_code,
+            provider=provider,
+            provider_error_type=provider_error_type,
+            trace_id=trace_id,
+            span_id=span_id,
+        )
+
+
+class LLMQuotaExhaustedError(LLMProviderError):
+    """Provider rejected the request because credits or quota are exhausted.
+
+    Classified as **FATAL**. This is the deliberate change from the
+    pre-typed-subclass behavior: an Anthropic 429-with-``insufficient_quota``
+    previously routed through :class:`LLMRateLimitError` and was
+    classified RETRYABLE — burning retry budget against an account
+    that will not recover within the budget window. This subclass
+    routes the same response to FATAL so the caller can act on the
+    billing-state condition (rotate keys, notify the user, fail over).
+
+    Raised by adapters when the provider returns a structured quota
+    signal — Anthropic ``insufficient_quota`` (on 429), Anthropic
+    ``"Your credit balance is too low"`` (on 400 or 403), OpenAI
+    ``insufficient_quota`` (on 429), Gemini ``RESOURCE_EXHAUSTED`` (via
+    LiteLLM's mapped ``RateLimitError``), Mistral ``insufficient_quota``
+    / ``quota_exceeded`` code (on 429).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        provider: str | None = None,
+        provider_error_type: str | None = None,
+        trace_id: str | None = None,
+        span_id: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            status_code=status_code,
+            provider=provider,
+            provider_error_type=provider_error_type,
+            trace_id=trace_id,
+            span_id=span_id,
+        )
+
+
+class LLMOverloadedError(LLMProviderError):
+    """Provider rejected the request because of transient capacity pressure.
+
+    Classified as RETRYABLE. The provider is asking the caller to back
+    off and try again; the agent loop's existing retry logic applies.
+
+    Raised by adapters on Anthropic 529, OpenAI ``overloaded_error``
+    (5xx body type), LiteLLM ``APIError`` with ``overloaded_error``
+    body type or 529 status, and Mistral 5xx with ``"overloaded"`` body
+    code.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        provider: str | None = None,
+        provider_error_type: str | None = None,
+        trace_id: str | None = None,
+        span_id: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            status_code=status_code,
+            provider=provider,
+            provider_error_type=provider_error_type,
+            trace_id=trace_id,
+            span_id=span_id,
+        )
 
 
 class MCPAuthError(LLMProviderError):
@@ -245,10 +364,14 @@ class EmbeddingProviderError(EmbeddingError):
     Attributes:
         status_code: HTTP status code, if available.
         provider: Provider name, if available.
+        provider_error_type: Raw provider-side error-type string from the
+            response body, if available. Diagnostic only — see
+            :class:`LLMProviderError` for the field semantics.
     """
 
     status_code: int | None
     provider: str | None
+    provider_error_type: str | None
 
     def __init__(
         self,
@@ -256,12 +379,14 @@ class EmbeddingProviderError(EmbeddingError):
         *,
         status_code: int | None = None,
         provider: str | None = None,
+        provider_error_type: str | None = None,
         trace_id: str | None = None,
         span_id: str | None = None,
     ) -> None:
         super().__init__(message, trace_id=trace_id, span_id=span_id)
         self.status_code = status_code
         self.provider = provider
+        self.provider_error_type = provider_error_type
 
 
 # --- Tool Errors ---

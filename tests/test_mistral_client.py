@@ -11,8 +11,11 @@ import pytest
 from pydantic import BaseModel
 
 from nanitics.errors import (
+    LLMAuthenticationError,
     LLMContextLengthError,
+    LLMOverloadedError,
     LLMProviderError,
+    LLMQuotaExhaustedError,
     LLMRateLimitError,
     LLMSchemaViolationError,
 )
@@ -23,6 +26,7 @@ from nanitics.infrastructure import (
 from nanitics.infrastructure.llm.mistral import (
     STRUCTURED_OUTPUT_TOOL_NAME,
     MistralLLMClient,
+    _extract_mistral_error_code,
     _map_stop_reason,
     _parse_response,
     _parse_tool_calls,
@@ -572,13 +576,15 @@ class TestMistralLLMClient:
         )
 
         with patch.object(client._client, "post", mock_post):
-            with pytest.raises(LLMProviderError) as exc_info:
+            with pytest.raises(LLMAuthenticationError) as exc_info:
                 await client.generate(
                     system_prompt="test",
                     messages=[Message(role="user", content="hi")],
                 )
             assert exc_info.value.provider == "mistral"
             assert exc_info.value.status_code == 401
+            # Non-JSON body → provider_error_type is None
+            assert exc_info.value.provider_error_type is None
 
     async def test_server_error_mapping(self) -> None:
         client = self._make_client()
@@ -719,6 +725,123 @@ class TestMistralLLMClient:
         assert result.usage.total_tokens == 150
         assert result.usage.cache_creation_input_tokens is None
         assert result.usage.cache_read_input_tokens is None
+
+
+# --- Typed Error Subclass Mapping Tests (Phase: typed-llm-error-subclasses) ---
+
+
+class TestExtractMistralErrorCode:
+    def test_non_json_returns_none(self) -> None:
+        assert _extract_mistral_error_code("not json") is None
+
+    def test_empty_returns_none(self) -> None:
+        assert _extract_mistral_error_code("") is None
+
+    def test_non_dict_top_level(self) -> None:
+        assert _extract_mistral_error_code(json.dumps(["x"])) is None
+
+    def test_missing_code_returns_none(self) -> None:
+        assert _extract_mistral_error_code(json.dumps({"message": "x"})) is None
+
+    def test_non_string_code(self) -> None:
+        assert _extract_mistral_error_code(json.dumps({"code": 42})) is None
+
+    def test_happy_path(self) -> None:
+        assert _extract_mistral_error_code(json.dumps({"code": "insufficient_quota"})) == "insufficient_quota"
+
+
+class TestMistralTypedErrorMapping:
+    def _make_client(self) -> MistralLLMClient:
+        return MistralLLMClient(model="mistral-small-latest", api_key="test-key")
+
+    async def _raise_via_client(self, status: int, body: str) -> None:
+        client = self._make_client()
+        error_response = _make_error_response(status, body=body)
+        mock_post = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "boom",
+                request=error_response.request,
+                response=error_response,
+            )
+        )
+        with patch.object(client._client, "post", mock_post):
+            await client.generate(
+                system_prompt="test",
+                messages=[Message(role="user", content="hi")],
+            )
+
+    async def test_429_insufficient_quota_routes_to_quota(self) -> None:
+        with pytest.raises(LLMQuotaExhaustedError) as exc_info:
+            await self._raise_via_client(
+                429,
+                json.dumps({"code": "insufficient_quota", "message": "x"}),
+            )
+        assert exc_info.value.provider == "mistral"
+        assert exc_info.value.status_code == 429
+        assert exc_info.value.provider_error_type == "insufficient_quota"
+
+    async def test_429_quota_exceeded_routes_to_quota(self) -> None:
+        with pytest.raises(LLMQuotaExhaustedError) as exc_info:
+            await self._raise_via_client(
+                429,
+                json.dumps({"code": "quota_exceeded", "message": "x"}),
+            )
+        assert exc_info.value.provider_error_type == "quota_exceeded"
+
+    async def test_429_without_quota_code_routes_to_rate_limit(self) -> None:
+        # Regression: a plain 429 with no quota code falls back to
+        # LLMRateLimitError (RETRYABLE).
+        client = self._make_client()
+        error_response = _make_error_response(429, body=json.dumps({"code": "rate_limit_exceeded"}))
+        mock_post = AsyncMock(
+            side_effect=httpx.HTTPStatusError("rate", request=error_response.request, response=error_response)
+        )
+        with patch.object(client._client, "post", mock_post), pytest.raises(LLMRateLimitError):
+            await client.generate(
+                system_prompt="test",
+                messages=[Message(role="user", content="hi")],
+            )
+
+    async def test_401_authentication_with_code(self) -> None:
+        with pytest.raises(LLMAuthenticationError) as exc_info:
+            await self._raise_via_client(401, json.dumps({"code": "invalid_api_key", "message": "Invalid key"}))
+        assert exc_info.value.provider == "mistral"
+        assert exc_info.value.status_code == 401
+        assert exc_info.value.provider_error_type == "invalid_api_key"
+
+    async def test_400_other_code_populates_provider_error_type(self) -> None:
+        with pytest.raises(LLMProviderError) as exc_info:
+            await self._raise_via_client(400, json.dumps({"code": "invalid_value", "message": "bad"}))
+        assert type(exc_info.value) is LLMProviderError
+        assert exc_info.value.provider_error_type == "invalid_value"
+
+    async def test_500_overloaded_routes_to_overloaded(self) -> None:
+        with pytest.raises(LLMOverloadedError) as exc_info:
+            await self._raise_via_client(503, json.dumps({"code": "overloaded", "message": "busy"}))
+        assert exc_info.value.provider == "mistral"
+        assert exc_info.value.status_code == 503
+        assert exc_info.value.provider_error_type == "overloaded"
+
+    async def test_500_without_overload_signal_routes_to_provider_error(self) -> None:
+        with pytest.raises(LLMProviderError) as exc_info:
+            await self._raise_via_client(503, json.dumps({"code": "server_error", "message": "x"}))
+        assert type(exc_info.value) is LLMProviderError
+        assert exc_info.value.status_code == 503
+        assert exc_info.value.provider_error_type == "server_error"
+
+    async def test_500_non_json_body_falls_through_with_none_type(self) -> None:
+        # Non-JSON 500 still raises LLMProviderError with
+        # provider_error_type=None — graceful body-shape fallback.
+        with pytest.raises(LLMProviderError) as exc_info:
+            await self._raise_via_client(500, "Internal server error")
+        assert exc_info.value.provider_error_type is None
+        assert exc_info.value.status_code == 500
+
+    async def test_404_unmatched_status_populates_provider_error_type(self) -> None:
+        with pytest.raises(LLMProviderError) as exc_info:
+            await self._raise_via_client(404, json.dumps({"code": "not_found", "message": "x"}))
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.provider_error_type == "not_found"
 
 
 # --- Structured Output Tests ---

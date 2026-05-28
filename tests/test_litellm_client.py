@@ -12,8 +12,11 @@ import pytest
 from pydantic import BaseModel
 
 from nanitics.errors import (
+    LLMAuthenticationError,
     LLMContextLengthError,
+    LLMOverloadedError,
     LLMProviderError,
+    LLMQuotaExhaustedError,
     LLMRateLimitError,
     LLMSchemaViolationError,
 )
@@ -22,7 +25,11 @@ from nanitics.infrastructure import (
     ToolSchema,
 )
 from nanitics.infrastructure.llm._openai_format import STRUCTURED_OUTPUT_TOOL_NAME
-from nanitics.infrastructure.llm.litellm import LiteLLMClient
+from nanitics.infrastructure.llm.litellm import (
+    LiteLLMClient,
+    _extract_litellm_error_type,
+    _extract_litellm_quota_signal,
+)
 from nanitics.tracing import (
     Message,
     ToolCall,
@@ -677,7 +684,7 @@ class TestLiteLLMClientErrors:
 
         with (
             await self._patch_and_raise(exc),
-            pytest.raises(LLMProviderError) as exc_info,
+            pytest.raises(LLMAuthenticationError) as exc_info,
         ):
             await client.generate(
                 system_prompt="sys",
@@ -698,7 +705,7 @@ class TestLiteLLMClientErrors:
 
         with (
             await self._patch_and_raise(exc),
-            pytest.raises(LLMProviderError) as exc_info,
+            pytest.raises(LLMAuthenticationError) as exc_info,
         ):
             await client.generate(
                 system_prompt="sys",
@@ -804,6 +811,7 @@ class TestLiteLLMClientErrors:
             )
         assert exc_info.value.provider == "litellm"
         assert exc_info.value.status_code == 502
+        assert type(exc_info.value) is LLMProviderError
 
     async def test_timeout_mapping(self) -> None:
         client = LiteLLMClient(model="openai/gpt-4o-mini", request_timeout=0.1)
@@ -1111,3 +1119,251 @@ class TestLiteLLMClientPassthrough:
                 )
             assert mock_ac.call_args.kwargs["model"] == model_str
             assert result.model == model_str
+
+
+# --- Typed Error Subclass Mapping Tests (Phase: typed-llm-error-subclasses) ---
+
+
+class TestExtractLitellmErrorType:
+    def test_missing_body(self) -> None:
+        exc = MagicMock(spec=[])
+        assert _extract_litellm_error_type(exc) is None
+
+    def test_body_is_none(self) -> None:
+        exc = MagicMock()
+        exc.body = None
+        assert _extract_litellm_error_type(exc) is None
+
+    def test_body_is_non_dict(self) -> None:
+        exc = MagicMock()
+        exc.body = "x"
+        assert _extract_litellm_error_type(exc) is None
+
+    def test_body_without_error(self) -> None:
+        exc = MagicMock()
+        exc.body = {"other": 1}
+        assert _extract_litellm_error_type(exc) is None
+
+    def test_body_with_non_dict_error(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": "x"}
+        assert _extract_litellm_error_type(exc) is None
+
+    def test_body_with_non_string_type(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": {"type": 42}}
+        assert _extract_litellm_error_type(exc) is None
+
+    def test_happy_path(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": {"type": "insufficient_quota"}}
+        assert _extract_litellm_error_type(exc) == "insufficient_quota"
+
+
+class TestExtractLitellmQuotaSignal:
+    def test_no_body(self) -> None:
+        exc = MagicMock()
+        exc.body = None
+        assert _extract_litellm_quota_signal(exc) is None
+
+    def test_non_dict_body(self) -> None:
+        exc = MagicMock()
+        exc.body = "x"
+        assert _extract_litellm_quota_signal(exc) is None
+
+    def test_no_error_obj(self) -> None:
+        exc = MagicMock()
+        exc.body = {}
+        assert _extract_litellm_quota_signal(exc) is None
+
+    def test_non_dict_error_obj(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": "x"}
+        assert _extract_litellm_quota_signal(exc) is None
+
+    def test_insufficient_quota_type(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": {"type": "insufficient_quota"}}
+        assert _extract_litellm_quota_signal(exc) == "insufficient_quota"
+
+    def test_gemini_resource_exhausted_status(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": {"status": "RESOURCE_EXHAUSTED", "message": "x"}}
+        assert _extract_litellm_quota_signal(exc) == "RESOURCE_EXHAUSTED"
+
+    def test_other_error_type_returns_none(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": {"type": "rate_limit_exceeded"}}
+        assert _extract_litellm_quota_signal(exc) is None
+
+    def test_non_string_error_type(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": {"type": 42}}
+        assert _extract_litellm_quota_signal(exc) is None
+
+    def test_non_string_status(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": {"status": 42}}
+        assert _extract_litellm_quota_signal(exc) is None
+
+    def test_other_status_returns_none(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": {"status": "DEADLINE_EXCEEDED"}}
+        assert _extract_litellm_quota_signal(exc) is None
+
+
+class TestLiteLLMTypedErrorMapping:
+    """Verify upstream LiteLLM exceptions map to the typed SDK subclasses."""
+
+    def _make_client(self) -> LiteLLMClient:
+        return LiteLLMClient(model="openai/gpt-4o-mini")
+
+    async def _raise_via_client(self, exc: Exception) -> None:
+        client = self._make_client()
+        with patch(
+            "nanitics.infrastructure.llm.litellm.litellm.acompletion",
+            new=AsyncMock(side_effect=exc),
+        ):
+            await client.generate(
+                system_prompt="sys",
+                messages=[Message(role="user", content="hi")],
+            )
+
+    async def test_rate_limit_insufficient_quota_routes_to_quota(self) -> None:
+        resp = _make_httpx_response(429)
+        exc = litellm.RateLimitError(
+            message="quota",
+            llm_provider="openai",
+            model="gpt-4o-mini",
+            response=resp,
+        )
+        exc.body = {"error": {"type": "insufficient_quota", "message": "x"}}
+        with pytest.raises(LLMQuotaExhaustedError) as exc_info:
+            await self._raise_via_client(exc)
+        assert exc_info.value.provider == "litellm"
+        assert exc_info.value.status_code == 429
+        assert exc_info.value.provider_error_type == "insufficient_quota"
+
+    async def test_rate_limit_gemini_resource_exhausted_routes_to_quota(self) -> None:
+        resp = _make_httpx_response(429)
+        exc = litellm.RateLimitError(
+            message="quota",
+            llm_provider="gemini",
+            model="gemini-2.0-flash",
+            response=resp,
+        )
+        exc.body = {"error": {"status": "RESOURCE_EXHAUSTED", "message": "x"}}
+        with pytest.raises(LLMQuotaExhaustedError) as exc_info:
+            await self._raise_via_client(exc)
+        assert exc_info.value.provider == "litellm"
+        assert exc_info.value.status_code == 429
+        assert exc_info.value.provider_error_type == "RESOURCE_EXHAUSTED"
+
+    async def test_rate_limit_sparse_body_routes_to_rate_limit(self) -> None:
+        # Regression: a 429 with no positive quota signal preserves the
+        # existing LLMRateLimitError (RETRYABLE) path.
+        resp = _make_httpx_response(429, headers={"retry-after": "7"})
+        exc = litellm.RateLimitError(
+            message="slow",
+            llm_provider="openai",
+            model="gpt-4o-mini",
+            response=resp,
+        )
+        with pytest.raises(LLMRateLimitError) as exc_info:
+            await self._raise_via_client(exc)
+        assert exc_info.value.retry_after == 7.0
+
+    async def test_api_error_529_routes_to_overloaded(self) -> None:
+        exc = litellm.APIError(
+            status_code=529,
+            message="overloaded",
+            llm_provider="anthropic",
+            model="claude-haiku-4-5",
+        )
+        with pytest.raises(LLMOverloadedError) as exc_info:
+            await self._raise_via_client(exc)
+        assert exc_info.value.provider == "litellm"
+        assert exc_info.value.status_code == 529
+
+    async def test_api_error_overloaded_body_type_routes_to_overloaded(self) -> None:
+        exc = litellm.APIError(
+            status_code=503,
+            message="overloaded",
+            llm_provider="openai",
+            model="gpt-4o-mini",
+        )
+        exc.body = {"error": {"type": "overloaded_error", "message": "x"}}
+        with pytest.raises(LLMOverloadedError) as exc_info:
+            await self._raise_via_client(exc)
+        assert exc_info.value.provider == "litellm"
+        assert exc_info.value.status_code == 503
+        assert exc_info.value.provider_error_type == "overloaded_error"
+
+    async def test_api_error_other_routes_to_provider_error_with_type(self) -> None:
+        exc = litellm.APIError(
+            status_code=502,
+            message="bad gw",
+            llm_provider="openai",
+            model="gpt-4o-mini",
+        )
+        exc.body = {"error": {"type": "server_error"}}
+        with pytest.raises(LLMProviderError) as exc_info:
+            await self._raise_via_client(exc)
+        assert type(exc_info.value) is LLMProviderError
+        assert exc_info.value.status_code == 502
+        assert exc_info.value.provider_error_type == "server_error"
+
+    async def test_bad_request_populates_provider_error_type(self) -> None:
+        resp = _make_httpx_response(400)
+        exc = litellm.BadRequestError(
+            message="invalid",
+            model="gpt-4o-mini",
+            llm_provider="openai",
+            response=resp,
+        )
+        exc.body = {"error": {"type": "invalid_request_error"}}
+        with pytest.raises(LLMProviderError) as exc_info:
+            await self._raise_via_client(exc)
+        assert type(exc_info.value) is LLMProviderError
+        assert exc_info.value.provider_error_type == "invalid_request_error"
+
+    async def test_not_found_populates_provider_error_type(self) -> None:
+        resp = _make_httpx_response(404)
+        exc = litellm.NotFoundError(
+            message="not found",
+            model="gpt-4o-mini",
+            llm_provider="openai",
+            response=resp,
+        )
+        exc.body = {"error": {"type": "not_found"}}
+        with pytest.raises(LLMProviderError) as exc_info:
+            await self._raise_via_client(exc)
+        assert exc_info.value.provider_error_type == "not_found"
+
+    async def test_unprocessable_populates_provider_error_type(self) -> None:
+        resp = _make_httpx_response(422)
+        exc = litellm.UnprocessableEntityError(
+            message="bad input",
+            model="gpt-4o-mini",
+            llm_provider="openai",
+            response=resp,
+        )
+        with pytest.raises(LLMProviderError) as exc_info:
+            await self._raise_via_client(exc)
+        # Empty body — provider_error_type is None
+        assert exc_info.value.provider_error_type is None
+        assert exc_info.value.status_code == 422
+
+    async def test_internal_server_populates_provider_error_type(self) -> None:
+        resp = _make_httpx_response(500)
+        exc = litellm.InternalServerError(
+            message="server down",
+            llm_provider="openai",
+            model="gpt-4o-mini",
+            response=resp,
+        )
+        exc.body = {"error": {"type": "server_error"}}
+        with pytest.raises(LLMProviderError) as exc_info:
+            await self._raise_via_client(exc)
+        assert exc_info.value.provider_error_type == "server_error"
+        assert exc_info.value.status_code == 500

@@ -9,8 +9,11 @@ import pytest
 from pydantic import BaseModel
 
 from nanitics.errors import (
+    LLMAuthenticationError,
     LLMContextLengthError,
+    LLMOverloadedError,
     LLMProviderError,
+    LLMQuotaExhaustedError,
     LLMRateLimitError,
     LLMSchemaViolationError,
 )
@@ -21,6 +24,8 @@ from nanitics.infrastructure import (
 from nanitics.infrastructure.llm.anthropic import (
     STRUCTURED_OUTPUT_TOOL_NAME,
     AnthropicLLMClient,
+    _extract_anthropic_error_message,
+    _extract_anthropic_error_type,
     _from_anthropic_response,
     _to_anthropic_messages,
     _to_anthropic_tools,
@@ -769,16 +774,18 @@ class TestAnthropicLLMClient:
         exc = anthropic.AuthenticationError(
             message="Invalid API key",
             response=mock_response,
-            body=None,
+            body={"error": {"type": "authentication_error", "message": "Invalid API key"}},
         )
 
         with patch.object(client._client.messages, "stream", return_value=_mock_stream_ctx(error=exc)):
-            with pytest.raises(LLMProviderError) as exc_info:
+            with pytest.raises(LLMAuthenticationError) as exc_info:
                 await client.generate(
                     system_prompt="test",
                     messages=[Message(role="user", content="hi")],
                 )
             assert exc_info.value.provider == "anthropic"
+            assert exc_info.value.status_code == 401
+            assert exc_info.value.provider_error_type == "authentication_error"
 
     async def test_api_status_error_mapping(self) -> None:
         client = self._make_client()
@@ -799,6 +806,7 @@ class TestAnthropicLLMClient:
                     messages=[Message(role="user", content="hi")],
                 )
             assert exc_info.value.status_code == 500
+            assert exc_info.value.provider_error_type is None
 
     async def test_connection_error_mapping(self) -> None:
         client = self._make_client()
@@ -839,6 +847,223 @@ class TestAnthropicLLMClient:
         # for no benefit. Callers with stable, repeated prefixes opt in.
         client = self._make_client()
         assert client._enable_caching is False
+
+
+# --- Typed Error Subclass Mapping Tests (Phase: typed-llm-error-subclasses) ---
+
+
+class TestExtractAnthropicErrorType:
+    """Defensive shape checks for the body parser."""
+
+    def test_missing_body(self) -> None:
+        exc = MagicMock(spec=[])  # no body attribute
+        assert _extract_anthropic_error_type(exc) is None
+
+    def test_body_is_none(self) -> None:
+        exc = MagicMock()
+        exc.body = None
+        assert _extract_anthropic_error_type(exc) is None
+
+    def test_body_is_non_dict(self) -> None:
+        exc = MagicMock()
+        exc.body = "not-a-dict"
+        assert _extract_anthropic_error_type(exc) is None
+
+    def test_body_dict_without_error_key(self) -> None:
+        exc = MagicMock()
+        exc.body = {"other": "data"}
+        assert _extract_anthropic_error_type(exc) is None
+
+    def test_body_dict_with_non_dict_error(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": "not-a-dict"}
+        assert _extract_anthropic_error_type(exc) is None
+
+    def test_body_dict_with_non_string_error_type(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": {"type": 42}}
+        assert _extract_anthropic_error_type(exc) is None
+
+    def test_happy_path(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": {"type": "insufficient_quota", "message": "..."}}
+        assert _extract_anthropic_error_type(exc) == "insufficient_quota"
+
+
+class TestExtractAnthropicErrorMessage:
+    """Defensive shape checks for the anchored-phrase body-message parser."""
+
+    def test_missing_body(self) -> None:
+        exc = MagicMock(spec=[])
+        assert _extract_anthropic_error_message(exc) == ""
+
+    def test_body_is_none(self) -> None:
+        exc = MagicMock()
+        exc.body = None
+        assert _extract_anthropic_error_message(exc) == ""
+
+    def test_body_is_non_dict(self) -> None:
+        exc = MagicMock()
+        exc.body = "not-a-dict"
+        assert _extract_anthropic_error_message(exc) == ""
+
+    def test_body_dict_with_non_dict_error(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": "not-a-dict"}
+        assert _extract_anthropic_error_message(exc) == ""
+
+    def test_body_dict_with_non_string_message(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": {"message": 42}}
+        assert _extract_anthropic_error_message(exc) == ""
+
+    def test_happy_path(self) -> None:
+        exc = MagicMock()
+        exc.body = {"error": {"type": "x", "message": "hello"}}
+        assert _extract_anthropic_error_message(exc) == "hello"
+
+
+class TestAnthropicTypedErrorMapping:
+    """End-to-end mapping of upstream Anthropic exceptions to typed SDK subclasses."""
+
+    def _make_client(self) -> AnthropicLLMClient:
+        return AnthropicLLMClient(model="claude-test", api_key="test-key")
+
+    async def _raise_via_client(self, exc: Exception) -> Any:
+        client = self._make_client()
+        with patch.object(client._client.messages, "stream", return_value=_mock_stream_ctx(error=exc)):
+            await client.generate(
+                system_prompt="test",
+                messages=[Message(role="user", content="hi")],
+            )
+
+    async def test_rate_limit_with_insufficient_quota_routes_to_quota_exhausted(self) -> None:
+        mock_response = MagicMock()
+        mock_response.headers = {}
+        mock_response.status_code = 429
+        exc = anthropic.RateLimitError(
+            message="Quota exhausted",
+            response=mock_response,
+            body={"error": {"type": "insufficient_quota", "message": "Quota exhausted"}},
+        )
+        with pytest.raises(LLMQuotaExhaustedError) as exc_info:
+            await self._raise_via_client(exc)
+        assert exc_info.value.provider == "anthropic"
+        assert exc_info.value.status_code == 429
+        assert exc_info.value.provider_error_type == "insufficient_quota"
+
+    async def test_rate_limit_without_quota_signal_still_routes_to_rate_limit(self) -> None:
+        # Regression: a generic 429 with no insufficient_quota body must
+        # continue to route through LLMRateLimitError so existing
+        # retry-with-backoff behaviour is preserved.
+        mock_response = MagicMock()
+        mock_response.headers = {"retry-after": "10"}
+        mock_response.status_code = 429
+        exc = anthropic.RateLimitError(
+            message="Rate limited",
+            response=mock_response,
+            body={"error": {"type": "rate_limit_error", "message": "Slow down"}},
+        )
+        with pytest.raises(LLMRateLimitError) as exc_info:
+            await self._raise_via_client(exc)
+        assert exc_info.value.retry_after == 10.0
+
+    async def test_bad_request_credit_balance_routes_to_quota_exhausted(self) -> None:
+        mock_response = MagicMock()
+        mock_response.headers = {}
+        mock_response.status_code = 400
+        exc = anthropic.BadRequestError(
+            message="Your credit balance is too low",
+            response=mock_response,
+            body={
+                "error": {
+                    "type": "invalid_request_error",
+                    "message": "Your credit balance is too low to access the API.",
+                }
+            },
+        )
+        with pytest.raises(LLMQuotaExhaustedError) as exc_info:
+            await self._raise_via_client(exc)
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.provider == "anthropic"
+        assert exc_info.value.provider_error_type == "invalid_request_error"
+
+    async def test_bad_request_other_invalid_request_routes_to_provider_error(self) -> None:
+        mock_response = MagicMock()
+        mock_response.headers = {}
+        mock_response.status_code = 400
+        exc = anthropic.BadRequestError(
+            message="invalid",
+            response=mock_response,
+            body={"error": {"type": "invalid_request_error", "message": "invalid model"}},
+        )
+        with pytest.raises(LLMProviderError) as exc_info:
+            await self._raise_via_client(exc)
+        assert type(exc_info.value) is LLMProviderError
+        assert exc_info.value.provider_error_type == "invalid_request_error"
+
+    async def test_api_status_403_billing_routes_to_quota_exhausted(self) -> None:
+        mock_response = MagicMock()
+        mock_response.headers = {}
+        mock_response.status_code = 403
+        exc = anthropic.APIStatusError(
+            message="Forbidden",
+            response=mock_response,
+            body={
+                "error": {
+                    "type": "permission_error",
+                    "message": "Your credit balance is too low.",
+                }
+            },
+        )
+        with pytest.raises(LLMQuotaExhaustedError) as exc_info:
+            await self._raise_via_client(exc)
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.provider_error_type == "permission_error"
+
+    async def test_api_status_403_non_billing_routes_to_provider_error(self) -> None:
+        mock_response = MagicMock()
+        mock_response.headers = {}
+        mock_response.status_code = 403
+        exc = anthropic.APIStatusError(
+            message="Forbidden",
+            response=mock_response,
+            body={"error": {"type": "permission_error", "message": "Account suspended."}},
+        )
+        with pytest.raises(LLMProviderError) as exc_info:
+            await self._raise_via_client(exc)
+        assert type(exc_info.value) is LLMProviderError
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.provider_error_type == "permission_error"
+
+    async def test_api_status_529_routes_to_overloaded(self) -> None:
+        mock_response = MagicMock()
+        mock_response.headers = {}
+        mock_response.status_code = 529
+        exc = anthropic.APIStatusError(
+            message="Overloaded",
+            response=mock_response,
+            body={"error": {"type": "overloaded_error", "message": "Overloaded"}},
+        )
+        with pytest.raises(LLMOverloadedError) as exc_info:
+            await self._raise_via_client(exc)
+        assert exc_info.value.status_code == 529
+        assert exc_info.value.provider_error_type == "overloaded_error"
+
+    async def test_api_status_other_5xx_routes_to_provider_error_with_type(self) -> None:
+        mock_response = MagicMock()
+        mock_response.headers = {}
+        mock_response.status_code = 502
+        exc = anthropic.APIStatusError(
+            message="Bad gateway",
+            response=mock_response,
+            body={"error": {"type": "api_error", "message": "upstream"}},
+        )
+        with pytest.raises(LLMProviderError) as exc_info:
+            await self._raise_via_client(exc)
+        assert type(exc_info.value) is LLMProviderError
+        assert exc_info.value.status_code == 502
+        assert exc_info.value.provider_error_type == "api_error"
 
 
 # --- Structured Output Tests ---
