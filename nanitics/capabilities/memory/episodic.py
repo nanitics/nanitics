@@ -113,6 +113,15 @@ class EpisodeStore(Protocol):
 
     Episodes are recorded with situation descriptions (embedded into vectors)
     and recalled by semantic similarity to a query.
+
+    **For:** learning from past task outcomes — what worked, what failed,
+    which approach succeeded under which conditions. Episodes carry an
+    outcome label and supersede older attempts on the same situation.
+
+    **Not for:** general document retrieval (use ``SemanticStore`` —
+    episodes are task-scoped, not corpus-scoped), exact-key fact lookup
+    (use ``LongTermStore``), in-run scratchpad (use ``WorkingMemory``),
+    or multi-agent coordination (use ``SharedMemory``).
     """
 
     async def record(self, episode: Episode) -> str:

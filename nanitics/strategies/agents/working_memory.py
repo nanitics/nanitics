@@ -14,6 +14,25 @@ class WorkingMemory(Protocol):
 
     Implementations must support full replacement (``write``), partial
     updates (``update``), and reading the current state (``read``).
+
+    **For:** single-agent in-run progress tracking — synthesized findings,
+    open questions, decisions the agent wants to carry forward across its
+    own steps within one ``Agent.run`` call.
+
+    **Not for:** state that must survive process restarts (use
+    ``LongTermStore`` or ``SemanticStore``), similarity-based recall (use
+    ``SemanticStore`` or ``EpisodeStore``), multi-agent coordination (use
+    ``SharedMemory`` or ``Blackboard``), or replay of the agent's own
+    prior assistant turns (use ``ThreadStore`` — behavioral continuity,
+    not information continuity).
+
+    Module layout note: this protocol lives in
+    ``nanitics.strategies.agents`` rather than ``nanitics.capabilities.memory``
+    because ``ReActAgent`` consumes it natively (it's part of the agent
+    contract, not an external capability). It is re-exported from
+    ``nanitics.capabilities.memory`` so consumers can import it alongside
+    the other memory protocols; the canonical location remains
+    ``strategies/agents/``.
     """
 
     def read(self) -> str | None:
