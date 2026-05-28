@@ -632,3 +632,165 @@ class TestSupervisorIntegration:
 def test_budget_trigger_rejects_non_positive(value: int) -> None:
     with pytest.raises(ValueError, match="max_tokens must be positive"):
         BudgetTrigger(max_tokens=value)
+
+
+# ── thread_key propagation ────────────────────────────────
+
+
+class TestSupervisorThreadKey:
+    """Supervisor threading rules:
+
+    * RETRY appends to the supervisee's thread — the agent sees its
+      prior attempt and the supervisor's feedback as natural conversation
+      turns.
+    * REASSIGN switches to the new agent's thread key (or stateless if
+      unmapped). The new agent does not inherit the previous one's
+      thread.
+    """
+
+    def test_thread_keys_default_empty(self) -> None:
+        emitter = InMemoryEmitter(trace_id="t")
+        sup = Supervisor(triggers=[], emitter=emitter)
+        assert sup._thread_keys == {}
+
+    async def test_retry_appends_to_same_thread(self) -> None:
+        from nanitics.composition import InMemoryThreadStore
+
+        emitter = InMemoryEmitter(trace_id="t")
+        thread_store = InMemoryThreadStore()
+        agent = ReActAgent(
+            name="worker",
+            llm_client=MockLLMClient(
+                [
+                    LLMResponse(
+                        content="first answer",
+                        tool_calls=[],
+                        usage=Usage(input_tokens=1, output_tokens=1),
+                        model="m",
+                        stop_reason="end_turn",
+                    ),
+                    LLMResponse(
+                        content="second answer",
+                        tool_calls=[],
+                        usage=Usage(input_tokens=1, output_tokens=1),
+                        model="m",
+                        stop_reason="end_turn",
+                    ),
+                ]
+            ),
+            emitter=emitter,
+            system_prompt="answer",
+            tools=[],
+            thread_store=thread_store,
+        )
+
+        # Trigger that asks for one retry on the first attempt only.
+        call_state = {"calls": 0}
+
+        def predicate(_result: AgentResult, _task: str) -> SupervisionDecision | None:
+            call_state["calls"] += 1
+            if call_state["calls"] == 1:
+                return SupervisionDecision(
+                    action=SupervisionAction.RETRY,
+                    trigger_name="one-retry",
+                    feedback="be more thorough",
+                )
+            return None
+
+        trigger = PredicateTrigger(name="one-retry", predicate=predicate)
+
+        sup = Supervisor(
+            triggers=[trigger],
+            emitter=emitter,
+            thread_keys={"worker": "worker-thread"},
+        )
+        sr = await sup.supervise(agent, "do the thing")
+
+        assert sr.accepted is True
+        assert sr.total_attempts == 2
+
+        # Both attempts wrote to the same thread.
+        loaded = await thread_store.load("worker-thread")
+        # Two user turns (initial + retry with feedback) and two assistant turns.
+        assert sum(1 for m in loaded if m.role == "user") == 2
+        assert sum(1 for m in loaded if m.role == "assistant") == 2
+        # The retry's user turn carries the feedback string.
+        user_contents = [str(m.content) for m in loaded if m.role == "user"]
+        assert any("be more thorough" in c for c in user_contents)
+
+    async def test_reassign_switches_thread(self) -> None:
+        from nanitics.composition import InMemoryThreadStore
+
+        emitter = InMemoryEmitter(trace_id="t")
+        thread_store = InMemoryThreadStore()
+
+        worker = ReActAgent(
+            name="worker",
+            llm_client=MockLLMClient(
+                [
+                    LLMResponse(
+                        content="worker answer",
+                        tool_calls=[],
+                        usage=Usage(input_tokens=1, output_tokens=1),
+                        model="m",
+                        stop_reason="end_turn",
+                    ),
+                ]
+            ),
+            emitter=emitter,
+            system_prompt="answer",
+            tools=[],
+            thread_store=thread_store,
+        )
+        backup = ReActAgent(
+            name="backup",
+            llm_client=MockLLMClient(
+                [
+                    LLMResponse(
+                        content="backup answer",
+                        tool_calls=[],
+                        usage=Usage(input_tokens=1, output_tokens=1),
+                        model="m",
+                        stop_reason="end_turn",
+                    ),
+                ]
+            ),
+            emitter=emitter,
+            system_prompt="answer",
+            tools=[],
+            thread_store=thread_store,
+        )
+
+        call_state = {"calls": 0}
+
+        def predicate(_result: AgentResult, _task: str) -> SupervisionDecision | None:
+            call_state["calls"] += 1
+            if call_state["calls"] == 1:
+                return SupervisionDecision(
+                    action=SupervisionAction.REASSIGN,
+                    trigger_name="reassign-once",
+                    reassign_to="backup",
+                )
+            return None
+
+        trigger = PredicateTrigger(name="reassign-once", predicate=predicate)
+
+        sup = Supervisor(
+            triggers=[trigger],
+            emitter=emitter,
+            agents={"backup": backup},
+            thread_keys={"worker": "worker-thread", "backup": "backup-thread"},
+        )
+        sr = await sup.supervise(worker, "do the thing")
+
+        assert sr.accepted is True
+        assert sr.final_agent == "backup"
+
+        worker_msgs = await thread_store.load("worker-thread")
+        backup_msgs = await thread_store.load("backup-thread")
+
+        # Worker's thread carries only its single attempt.
+        assert sum(1 for m in worker_msgs if m.role == "assistant") == 1
+        # Backup's thread carries its own attempt — not a continuation
+        # of the worker's thread.
+        assert sum(1 for m in backup_msgs if m.role == "assistant") == 1

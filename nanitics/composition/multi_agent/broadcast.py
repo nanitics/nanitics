@@ -215,6 +215,16 @@ class Broadcast:
         eligibility_filter: Which agents participate. Defaults to
             ``AllEligible``.
         cancellation_token: Cancellation signal.
+        thread_keys: Optional mapping from agent name to thread key.
+            Each participating agent named in the mapping carries its
+            own conversation thread across broadcast runs. Agents not
+            in the mapping run stateless. Each agent must be configured
+            with a :class:`~nanitics.composition.threads.ThreadStore`
+            for the prefix to be persisted.
+
+    Raises:
+        ValueError: If ``thread_keys`` references an agent name not
+            in ``agents``.
     """
 
     def __init__(
@@ -225,12 +235,22 @@ class Broadcast:
         response_strategy: ResponseStrategy | None = None,
         eligibility_filter: EligibilityFilter | None = None,
         cancellation_token: CancellationToken | None = None,
+        thread_keys: dict[str, str] | None = None,
     ) -> None:
+        if thread_keys is not None:
+            agent_names = {a.name for a in agents}
+            unknown = set(thread_keys) - agent_names
+            if unknown:
+                raise ValueError(
+                    f"thread_keys references agents not in this Broadcast: {sorted(unknown)}. "
+                    f"Known agents: {sorted(agent_names)}."
+                )
         self._agents = agents
         self._emitter = emitter
         self._response_strategy: ResponseStrategy = response_strategy if response_strategy is not None else CollectAll()
         self._eligibility_filter = eligibility_filter if eligibility_filter is not None else AllEligible()
         self._cancellation_token = cancellation_token
+        self._thread_keys = thread_keys or {}
 
     async def run(self, task: str) -> BroadcastResult:
         strategy_name = type(self._response_strategy).__name__
@@ -259,7 +279,7 @@ class Broadcast:
 
         async def _run_agent(agent: Agent) -> BroadcastResponse | AgentFailure:
             try:
-                result = await agent.bind(self._emitter).run(task)
+                result = await agent.bind(self._emitter).run(task, thread_key=self._thread_keys.get(agent.name))
                 response = BroadcastResponse(
                     agent_name=agent.name,
                     output=result.output,

@@ -1,5 +1,7 @@
 """Tests for Broadcast: models, strategies, filters, controller, events."""
 
+import pytest
+
 from nanitics.composition.multi_agent.broadcast import (
     AllEligible,
     Broadcast,
@@ -429,3 +431,51 @@ class TestBroadcastController:
         )
         result = await broadcast.run("task")
         assert len(result.responses) == 1
+
+
+# ──────────────────────────────────────────────────────────
+# thread_key propagation
+# ──────────────────────────────────────────────────────────
+
+
+class TestBroadcastThreadKeys:
+    def test_rejects_unknown_agent_name(self) -> None:
+        emitter = make_emitter()
+        with pytest.raises(ValueError, match="thread_keys references agents"):
+            Broadcast(
+                agents=[make_agent("a", emitter)],
+                emitter=emitter,
+                thread_keys={"unknown": "k"},
+            )
+
+    def test_thread_keys_default_empty(self) -> None:
+        emitter = make_emitter()
+        broadcast = Broadcast(agents=[make_agent("a", emitter)], emitter=emitter)
+        assert broadcast._thread_keys == {}
+
+    async def test_per_agent_thread_accumulates_across_runs(self) -> None:
+        from nanitics.composition import InMemoryThreadStore
+
+        emitter = make_emitter()
+        thread_store = InMemoryThreadStore()
+
+        agent = ReActAgent(
+            name="a",
+            llm_client=MockLLMClient([make_response("ans1"), make_response("ans2")]),
+            emitter=emitter,
+            system_prompt="answer.",
+            tools=[],
+            thread_store=thread_store,
+        )
+
+        broadcast = Broadcast(
+            agents=[agent],
+            emitter=emitter,
+            thread_keys={"a": "a-thread"},
+        )
+        await broadcast.run("first")
+        await broadcast.run("second")
+
+        loaded = await thread_store.load("a-thread")
+        assert sum(1 for m in loaded if m.role == "user") >= 2
+        assert sum(1 for m in loaded if m.role == "assistant") >= 2

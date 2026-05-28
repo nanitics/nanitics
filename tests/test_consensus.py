@@ -738,3 +738,63 @@ class TestConsensusEventsDeliberation:
         for i, ae in enumerate(agreement_events):
             assert ae.round == i + 1
             assert ae.converged is False  # never converged
+
+
+# ──────────────────────────────────────────────────────────
+# thread_key propagation
+# ──────────────────────────────────────────────────────────
+
+
+class TestConsensusThreadKeys:
+    def test_rejects_unknown_agent_name(self) -> None:
+        emitter = make_emitter()
+        with pytest.raises(ValueError, match="thread_keys references agents"):
+            Consensus(
+                agents=[make_agent("a", emitter), make_agent("b", emitter)],
+                emitter=emitter,
+                thread_keys={"missing": "k"},
+            )
+
+    def test_thread_keys_default_empty(self) -> None:
+        emitter = make_emitter()
+        consensus = Consensus(
+            agents=[make_agent("a", emitter), make_agent("b", emitter)],
+            emitter=emitter,
+        )
+        assert consensus._thread_keys == {}
+
+    async def test_per_agent_thread_accumulates_across_runs(self) -> None:
+        from nanitics.composition import InMemoryThreadStore
+
+        emitter = make_emitter()
+        thread_store = InMemoryThreadStore()
+
+        agent_a = ReActAgent(
+            name="A",
+            llm_client=MockLLMClient([make_response("yes"), make_response("yes")]),
+            emitter=emitter,
+            system_prompt="answer",
+            tools=[],
+            thread_store=thread_store,
+        )
+        agent_b = ReActAgent(
+            name="B",
+            llm_client=MockLLMClient([make_response("yes"), make_response("yes")]),
+            emitter=emitter,
+            system_prompt="answer",
+            tools=[],
+            thread_store=thread_store,
+        )
+
+        consensus = Consensus(
+            agents=[agent_a, agent_b],
+            emitter=emitter,
+            thread_keys={"A": "A-thread", "B": "B-thread"},
+        )
+        await consensus.run("q1")
+        await consensus.run("q2")
+
+        loaded_a = await thread_store.load("A-thread")
+        loaded_b = await thread_store.load("B-thread")
+        assert sum(1 for m in loaded_a if m.role == "assistant") >= 2
+        assert sum(1 for m in loaded_b if m.role == "assistant") >= 2

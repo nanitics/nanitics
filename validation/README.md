@@ -121,6 +121,7 @@ the recommended reading order.
 ### Threads
 
 - `threads/thread_identity_replay.py` — `ThreadStore` + `thread_key` behavioral continuity across two real-LLM runs; verifies replayed prior assistant turns are treated as the model's own work (quick).
+- `threads/multi_agent_continuity.py` — `AgentTool` + `thread_key` propagation across repeated delegations; drafter→critic→drafter via the same `AgentTool` instance proves a coordinator's repeated delegations accumulate behavioral state in the delegate's thread (quick).
 
 ### Multi-agent
 

@@ -465,10 +465,13 @@ class _BoundAgentStep:
         return self._step.name
 
     async def execute(self, input: Any) -> StepResult:
+        from nanitics.composition.orchestration.adapters import AgentStep
+
         if self._agent_checkpoint is not None:
             self._bound.agent._set_resume_state(self._agent_checkpoint)
             self._agent_checkpoint = None
-        result = await self._bound.run(str(input))
+        step = cast(AgentStep, self._step)
+        result = await self._bound.run(str(input), thread_key=step._thread_key)
         metadata: dict[str, Any] = {
             "total_steps": result.total_steps,
             "termination_reason": result.termination_reason,
@@ -504,7 +507,7 @@ class _BoundHandoffStep:
         from nanitics.infrastructure.observability.events import HandoffEvent
 
         step = cast(HandoffStep, self._step)
-        result = await self._bound.run(str(input))
+        result = await self._bound.run(str(input), thread_key=step._thread_key)
         handoff_text = await step._transfer_strategy.extract(result)
         payload_fields = list(type(result).model_fields.keys())
         payload_size = len(handoff_text)

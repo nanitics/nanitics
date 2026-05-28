@@ -115,6 +115,16 @@ class JudgeRouter:
         min_confidence_threshold: When set, winners below this threshold
             are rejected (``allocated=False``, ``rejection_reason="below_threshold"``).
         cancellation_token: Optional cancellation signal.
+        thread_keys: Optional mapping from agent name to thread key.
+            The winning agent's execution forwards the matched key — an
+            agent that wins repeated routings accumulates its prior
+            wins as conversation history. Agents not in the mapping
+            execute stateless. Each agent must be configured with a
+            :class:`~nanitics.composition.threads.ThreadStore`.
+
+    Raises:
+        ValueError: If ``thread_keys`` references an agent name not
+            in ``participants``.
     """
 
     def __init__(
@@ -126,15 +136,25 @@ class JudgeRouter:
         prompt_template: str | None = None,
         min_confidence_threshold: float | None = None,
         cancellation_token: CancellationToken | None = None,
+        thread_keys: dict[str, str] | None = None,
     ) -> None:
         resolved_template = DEFAULT_CALIBRATED_JUDGE_PROMPT_TEMPLATE if prompt_template is None else prompt_template
         _validate_judge_prompt_template(resolved_template)
+        if thread_keys is not None:
+            agent_names = {p.agent.name for p in participants}
+            unknown = set(thread_keys) - agent_names
+            if unknown:
+                raise ValueError(
+                    f"thread_keys references agents not in this JudgeRouter: {sorted(unknown)}. "
+                    f"Known agents: {sorted(agent_names)}."
+                )
         self._participants = participants
         self._judge_llm = judge_llm
         self._emitter = emitter
         self._prompt_template = resolved_template
         self._min_confidence_threshold = min_confidence_threshold
         self._cancellation_token = cancellation_token
+        self._thread_keys = thread_keys or {}
 
     async def run(self, task: str) -> JudgeRouterResult:
         """Run the judge-routed allocation.
@@ -236,7 +256,9 @@ class JudgeRouter:
             # above, so winning_agent is non-None.
             assert winning_agent is not None
             try:
-                agent_result = await winning_agent.bind(self._emitter).run(task)
+                agent_result = await winning_agent.bind(self._emitter).run(
+                    task, thread_key=self._thread_keys.get(winning_agent.name)
+                )
                 execution_result = agent_result.output
             except Exception as exc:
                 execution_result = None

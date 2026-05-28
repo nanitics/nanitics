@@ -281,9 +281,18 @@ class Consensus:
         deliberation: Configuration for multi-round deliberation.
             When ``None``, runs a single round.
         cancellation_token: Cancellation signal.
+        thread_keys: Optional mapping from agent name to thread key.
+            Each named agent carries its own conversation thread across
+            consensus rounds (and across runs). The natural use case is
+            deliberation: each agent sees its prior round's vote and the
+            ``\n## Peer responses`` block accrues as conversation
+            history. Agents not in the mapping run stateless. Each
+            agent must be configured with a
+            :class:`~nanitics.composition.threads.ThreadStore`.
 
     Raises:
-        ValueError: If fewer than 2 agents are provided.
+        ValueError: If fewer than 2 agents are provided, or if
+            ``thread_keys`` references an agent name not in ``agents``.
     """
 
     def __init__(
@@ -294,14 +303,24 @@ class Consensus:
         aggregation_strategy: AggregationStrategy | None = None,
         deliberation: DeliberationConfig | None = None,
         cancellation_token: CancellationToken | None = None,
+        thread_keys: dict[str, str] | None = None,
     ) -> None:
         if len(agents) < 2:
             raise ValueError("Consensus requires at least 2 agents")
+        if thread_keys is not None:
+            agent_names = {a.name for a in agents}
+            unknown = set(thread_keys) - agent_names
+            if unknown:
+                raise ValueError(
+                    f"thread_keys references agents not in this Consensus: {sorted(unknown)}. "
+                    f"Known agents: {sorted(agent_names)}."
+                )
         self._agents = agents
         self._emitter = emitter
         self._aggregation_strategy = aggregation_strategy or MajorityVoting()
         self._deliberation = deliberation
         self._cancellation_token = cancellation_token
+        self._thread_keys = thread_keys or {}
 
     async def run(self, task: str) -> ConsensusResult:
         """Execute the consensus process.
@@ -450,7 +469,7 @@ class Consensus:
 
     async def _run_agent(self, agent: Agent, task: str, round_num: int) -> ConsensusResponse:
         try:
-            result = await agent.bind(self._emitter).run(task)
+            result = await agent.bind(self._emitter).run(task, thread_key=self._thread_keys.get(agent.name))
             response = ConsensusResponse(
                 agent_name=agent.name,
                 output=result.output or "",

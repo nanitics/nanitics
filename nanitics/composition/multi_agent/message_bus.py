@@ -68,6 +68,17 @@ class TopicSubscription(BaseModel):
         topics: Topics this agent listens to.
         filter: Optional filter to further narrow which messages trigger
             this subscription.
+        thread_key: Opaque key identifying this subscriber's
+            conversation thread. When set, every message the subscriber
+            handles forwards the key, so the subscriber accumulates its
+            prior message-handling turns as conversation history. This
+            is orthogonal to
+            :class:`~nanitics.composition.multi_agent.message_bus.MessageHistoryProvider`,
+            which conveys *bus topic* history as injected context; the
+            ``thread_key`` carries the subscriber's own behavioral
+            continuity. The subscriber's agent must be configured with
+            a :class:`~nanitics.composition.threads.ThreadStore` for
+            the prefix to be persisted.
     """
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
@@ -75,6 +86,7 @@ class TopicSubscription(BaseModel):
     agent: Agent = Field(exclude=True)
     topics: list[str]
     filter: MessageFilter | None = Field(default=None, exclude=True)
+    thread_key: str | None = None
 
 
 class AgentExecution(BaseModel):
@@ -640,7 +652,7 @@ class MessageBus:
             # still mutates the shared agent; concurrent subscribers
             # racing on that state are a known hazard (not yet addressed).
             # The bind call itself is non-mutating under the new contract.
-            result: AgentResult = await agent.bind(self._emitter).run(message.content)
+            result: AgentResult = await agent.bind(self._emitter).run(message.content, thread_key=sub.thread_key)
 
             # Set depth and parent on published messages
             published = [

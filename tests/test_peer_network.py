@@ -551,3 +551,128 @@ class TestAllowedPeers:
                 assert f"consult_{name}" not in _consult_tool_names(agent), (
                     f"{name} must not have consult_{name} in its tool registry"
                 )
+
+
+# ── thread_key propagation ────────────────────────────────
+
+
+class TestPeerNetworkThreadKey:
+    """Per-peer-identity threading: each peer carries its own thread,
+    keyed by ``PeerSpec.thread_key``. Every consultation of a peer —
+    whether entry-point or via ``consult_<peer>`` — uses the peer's key,
+    so the peer accumulates its prior turns across consultations.
+
+    Per-pair / per-network scoping is deferred until a real consumer
+    asks; the default position is per-peer-identity.
+    """
+
+    def test_thread_key_defaults_to_none_on_peerspec(self) -> None:
+        spec = make_spec("alice")
+        assert spec.thread_key is None
+
+    def test_thread_key_field_accepted(self) -> None:
+        spec = PeerSpec(
+            name="alice",
+            description="alice",
+            llm_client=MockLLMClient([make_response("hi")]),
+            system_prompt="you are alice",
+            tools=[],
+            thread_key="alice-thread",
+        )
+        assert spec.thread_key == "alice-thread"
+
+    def test_peer_tool_carries_peer_thread_key(self) -> None:
+        emitter = make_emitter()
+        bob_spec = PeerSpec(
+            name="bob",
+            description="bob",
+            llm_client=MockLLMClient([make_response("bob output")]),
+            system_prompt="you are bob",
+            tools=[],
+            thread_key="bob-thread",
+        )
+        network = PeerNetwork(
+            peers=[make_spec("alice"), bob_spec],
+            emitter=emitter,
+        )
+        # Alice has a consult_bob tool; that PeerTool should carry
+        # bob's thread_key, not alice's.
+        alice = network._registry["alice"]
+        consult_bob = alice._tool_registry.get("consult_bob")
+        assert isinstance(consult_bob, PeerTool)
+        assert consult_bob._thread_key == "bob-thread"
+
+    async def test_entry_run_uses_peerspec_thread_key_by_default(self) -> None:
+        from nanitics.composition import InMemoryThreadStore
+
+        emitter = make_emitter()
+        store = InMemoryThreadStore()
+        alice_spec = PeerSpec(
+            name="alice",
+            description="alice",
+            llm_client=MockLLMClient([make_response("alice answer")]),
+            system_prompt="you are alice",
+            tools=[],
+            thread_key="alice-thread",
+            allowed_peers=[],
+        )
+        network = PeerNetwork(
+            peers=[alice_spec, make_spec("bob")],
+            emitter=emitter,
+            thread_store=store,
+        )
+        await network.run("alice", "say hi")
+        loaded = await store.load("alice-thread")
+        assert any(m.role == "assistant" for m in loaded)
+
+    async def test_run_thread_key_overrides_peerspec_key(self) -> None:
+        from nanitics.composition import InMemoryThreadStore
+
+        emitter = make_emitter()
+        store = InMemoryThreadStore()
+        alice_spec = PeerSpec(
+            name="alice",
+            description="alice",
+            llm_client=MockLLMClient([make_response("alice answer")]),
+            system_prompt="you are alice",
+            tools=[],
+            thread_key="alice-thread",
+            allowed_peers=[],
+        )
+        network = PeerNetwork(
+            peers=[alice_spec, make_spec("bob")],
+            emitter=emitter,
+            thread_store=store,
+        )
+        await network.run("alice", "say hi", thread_key="session-42")
+        # The override key got the writes, not the default per-peer key.
+        assert len(await store.load("session-42")) > 0
+        assert len(await store.load("alice-thread")) == 0
+
+    async def test_per_peer_accumulation_across_two_network_runs(self) -> None:
+        """Two separate `network.run` calls hit the entry peer twice; with
+        per-peer-identity, the second call sees the first's turns."""
+        from nanitics.composition import InMemoryThreadStore
+
+        emitter = make_emitter()
+        store = InMemoryThreadStore()
+        alice_spec = PeerSpec(
+            name="alice",
+            description="alice",
+            llm_client=MockLLMClient([make_response("first answer"), make_response("second answer")]),
+            system_prompt="you are alice",
+            tools=[],
+            thread_key="alice-thread",
+            allowed_peers=[],
+        )
+        network = PeerNetwork(
+            peers=[alice_spec, make_spec("bob")],
+            emitter=emitter,
+            thread_store=store,
+        )
+        await network.run("alice", "q1")
+        await network.run("alice", "q2")
+        loaded = await store.load("alice-thread")
+        # Two user inputs + two assistant outputs at minimum.
+        assert sum(1 for m in loaded if m.role == "user") >= 2
+        assert sum(1 for m in loaded if m.role == "assistant") >= 2

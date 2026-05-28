@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Multi-agent thread propagation.** Every multi-agent construct now
+  routes `thread_key` to the agents it owns, so behavioral continuity
+  composes through delegation, pipelines, peer networks, blackboards,
+  fan-out, and post-execution monitoring. Per-construct API:
+  `AgentTool(..., thread_key="…")` and `HandoffStep(..., thread_key="…")`
+  forward the key on every execute; `create_handoff_chain` accepts a
+  `thread_keys: list[str | None]` parallel to `agents` so the same
+  agent appearing twice can share a thread (e.g.,
+  drafter→critic→drafter). `AgentStep` (workflow adapter) gains the
+  same shape, and the `_BoundHandoffStep` / `_BoundAgentStep` workflow
+  wrappers now forward the key. `PeerSpec` gains `thread_key`;
+  `PeerNetwork` accepts `thread_store` and wires it into every peer's
+  `ReActAgent`; `PeerNetwork.run(..., thread_key=…)` is an entry-agent
+  override. Per-peer-identity is the default scoping (per-pair /
+  per-network deferred until consumers report a need). `Blackboard`,
+  `Broadcast`, `Consensus`, `Bidding`, `JudgeRouter`, and `Supervisor`
+  accept `thread_keys: dict[str, str]` (agent-name → key) with
+  construction-time validation against unknown agent names.
+  `Supervisor`'s RETRY appends to the supervisee's thread (so the
+  feedback-augmented retry sees the prior attempt as natural
+  conversation history); REASSIGN switches to the new agent's own
+  thread or runs stateless. `TopicSubscription.thread_key` carries the
+  subscriber's behavioral continuity through a `MessageBus`,
+  orthogonal to `MessageHistoryProvider` (which conveys bus-topic
+  history). `Debater.thread_key` carries per-debater continuity across
+  rounds. Every key is opt-in; default behavior is unchanged when
+  unset. Recipes in `docs/guides/multi-agent-foundations.md`.
+
 - **Thread identity primitive — `thread_key` + `ThreadStore`.** A new
   substrate for behavioral continuity: `Agent.run(input, thread_key=...)`
   loads a per-thread `Message` prefix from a configured

@@ -292,6 +292,8 @@ initial_messages  →  thread prefix from ThreadStore  →  new user input
 - No cross-process locking. `ThreadLocks` is asyncio-local.
 - Only `ReActAgent` consumes the prefix in this phase. Other subtypes accept `thread_key` on `Agent.run` (so wrapping code can pass it unconditionally) but do not replay the prefix; wiring lands in a follow-up phase.
 
+**Multi-agent constructs.** Every multi-agent primitive (`AgentTool`, `HandoffStep`, `PeerNetwork`, `Blackboard`, `Broadcast`, `Consensus`, `Bidding`, `JudgeRouter`, `Supervisor`, `MessageBus`, `Debate`) exposes a shape for routing thread keys to the agents it owns — repeated delegations, peers, debaters, subscribers each accumulate their own behavioral state. See [Multi-Agent Foundations § Behavioral Continuity](multi-agent-foundations.md#behavioral-continuity-in-multi-agent-patterns) for the per-construct API and recipes.
+
 ## Custom Implementations
 
 All memory types are defined as Python protocols. To build a production-backed store, implement the corresponding protocol with your persistence layer (PostgreSQL, Redis, etc.). The in-memory implementations (`InMemoryWorkingMemory`, `InMemoryLongTermStore`, `InMemorySemanticStore`, `InMemoryEpisodeStore`, `InMemorySharedMemory`) serve as reference implementations and are suitable for testing.

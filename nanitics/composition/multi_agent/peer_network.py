@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from nanitics.composition.threads.store import ThreadStore
 from nanitics.infrastructure.errors import AgentError
 from nanitics.infrastructure.llm.protocol import LLMClient, ToolSchema
 from nanitics.infrastructure.observability.emitter import EventEmitter
@@ -43,6 +44,17 @@ class PeerSpec(BaseModel):
             ``name`` (self-reference) raises ``ValueError``; naming a
             peer not present in the network also raises ``ValueError``.
             ``consult_<self>`` is never injected under any configuration.
+        thread_key: Opaque key identifying this peer's conversation
+            thread. When set, every consultation of this peer — whether
+            entry-point or via ``consult_<name>`` — forwards the key,
+            so the peer accumulates its prior turns across the
+            network's lifetime. Per-peer-identity is the default
+            scoping; per-pair or per-network scoping is deferred to a
+            follow-up if real consumers report a need. The peer's
+            underlying ``ReActAgent`` must be wired with a
+            :class:`~nanitics.composition.threads.ThreadStore` for the
+            prefix to be persisted, which the network does by accepting
+            an optional ``thread_store`` constructor argument.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -54,6 +66,7 @@ class PeerSpec(BaseModel):
     tools: list[Tool]
     max_iterations: int = 10
     allowed_peers: list[str] | None = None
+    thread_key: str | None = None
 
 
 class PeerBudgetExceededError(AgentError):
@@ -141,6 +154,7 @@ class PeerTool:
         budget: InvocationBudget,
         emitter: EventEmitter,
         consulted: set[str],
+        thread_key: str | None = None,
     ) -> None:
         self._peer_name = peer_name
         self._peer_description = peer_description
@@ -149,6 +163,7 @@ class PeerTool:
         self._budget = budget
         self._emitter = emitter
         self._consulted = consulted
+        self._thread_key = thread_key
 
     @property
     def schema(self) -> ToolSchema:
@@ -198,7 +213,7 @@ class PeerTool:
             )
         )
 
-        result = await agent.bind(self._emitter).run(message)
+        result = await agent.bind(self._emitter).run(message, thread_key=self._thread_key)
 
         return ToolResult(
             content=result.output or "",
@@ -269,6 +284,13 @@ class PeerNetwork:
         emitter: Event emitter for network tracing.
         max_invocations: Total consultation budget shared across all peers.
         cancellation_token: Cancellation signal propagated to all peer agents.
+        thread_store: Shared :class:`~nanitics.composition.threads.ThreadStore`
+            wired into every peer ``ReActAgent`` so peers with a
+            ``thread_key`` accumulate behavioral continuity across
+            consultations. When ``None``, peer ``thread_key`` values
+            are accepted but no prefix is persisted. Per-peer-identity
+            is the default scoping — each peer carries its own thread,
+            regardless of who called it.
 
     Raises:
         ValueError: If peer names are not unique, or if any ``PeerSpec``'s
@@ -282,6 +304,7 @@ class PeerNetwork:
         emitter: EventEmitter,
         max_invocations: int = 50,
         cancellation_token: CancellationToken | None = None,
+        thread_store: ThreadStore | None = None,
     ) -> None:
         names = [p.name for p in peers]
         if len(names) != len(set(names)):
@@ -315,6 +338,7 @@ class PeerNetwork:
                     budget=self._budget,
                     emitter=emitter,
                     consulted=self._consulted,
+                    thread_key=self._peer_specs[other_name].thread_key,
                 )
                 for other_name in allowed
             ]
@@ -332,16 +356,24 @@ class PeerNetwork:
                 tools=[*spec.tools, *peer_tools],
                 max_iterations=spec.max_iterations,
                 cancellation_token=cancellation_token,
+                thread_store=thread_store,
             )
 
             self._registry[spec.name] = agent
 
-    async def run(self, agent_name: str, task: str) -> AgentResult:
+    async def run(self, agent_name: str, task: str, *, thread_key: str | None = None) -> AgentResult:
         """Start execution from a specific peer agent.
 
         Args:
             agent_name: Name of the entry-point agent.
             task: Task to execute.
+            thread_key: Optional override for the entry agent's thread
+                key. When ``None`` (the default) the entry peer's
+                ``PeerSpec.thread_key`` is used, so per-peer-identity
+                accumulation continues across repeated network runs.
+                Pass an explicit value to override on a per-network-run
+                basis (e.g., per-session keys layered over per-peer
+                identity).
 
         Returns:
             The entry agent's ``AgentResult``.
@@ -353,6 +385,8 @@ class PeerNetwork:
             raise ValueError(
                 f"Agent '{agent_name}' not found in peer network. Available: {list(self._registry.keys())}"
             )
+
+        effective_key = thread_key if thread_key is not None else self._peer_specs[agent_name].thread_key
 
         self._emitter.emit(
             PeerNetworkStartEvent(
@@ -367,7 +401,7 @@ class PeerNetwork:
             )
         )
 
-        result = await self._registry[agent_name].bind(self._emitter).run(task)
+        result = await self._registry[agent_name].bind(self._emitter).run(task, thread_key=effective_key)
 
         self._emitter.emit(
             PeerNetworkCompleteEvent(

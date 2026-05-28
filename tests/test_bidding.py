@@ -751,3 +751,60 @@ class TestBiddingController:
         result = await bidding.run("task")
         assert result.allocated is True
         assert result.execution_result == "out"
+
+
+# ──────────────────────────────────────────────────────────
+# thread_key propagation
+# ──────────────────────────────────────────────────────────
+
+
+class TestBiddingThreadKeys:
+    def test_rejects_unknown_agent_name(self) -> None:
+        emitter = make_emitter()
+        agent = make_agent("a", emitter)
+        with pytest.raises(ValueError, match="thread_keys references agents"):
+            Bidding(
+                participants=[BiddableAgent(agent=agent, bid_generator=FixedBidGenerator(confidence=0.9))],
+                emitter=emitter,
+                thread_keys={"missing": "k"},
+            )
+
+    def test_thread_keys_default_empty(self) -> None:
+        emitter = make_emitter()
+        agent = make_agent("a", emitter)
+        bidding = Bidding(
+            participants=[BiddableAgent(agent=agent, bid_generator=FixedBidGenerator(confidence=0.9))],
+            emitter=emitter,
+        )
+        assert bidding._thread_keys == {}
+
+    async def test_winner_thread_accumulates_across_runs(self) -> None:
+        from nanitics.composition import InMemoryThreadStore
+
+        emitter = make_emitter()
+        thread_store = InMemoryThreadStore()
+        winner = ReActAgent(
+            name="winner",
+            llm_client=MockLLMClient([make_response("win1"), make_response("win2")]),
+            emitter=emitter,
+            system_prompt="answer.",
+            tools=[],
+            thread_store=thread_store,
+        )
+        loser = make_agent("loser", emitter)
+
+        bidding = Bidding(
+            participants=[
+                BiddableAgent(agent=winner, bid_generator=FixedBidGenerator(confidence=0.9)),
+                BiddableAgent(agent=loser, bid_generator=FixedBidGenerator(confidence=0.1)),
+            ],
+            emitter=emitter,
+            thread_keys={"winner": "winner-thread"},
+        )
+
+        # Two auctions, both won by `winner` (higher confidence).
+        await bidding.run("task1")
+        await bidding.run("task2")
+
+        loaded = await thread_store.load("winner-thread")
+        assert sum(1 for m in loaded if m.role == "assistant") >= 2

@@ -21,10 +21,19 @@ class AgentStep:
 
     Args:
         agent: The agent to execute as a workflow step.
+        thread_key: Opaque key identifying the conversation thread this
+            step's agent continues across repeated runs of the same
+            step. Forwarded to
+            :meth:`~nanitics.strategies.agents.base.Agent.run` on each
+            execution. The agent must be configured with a
+            :class:`~nanitics.composition.threads.ThreadStore` for the
+            prefix to be persisted; the key is otherwise accepted and
+            ignored. ``None`` (the default) runs the step stateless.
     """
 
-    def __init__(self, agent: Agent) -> None:
+    def __init__(self, agent: Agent, *, thread_key: str | None = None) -> None:
         self._agent = agent
+        self._thread_key = thread_key
 
     @property
     def name(self) -> str:
@@ -36,7 +45,7 @@ class AgentStep:
         return self._agent
 
     async def execute(self, input: Any) -> StepResult:
-        result = await self._agent.run(str(input))
+        result = await self._agent.run(str(input), thread_key=self._thread_key)
         metadata: dict[str, Any] = {
             "total_steps": result.total_steps,
             "termination_reason": result.termination_reason,

@@ -378,3 +378,79 @@ class TestJudgeRoutingEventRoundTrip:
             data = original.model_dump()
             recovered = adapter.validate_python(data)
             assert recovered == original
+
+
+class TestJudgeRouterThreadKeys:
+    def test_rejects_unknown_agent_name(self) -> None:
+        emitter = make_emitter()
+        with pytest.raises(ValueError, match="thread_keys references agents"):
+            JudgeRouter(
+                participants=[_participant("a", emitter)],
+                judge_llm=MockLLMClient([]),
+                emitter=emitter,
+                thread_keys={"missing": "k"},
+            )
+
+    def test_thread_keys_default_empty(self) -> None:
+        emitter = make_emitter()
+        router = JudgeRouter(
+            participants=[_participant("a", emitter)],
+            judge_llm=MockLLMClient([]),
+            emitter=emitter,
+        )
+        assert router._thread_keys == {}
+
+    async def test_winner_thread_accumulates_across_runs(self) -> None:
+        from nanitics.composition import InMemoryThreadStore
+
+        emitter = make_emitter()
+        thread_store = InMemoryThreadStore()
+
+        winner = ReActAgent(
+            name="winner",
+            llm_client=MockLLMClient([make_response("ans1"), make_response("ans2")]),
+            emitter=emitter,
+            system_prompt="answer.",
+            tools=[],
+            thread_store=thread_store,
+        )
+        loser = _make_agent("loser", emitter)
+
+        judge_responses = [
+            make_response(
+                _ranking_response(
+                    [
+                        {
+                            "agent_name": "winner",
+                            "confidence": 0.9,
+                            "capabilities": [],
+                            "estimated_cost": None,
+                            "reasoning": "r",
+                        },
+                        {
+                            "agent_name": "loser",
+                            "confidence": 0.1,
+                            "capabilities": [],
+                            "estimated_cost": None,
+                            "reasoning": "r",
+                        },
+                    ]
+                )
+            )
+            for _ in range(2)
+        ]
+
+        router = JudgeRouter(
+            participants=[
+                BiddableAgent(agent=winner, bid_generator=FixedBidGenerator(confidence=0.0)),
+                BiddableAgent(agent=loser, bid_generator=FixedBidGenerator(confidence=0.0)),
+            ],
+            judge_llm=MockLLMClient(judge_responses),
+            emitter=emitter,
+            thread_keys={"winner": "winner-thread"},
+        )
+        await router.run("first")
+        await router.run("second")
+
+        loaded = await thread_store.load("winner-thread")
+        assert sum(1 for m in loaded if m.role == "assistant") >= 2

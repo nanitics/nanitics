@@ -280,6 +280,22 @@ class Blackboard:
         termination: Condition for stopping iteration.
             Defaults to ``NoNewContributions``.
         max_rounds: Hard upper bound on rounds regardless of termination.
+        thread_keys: Optional mapping from agent name to thread key.
+            Each participating agent named in the mapping carries its
+            own conversation thread across rounds, accumulating its
+            prior assistant turns, tool calls, and tool results.
+            Agents not in the mapping run stateless across rounds.
+            Each agent must be configured with a
+            :class:`~nanitics.composition.threads.ThreadStore` for the
+            prefix to be persisted; the key is otherwise accepted and
+            ignored. Sharing a key across multiple agents is not
+            recommended — each agent's writes would interleave in the
+            thread and confuse the model's "what I previously did"
+            framing.
+
+    Raises:
+        ValueError: If ``thread_keys`` references an agent name not
+            in ``agents``.
     """
 
     def __init__(
@@ -291,6 +307,7 @@ class Blackboard:
         control: ControlStrategy | None = None,
         termination: TerminationCondition | None = None,
         max_rounds: int = 10,
+        thread_keys: dict[str, str] | None = None,
     ) -> None:
         if not agents:
             raise ValueError("agents must not be empty")
@@ -301,12 +318,21 @@ class Blackboard:
                 f"These agents do not: {', '.join(non_capable)}. "
                 f"Use ReActAgent or another agent type with supports_dynamic_tools=True."
             )
+        if thread_keys is not None:
+            agent_names = {a.name for a in agents}
+            unknown = set(thread_keys) - agent_names
+            if unknown:
+                raise ValueError(
+                    f"thread_keys references agents not in this Blackboard: {sorted(unknown)}. "
+                    f"Known agents: {sorted(agent_names)}."
+                )
         self._shared_memory = shared_memory
         self._agents = agents
         self._emitter = emitter
         self._control: ControlStrategy = control if control is not None else ScheduledControl()
         self._termination: TerminationCondition = termination if termination is not None else NoNewContributions()
         self._max_rounds = max_rounds
+        self._thread_keys = thread_keys or {}
 
     async def run(self, task: str) -> BlackboardResult:
         """Execute the blackboard coordination loop.
@@ -378,14 +404,16 @@ class Blackboard:
                         # span-stack ContextVar is set in the task that
                         # reads it.
                         async def _bind_and_run(a: Any, emitter: EventEmitter) -> Any:
-                            return await a.bind(emitter).run(task)
+                            return await a.bind(emitter).run(task, thread_key=self._thread_keys.get(a.name))
 
                         results = await asyncio.gather(*(_bind_and_run(a, self._emitter) for a in selected))
                         agent_results: dict[str, Any] = dict(zip([a.name for a in selected], results, strict=True))
                     else:
                         agent_results = {}
                         for agent in selected:
-                            result = await agent.bind(self._emitter).run(task)
+                            result = await agent.bind(self._emitter).run(
+                                task, thread_key=self._thread_keys.get(agent.name)
+                            )
                             agent_results[agent.name] = result
                 finally:
                     collector.active = False
