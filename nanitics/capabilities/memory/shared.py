@@ -51,6 +51,18 @@ class SharedMemory(Protocol):
     Entries are attributed to authors, support scoping by topic, and
     follow a lifecycle (active → superseded or retracted). Only the
     original author can supersede or retract their own entries.
+
+    **For:** multiple agents publishing artifacts, observations, and
+    decisions to a shared board that every participant reads — the
+    cooperative-blackboard pattern. Authorship and lifecycle let
+    participants attribute entries and supersede stale information.
+
+    **Not for:** real-time agent-to-agent messaging (use ``MessageBus``
+    — shared memory is a board, not a channel; see also
+    ``MessageHistoryProvider`` for bus-topic continuity), single-agent
+    in-run state (use ``WorkingMemory``), persistence across runs
+    without coordination semantics (use ``LongTermStore``), or
+    similarity-based retrieval (use ``SemanticStore``).
     """
 
     async def write(

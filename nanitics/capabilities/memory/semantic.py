@@ -39,6 +39,14 @@ class SemanticStore(Protocol):
     Content is embedded into vectors and retrieved by semantic similarity
     rather than exact key match. Requires an ``EmbeddingClient`` for
     vector conversion.
+
+    **For:** retrieval-augmented generation, document search, finding
+    relevant prior knowledge by meaning rather than identifier.
+
+    **Not for:** exact-key lookup of known facts (use ``LongTermStore``),
+    in-run scratchpad (use ``WorkingMemory``), recall of full task
+    experiences with outcomes (use ``EpisodeStore``), or multi-agent
+    coordination (use ``SharedMemory``).
     """
 
     async def add(self, content: str, metadata: dict[str, Any] | None = None) -> str:

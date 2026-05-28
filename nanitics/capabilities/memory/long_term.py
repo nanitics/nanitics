@@ -9,6 +9,15 @@ class LongTermStore(Protocol):
 
     Stores string values under descriptive keys. Supports optional
     namespaces for isolating data between different agents or contexts.
+
+    **For:** named facts the agent explicitly stores and recalls — user
+    preferences, learned constants, project metadata, anything addressable
+    by a descriptive key.
+
+    **Not for:** similarity-based retrieval over a corpus (use
+    ``SemanticStore``), in-run scratchpad work (use ``WorkingMemory``),
+    learning from past task outcomes (use ``EpisodeStore``), or
+    multi-agent coordination (use ``SharedMemory``).
     """
 
     async def store(self, key: str, value: str, namespace: str | None = None) -> None:

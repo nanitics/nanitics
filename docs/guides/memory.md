@@ -241,6 +241,8 @@ See [Context Management](context-management.md) for strategies to manage context
 
 **Shared memory is not a message bus.** It's a shared artifact board, not a communication channel. For real-time agent-to-agent messaging, see [Multi-Agent Foundations](multi-agent-foundations.md).
 
+**`MessageHistoryProvider` is bus-topic continuity, not a memory type.** `MessageBus` wires a `MessageHistoryProvider` into each subscriber so they see recent messages on their subscribed topics. It is a *de facto* continuity primitive — but the substrate is the bus's message log, not a memory store, and the lifetime is the bus instance. Don't reach for it as a "memory provider"; reach for `MessageBus` when you want pub/sub between agents, and the per-subscriber history block comes along with it. The provider isn't intended for use outside `MessageBus`.
+
 **Context budget.** Each context provider adds content to every LLM call. Multiple memory providers can consume significant context. Monitor `ContextUsage` and consider which providers truly need to be automatic vs. tool-based.
 
 **Working memory reset on run start.** `ReActAgent` calls `working_memory.reset()` at the start of every run. Pre-populated data is lost before the first LLM call unless you override `reset()` in a custom implementation or use a context provider to inject initial state.
