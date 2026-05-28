@@ -100,6 +100,7 @@ Postgres-backed semantic memory.
 | [memory/semantic_memory.py](memory/semantic_memory.py) | `InMemorySemanticStore`, `MockEmbeddingClient`, similarity ranking, namespace isolation, `SemanticMemoryProvider`, `SemanticMemoryContributor` | [Memory](../docs/guides/memory.md) |
 | [memory/shared_memory.py](memory/shared_memory.py) | `InMemorySharedMemory`, entry lifecycle, two-agent coordination through shared state | [Memory](../docs/guides/memory.md#shared-memory) |
 | [memory/persistent_semantic_memory.py](memory/persistent_semantic_memory.py) | `PostgresSemanticStore` + pgvector as drop-in for `InMemorySemanticStore`, CRUD, namespace isolation | [Memory](../docs/guides/memory.md) |
+| [memory/working_memory_vs_threads.py](memory/working_memory_vs_threads.py) | Side-by-side: `InMemoryWorkingMemory` surfaces a draft inside `<nanitics:context provider="working_memory">` (information continuity); `thread_key` replays it as an unwrapped `assistant` turn (behavioral continuity) | [Memory](../docs/guides/memory.md) |
 
 ## Context
 
@@ -158,6 +159,15 @@ assume the earlier primitives.
 | [multi_agent/blackboard.py](multi_agent/blackboard.py) | `Blackboard`, `ScheduledControl`/`PrioritizedControl`/`OpportunisticControl`, termination | [Multi-Agent Coordination](../docs/guides/multi-agent-coordination.md#blackboard) |
 | [multi_agent/debate.py](multi_agent/debate.py) | `Debate`, `Debater`, `JudgeResolution`, `LLMJudgeResolution` with criteria | [Multi-Agent Coordination](../docs/guides/multi-agent-coordination.md#debate) |
 | [multi_agent/consensus.py](multi_agent/consensus.py) | `Consensus`, `MajorityVoting`/`WeightedVoting`/`BestOfN`, `DeliberationConfig` | [Multi-Agent Coordination](../docs/guides/multi-agent-coordination.md#consensus) |
+
+**Behavioral continuity**
+
+| Example | Description | Guide |
+|---|---|---|
+| [multi_agent/threads_drafter_critic_pipeline.py](multi_agent/threads_drafter_critic_pipeline.py) | `create_handoff_chain` with `thread_keys` — drafter→critic→drafter, drafter sees its own v1 on the second turn, `AgentStartEvent.replayed_message_count >= 1` asserted | [Multi-Agent Foundations](../docs/guides/multi-agent-foundations.md#behavioral-continuity-in-multi-agent-patterns) |
+| [multi_agent/threads_persistent_peers.py](multi_agent/threads_persistent_peers.py) | `PeerNetwork` with `PeerSpec.thread_key` + `thread_store` — per-peer identity across two sequential `network.run` calls; planner sees its prior plan, executor stays empty | [Multi-Agent Foundations](../docs/guides/multi-agent-foundations.md#behavioral-continuity-in-multi-agent-patterns) |
+| [multi_agent/threads_repeated_agent_tool.py](multi_agent/threads_repeated_agent_tool.py) | `AgentTool(thread_key=...)` invoked twice by one coordinator — the specialist's second turn replays its first; two `DelegationEvent`s and one specialist `AgentStartEvent` with replay >= 1 | [Multi-Agent Foundations](../docs/guides/multi-agent-foundations.md#behavioral-continuity-in-multi-agent-patterns) |
+| [multi_agent/threads_orchestrator_stateful_specialist.py](multi_agent/threads_orchestrator_stateful_specialist.py) | `create_orchestrator` with a specialist `AgentTool(thread_key=...)` — orchestrator dispatches the same specialist twice; second dispatch replays the first | [Multi-Agent Coordination](../docs/guides/multi-agent-coordination.md) |
 
 ## Workflows
 
