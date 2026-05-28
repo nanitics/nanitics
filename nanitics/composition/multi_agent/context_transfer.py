@@ -13,6 +13,17 @@ class ContextTransferStrategy(Protocol):
 
     Implementations control what information flows from one agent to the
     next — full output, trajectory, summary, or a custom extraction.
+
+    Returns ``str`` because the seam between agents is messages. Consumers
+    that need a typed object on their side of the seam project from the
+    extracted string (or from ``AgentResult`` directly) in their own code;
+    the SDK does not ship a parallel typed-transfer protocol.
+
+    Distinct from ``ContextProvider``, which runs *inside one agent* on
+    every LLM call to inject dynamic context. ``ContextTransferStrategy``
+    runs *between two agents*, once per delegation or handoff edge. See
+    ``docs/guides/multi-agent-foundations.md`` § Context Transfer for the
+    full contrast.
     """
 
     async def extract(self, result: AgentResult) -> str: ...

@@ -96,6 +96,17 @@ All strategies implement the same protocol: `async def extract(self, result: Age
 
 > **See also:** [examples/multi_agent/context_transfer.py](../../examples/multi_agent/context_transfer.py)
 
+### `ContextProvider` vs `ContextTransferStrategy`
+
+The SDK has two extension points whose names invite conflation. They solve different problems at different points in the runtime:
+
+- **`ContextProvider`** runs *inside one agent*, once per LLM call. It injects content (working memory, shared memory, episodic memory, etc.) into the prompt before the model generates. Its question is: *"what additional context should this agent see right now?"*
+- **`ContextTransferStrategy`** runs *between two agents*, once per delegation or handoff edge. It extracts a string from the upstream agent's `AgentResult` to feed into the downstream agent's input. Its question is: *"what should the next agent know about what just happened?"*
+
+One injects per-call context into a single agent; the other extracts a per-edge result between two agents. They are not interchangeable, and they compose: a downstream agent can have its own `ContextProvider`s that fire on every LLM call regardless of what arrived through the transfer strategy.
+
+**Non-goal: typed-projection renderers.** `ContextTransferStrategy.extract` returns `str` deliberately. The seam between agents is messages, and messages are strings. Consumers who want a typed object on their side of the seam — for example, a Pydantic model parsed from a structured agent — implement the projection in their own application code and use `CustomTransfer` (or a hand-rolled `ContextTransferStrategy`) to bridge back to `str` at the SDK boundary. The SDK intentionally does not ship a parallel typed-transfer protocol; doing so would create two transfer systems for the same axis and the duplication would rot.
+
 ## Handoff Protocol
 
 The handoff protocol provides structured context transfer between agents in a sequential workflow. While `ContextTransferStrategy` handles raw extraction, the handoff protocol adds structure on top: a `HandoffPayload` data model with semantic fields (`task_state`, `findings`, `decisions`, `open_questions`, `artifacts`, `metadata`), a `HandoffTransfer` strategy that builds payloads from results, workflow integration via `HandoffStep`, and prompt helpers that guide agents to produce and consume structured handoffs.
