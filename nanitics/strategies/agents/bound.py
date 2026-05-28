@@ -61,6 +61,6 @@ class BoundAgent:
         """The child emitter this handle runs the agent under."""
         return self._ctx.emitter
 
-    async def run(self, input: AgentInput) -> AgentResult:
+    async def run(self, input: AgentInput, *, thread_key: str | None = None) -> AgentResult:
         """Run the agent under this handle's child emitter."""
-        return await self._agent._run_with_context(input, self._ctx)
+        return await self._agent._run_with_context(input, self._ctx, thread_key=thread_key)

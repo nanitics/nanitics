@@ -80,7 +80,7 @@ class ReasoningAgent(Agent):
     def _agent_type(self) -> str:
         return "reasoning"
 
-    async def _execute(self, input: AgentInput) -> AgentResult:
+    async def _execute(self, input: AgentInput, *, thread_key: str | None = None) -> AgentResult:
         messages = [Message(role="user", content=input)]
         usages = []
 

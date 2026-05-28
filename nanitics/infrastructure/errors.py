@@ -658,3 +658,35 @@ class ApprovalTimeoutError(HumanInputProviderError):
     so a subsequent ``resolve`` call for the same ``request_id`` returns
     ``False``. The wrapped tool never executed.
     """
+
+
+# --- Thread Errors ---
+
+
+class ThreadInUseError(NaniticsError):
+    """Raised when a concurrent ``Agent.run`` is already in flight for the same ``thread_key``.
+
+    The SDK serializes concurrent same-key runs by refusing the second
+    one rather than queueing — see
+    ``temp/sdk-thread-identity/design-rationale.md`` §2. Different-key
+    runs proceed in parallel without contention.
+
+    Attributes:
+        thread_key: The contested thread key.
+    """
+
+    thread_key: str
+
+    def __init__(
+        self,
+        *,
+        thread_key: str,
+        trace_id: str | None = None,
+        span_id: str | None = None,
+    ) -> None:
+        super().__init__(
+            f"Thread {thread_key!r} is already in use by a concurrent run.",
+            trace_id=trace_id,
+            span_id=span_id,
+        )
+        self.thread_key = thread_key

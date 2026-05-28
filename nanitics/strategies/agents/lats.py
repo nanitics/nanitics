@@ -605,7 +605,7 @@ class LATSAgent(Agent):
 
     # ── Main MCTS Loop ────────────────────────────────────────
 
-    async def _execute(self, input: AgentInput) -> AgentResult:
+    async def _execute(self, input: AgentInput, *, thread_key: str | None = None) -> AgentResult:
         self._nodes.clear()
         usages: list[Usage] = []
         tool_schemas = self._tool_registry.list_schemas()

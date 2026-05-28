@@ -105,7 +105,7 @@ class ReflexionAgent(Agent):
     def _get_tool_schemas(self) -> list[ToolInfo]:
         return []
 
-    async def _execute(self, input: AgentInput) -> AgentResult:
+    async def _execute(self, input: AgentInput, *, thread_key: str | None = None) -> AgentResult:
         from nanitics.capabilities.memory.episodic import OutcomeType, extract_episode
 
         usages: list[Usage] = []

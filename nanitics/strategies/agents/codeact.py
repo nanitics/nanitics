@@ -309,7 +309,7 @@ class CodeActAgent(Agent):
             for s in self._tool_registry.list_schemas()
         ]
 
-    async def _execute(self, input: AgentInput) -> AgentResult:
+    async def _execute(self, input: AgentInput, *, thread_key: str | None = None) -> AgentResult:
         self._limiter.reset()
         self._error_handler.reset()
         if self._context_manager is not None:

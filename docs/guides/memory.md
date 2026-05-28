@@ -17,6 +17,7 @@ The SDK provides five memory types, each solving a different problem. Choosing t
 | [Semantic Memory](#semantic-memory) | Across runs | Tools or context provider | Knowledge retrieval by meaning — RAG, document search |
 | [Episodic Memory](#episodic-memory) | Across runs | Tools or context provider | Learning from past experiences — what worked, what didn't |
 | [Shared Memory](#shared-memory) | Within a session | Tools or context provider | Multi-agent coordination through shared state |
+| [Behavioral Continuity](#behavioral-continuity) | Across `Agent.run` calls | Replayed `Message` prefix on the run's message list | Same agent invoked twice; the second call should remember the first as its own prior turns |
 
 **Choosing a memory type:**
 
@@ -243,6 +244,53 @@ See [Context Management](context-management.md) for strategies to manage context
 **Context budget.** Each context provider adds content to every LLM call. Multiple memory providers can consume significant context. Monitor `ContextUsage` and consider which providers truly need to be automatic vs. tool-based.
 
 **Working memory reset on run start.** `ReActAgent` calls `working_memory.reset()` at the start of every run. Pre-populated data is lost before the first LLM call unless you override `reset()` in a custom implementation or use a context provider to inject initial state.
+
+**Behavioral continuity bypasses the `<nanitics:context>` wrapper.** Replayed thread-prefix messages are inserted as plain `Message` objects, not wrapped like provider contributions. This is deliberate — the wrapper marks "SDK-injected context"; an unwrapped `assistant` message marks "your prior turn." See [Behavioral Continuity](#behavioral-continuity).
+
+## Behavioral Continuity
+
+The memory types above are about **information continuity**: the agent reads side-store content (key-value facts, embeddings, episodes, board state) through an injection seam and reasons over it as external data. Thread identity is about **behavioral continuity**: the agent's prior assistant turns, tool calls, and tool results are replayed back into a subsequent run's message list so the model treats them as its own conversation history, not as injected context.
+
+**API.**
+
+```python
+from nanitics.composition import InMemoryThreadStore
+
+store = InMemoryThreadStore()
+agent = ReActAgent(
+    name="drafter",
+    llm_client=client,
+    emitter=emitter,
+    system_prompt="...",
+    tools=[],
+    thread_store=store,
+)
+
+await agent.run("Draft a pitch", thread_key="t1")
+await agent.run("Now make it shorter", thread_key="t1")  # sees the first draft as a prior assistant turn
+```
+
+`ThreadStore` is the protocol; `InMemoryThreadStore` is the reference implementation. Pass a `thread_key` to `Agent.run` to opt a single call into thread continuity. The store's prefix is loaded before `_execute` and the new messages produced during the run are appended on successful completion.
+
+**Ordering.** Within the per-run message list:
+
+```
+initial_messages  →  thread prefix from ThreadStore  →  new user input
+```
+
+`initial_messages` (a constructor-bound static seed) and the dynamic thread prefix coexist — the seed always sits at the top, the prefix carries per-thread history, and the new user input ends the list. `Agent._inject_context()` then wraps any `ContextProvider` contributions on top, sitting alongside (not inside) the replayed prefix.
+
+**Replayed messages bypass the wrapper.** This is the load-bearing semantic distinction: messages loaded from a `ThreadStore` are real `Message` objects spliced directly into the message list — they are NOT wrapped in the `<nanitics:context provider=...>` envelope that `Agent._inject_context()` applies to `ContextProvider` contributions. The wrapper signals "injected context"; an unwrapped `assistant` message signals "your prior turn." Behavioral continuity requires the latter frame.
+
+**Concurrency.** Two concurrent `Agent.run` calls with the same `thread_key` raise `ThreadInUseError`. The SDK does no internal queueing — consumers who want a queue build one around `Agent.run` themselves. Different-key runs proceed in parallel without contention. Cross-process locking is out of scope for the in-memory store; a Postgres-backed implementation with advisory locks lands in a follow-up phase.
+
+**Checkpoint interaction.** A run that suspends inside `Agent.run` snapshots its thread prefix into `RunCheckpoint.state` at suspend time. On resume the run uses that frozen view of the prefix — it does NOT re-consult the live `ThreadStore`. Concurrent external appends between suspend and resume are silently overridden by the resumed run's continuation when it appends its new messages on completion. Consumers who care about this must avoid concurrent thread access during suspend windows.
+
+**Non-goals for this phase.**
+
+- No default trimming or compaction. Threads grow unbounded; use `ContextManagement` to handle the window-fit correctness case at the LLM-call boundary, or wrap the store with a compaction-aware decorator.
+- No cross-process locking. `ThreadLocks` is asyncio-local.
+- Only `ReActAgent` consumes the prefix in this phase. Other subtypes accept `thread_key` on `Agent.run` (so wrapping code can pass it unconditionally) but do not replay the prefix; wiring lands in a follow-up phase.
 
 ## Custom Implementations
 

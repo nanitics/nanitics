@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
+if TYPE_CHECKING:
+    from nanitics.composition.threads.store import ThreadLocks, ThreadStore
 from nanitics.infrastructure.errors import AgentIterationLimitError, AgentToolCallLimitError
 from nanitics.infrastructure.llm.protocol import LLMClient, Message, ToolCall
 from nanitics.infrastructure.observability.emitter import EventEmitter
@@ -100,6 +102,8 @@ class ReActAgent(Agent):
         output_schema: type[BaseModel] | None = None,
         initial_messages: list[Message] | None = None,
         run_id: str | None = None,
+        thread_store: ThreadStore | None = None,
+        thread_locks: ThreadLocks | None = None,
     ) -> None:
         if run_id is not None:
             tool_state = dict(tool_state) if tool_state else {}
@@ -121,6 +125,8 @@ class ReActAgent(Agent):
             output_evaluator=output_evaluator,
             prompt_contributors=contributors if contributors else None,
             streaming=streaming,
+            thread_store=thread_store,
+            thread_locks=thread_locks,
         )
         self._tool_registry = ToolRegistry(
             tool_state=tool_state,
@@ -178,7 +184,7 @@ class ReActAgent(Agent):
     def update_tool_state(self, key: str, value: Any) -> None:
         self._tool_registry.update_state(key, value)
 
-    async def _execute(self, input: AgentInput) -> AgentResult:
+    async def _execute(self, input: AgentInput, *, thread_key: str | None = None) -> AgentResult:
         tool_schemas = self._tool_registry.list_schemas()
         available_tools = [s.name for s in tool_schemas]
 
@@ -198,6 +204,7 @@ class ReActAgent(Agent):
         messages: list[Message] = []
         if self._initial_messages:
             messages.extend(self._initial_messages)
+        messages.extend(await self._load_thread_prefix(thread_key))
         messages.append(Message(role="user", content=input))
         usages: list[Usage] = []
 
