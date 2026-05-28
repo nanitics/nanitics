@@ -124,6 +124,16 @@ class TestCompositionDurabilityLazyImports:
         assert mod.get_checkpoint_schema_sql is None  # type: ignore[union-attr]
 
 
+class TestCompositionThreadsLazyImports:
+    def test_postgres_thread_store_unavailable_sets_none(self) -> None:
+        mod = _reload_without(
+            "nanitics.composition.threads",
+            ["nanitics.composition.threads.postgres_thread_store"],
+        )
+        assert mod.PostgresThreadStore is None  # type: ignore[union-attr]
+        assert mod.get_thread_schema_sql is None  # type: ignore[union-attr]
+
+
 class TestToolsLazyImports:
     def test_http_tools_unavailable_raises_on_call(self) -> None:
         # Block the leaf http-based tool modules so nanitics.tools exercises

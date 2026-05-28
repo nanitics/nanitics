@@ -39,9 +39,12 @@ class ThreadStore(Protocol):
     Concurrency: implementations need not be thread-safe across
     processes. Serialization of concurrent same-key runs in one process
     is the caller's responsibility, handled by :class:`ThreadLocks` in
-    ``Agent.run``. Cross-process locking lands with the Postgres-backed
-    implementation in a follow-up phase (Step 6 of the SDK Continuity
-    Maturation plan).
+    ``Agent.run``. Cross-process serialization is out of scope: the
+    Postgres-backed :class:`~nanitics.composition.threads.postgres_thread_store.PostgresThreadStore`
+    persists durably across restarts but does not coordinate concurrent
+    same-key appends from multiple processes — consumers running
+    multiple processes against the same logical thread must coordinate
+    externally. A Postgres advisory-lock primitive remains a follow-up.
 
     The store has no built-in trimming or compaction. Threads grow
     unbounded; consumers concerned with token budget should configure
@@ -88,8 +91,8 @@ class InMemoryThreadStore:
     """Reference :class:`ThreadStore` backed by an in-process dict.
 
     Suitable for tests, single-process workloads, and demos. Not durable
-    across restarts; not safe across processes. A Postgres-backed
-    implementation lands in a follow-up phase.
+    across restarts; not safe across processes. For durable persistence
+    use :class:`~nanitics.composition.threads.postgres_thread_store.PostgresThreadStore`.
 
     The store has no built-in trimming or compaction — see the
     :class:`ThreadStore` docstring for the rationale and pointers to
@@ -119,10 +122,13 @@ class ThreadLocks:
     immediately rather than queueing — see
     ``temp/sdk-thread-identity/design-rationale.md`` §2.
 
-    Cross-process locking is out of scope for this phase; consumers
-    running multiple processes against the same logical thread must
-    coordinate externally. A Postgres advisory-lock story lands with the
-    Postgres-backed :class:`ThreadStore`.
+    Cross-process locking is out of scope. Consumers running multiple
+    processes against the same logical thread must coordinate
+    externally, even when using
+    :class:`~nanitics.composition.threads.postgres_thread_store.PostgresThreadStore`
+    — its persistence layer is durable but does not serialize concurrent
+    appends across processes. A Postgres advisory-lock primitive remains
+    a follow-up.
     """
 
     def __init__(self) -> None:

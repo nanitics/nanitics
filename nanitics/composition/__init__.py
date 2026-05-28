@@ -138,8 +138,10 @@ from nanitics.composition.orchestration import (
 from nanitics.composition.orchestration.plan_bridge import plan_to_workflow
 from nanitics.composition.threads import (
     InMemoryThreadStore,
+    PostgresThreadStore,
     ThreadLocks,
     ThreadStore,
+    get_thread_schema_sql,
 )
 
 __all__ = [
@@ -234,6 +236,7 @@ __all__ = [
     "Pipeline",
     "PipelineContractError",
     "PostgresCheckpointStore",
+    "PostgresThreadStore",
     "PredicateTrigger",
     "PrioritizedControl",
     "QualityTrigger",
@@ -274,6 +277,7 @@ __all__ = [
     "create_handoff_chain",
     "create_orchestrator",
     "get_checkpoint_schema_sql",
+    "get_thread_schema_sql",
     "handoff_receiver_instructions",
     "handoff_sender_instructions",
     "orchestrator_prompt_section",
