@@ -101,8 +101,8 @@ class _OrchestratorAgent(ReActAgent):
         self._final_output_strategy = final_output_strategy
         self._relay_evaluator = relay_evaluator
 
-    async def _execute(self, input: AgentInput) -> AgentResult:
-        result = await super()._execute(input)
+    async def _execute(self, input: AgentInput, *, thread_key: str | None = None) -> AgentResult:
+        result = await super()._execute(input, thread_key=thread_key)
         if self._final_output_strategy is FinalOutputStrategy.SYNTHESIZE:
             return result
         return await self._apply_relay(result, input)

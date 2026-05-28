@@ -329,7 +329,7 @@ class TreeOfThoughtAgent(Agent):
 
         return updated
 
-    async def _execute(self, input: AgentInput) -> AgentResult:
+    async def _execute(self, input: AgentInput, *, thread_key: str | None = None) -> AgentResult:
         self._nodes.clear()
         usages: list[Usage] = []
         step_number = 0

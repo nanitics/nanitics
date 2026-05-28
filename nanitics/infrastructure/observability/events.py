@@ -60,7 +60,19 @@ class ToolInfo(BaseModel):
 
 
 class AgentStartEvent(BaseEvent):
-    """Emitted when an agent begins execution."""
+    """Emitted when an agent begins execution.
+
+    The ``thread_key`` and ``replayed_message_count`` fields carry
+    thread-identity metadata for the run: ``thread_key`` is the opaque
+    key the caller passed to ``Agent.run``, and
+    ``replayed_message_count`` is the number of prior
+    :class:`~nanitics.infrastructure.llm.protocol.Message` objects
+    spliced into the per-run message list from the configured
+    :class:`~nanitics.composition.threads.ThreadStore` before the new
+    user input. Both are ``None`` / ``0`` for runs without a thread.
+    Replay is implicit in the augmented payload — no separate replay
+    event is emitted.
+    """
 
     event_type: Literal["agent.start"] = "agent.start"
     agent_name: str
@@ -70,6 +82,8 @@ class AgentStartEvent(BaseEvent):
     tool_schemas: list[ToolInfo] = Field(default_factory=list)
     agent_type: str | None = None
     capabilities: list[str] = Field(default_factory=list)
+    thread_key: str | None = None
+    replayed_message_count: int = 0
 
 
 class AgentStepEvent(BaseEvent):

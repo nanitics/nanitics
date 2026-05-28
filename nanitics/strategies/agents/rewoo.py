@@ -238,7 +238,7 @@ class ReWOOAgent(Agent):
         lines.append("Note any steps that failed and their impact on the completeness of the answer.")
         return "\n".join(lines)
 
-    async def _execute(self, input: AgentInput) -> AgentResult:
+    async def _execute(self, input: AgentInput, *, thread_key: str | None = None) -> AgentResult:
         from nanitics.capabilities.planning.models import Plan, PlanStatus, PlanStep, StepStatus
 
         usages: list[Usage] = []

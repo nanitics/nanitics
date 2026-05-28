@@ -15,6 +15,7 @@ from nanitics.strategies.agents.context import ContextContent, ContextManagement
 from nanitics.strategies.agents.errors import ErrorHandling
 
 if TYPE_CHECKING:
+    from nanitics.composition.threads.store import ThreadLocks, ThreadStore
     from nanitics.strategies.tools import Tool
 from nanitics.infrastructure.errors import LLMSchemaViolationError, NaniticsError
 from nanitics.infrastructure.llm.protocol import (
@@ -107,6 +108,7 @@ class AgentResult(PydanticBaseModel):
     termination_reason: str
     messages: list[Message]
     usage: Usage
+    thread_key: str | None = None
 
 
 class Agent(ABC):
@@ -130,6 +132,17 @@ class Agent(ABC):
         output_evaluator: Quality gate that can trigger output revision.
         prompt_contributors: Components that add sections to the system
             prompt.
+        thread_store: Persists per-thread :class:`Message` prefixes
+            across :meth:`run` calls keyed by ``thread_key``. When
+            ``None``, ``thread_key`` is accepted by :meth:`run` but no
+            prefix is loaded and no append happens — the agent's
+            configuration decides whether persistence occurs, so
+            wrapping code can pass ``thread_key`` unconditionally.
+        thread_locks: Per-key serialization for concurrent :meth:`run`
+            calls. Defaults to a fresh per-agent
+            :class:`~nanitics.composition.threads.ThreadLocks`. Pass a
+            shared instance to coordinate threads across multiple agent
+            instances.
     """
 
     def __init__(
@@ -146,6 +159,8 @@ class Agent(ABC):
         output_evaluator: OutputEvaluator | None = None,
         prompt_contributors: list[SystemPromptContributor] | None = None,
         streaming: bool = False,
+        thread_store: ThreadStore | None = None,
+        thread_locks: ThreadLocks | None = None,
     ) -> None:
         self._name = name
         self._llm_client = llm_client
@@ -186,6 +201,13 @@ class Agent(ABC):
         self._context_providers = context_providers
         self._output_evaluator = output_evaluator
         self._streaming = streaming
+        self._thread_store = thread_store
+        if thread_locks is None:
+            from nanitics.composition.threads.store import ThreadLocks as _ThreadLocks
+
+            self._thread_locks: ThreadLocks = _ThreadLocks()
+        else:
+            self._thread_locks = thread_locks
         self._resume_state: dict[str, Any] | None = None
         # Auto-wire agent-owned emitter-caching capabilities to the agent's
         # per-task emitter. Any attached context provider or output
@@ -249,7 +271,9 @@ class Agent(ABC):
         """
         return BoundAgent(self, RunContext(emitter=parent_emitter.create_child()))
 
-    async def _run_with_context(self, input: AgentInput, ctx: RunContext) -> AgentResult:
+    async def _run_with_context(
+        self, input: AgentInput, ctx: RunContext, *, thread_key: str | None = None
+    ) -> AgentResult:
         """Run the agent under a per-invocation :class:`RunContext`.
 
         Installs ``ctx.emitter`` on the per-task ``ContextVar`` for the
@@ -259,14 +283,34 @@ class Agent(ABC):
         """
         token = self._emitter_var.set(ctx.emitter)
         try:
-            return await self.run(input)
+            return await self.run(input, thread_key=thread_key)
         finally:
             self._emitter_var.reset(token)
 
     def _set_resume_state(self, state: dict[str, Any]) -> None:
         self._resume_state = state
 
-    async def run(self, input: AgentInput) -> AgentResult:
+    async def _load_thread_prefix(self, thread_key: str | None) -> list[Message]:
+        """Load the :class:`Message` prefix for a thread.
+
+        Returns ``[]`` when ``thread_key`` is ``None`` or when no
+        :class:`~nanitics.composition.threads.ThreadStore` is configured
+        on the agent. Subclass ``_execute`` methods opt in by calling
+        this; the returned messages slot between
+        :attr:`_initial_messages` (when present) and the new user input.
+
+        The messages are real :class:`Message` objects intended for
+        direct splicing into the per-run message list — they are NOT
+        wrapped in the ``<nanitics:context>`` envelope that
+        :meth:`_inject_context` applies to ``ContextProvider``
+        contributions. See ``temp/sdk-thread-identity/design-rationale.md``
+        §4 for the rationale.
+        """
+        if thread_key is None or self._thread_store is None:
+            return []
+        return await self._thread_store.load(thread_key)
+
+    async def run(self, input: AgentInput, *, thread_key: str | None = None) -> AgentResult:
         """Execute the agent on the given task.
 
         Runs the agent's reasoning loop within a trace span. Emits start,
@@ -277,23 +321,84 @@ class Agent(ABC):
             input: The task or question for the agent to work on.
                 Accepts a plain string or a list of content blocks
                 for multimodal input (text + images).
+            thread_key: Opaque key identifying the conversation thread
+                this run continues. When set, the configured
+                :class:`~nanitics.composition.threads.ThreadStore`'s
+                prefix for the key is loaded before ``_execute`` and the
+                run's new messages are appended on successful
+                completion. Concurrent same-key runs raise
+                :class:`~nanitics.infrastructure.errors.ThreadInUseError`.
+                When no ``thread_store`` is configured the key is
+                accepted but no prefix is loaded and no append happens.
 
         Returns:
             The result of the run including output, step count, messages,
-            and token usage.
+            token usage, and the ``thread_key`` (echoed back for
+            correlation, ``None`` when the run had no thread).
 
         Raises:
             SuspendExecution: When the agent suspends for human input.
+                On a thread-keyed run, the loaded prefix and key are
+                snapshotted into the suspension's ``checkpoint_data`` so
+                ``_execute_resume`` can use a frozen view of the thread
+                without re-consulting the live store.
+            ThreadInUseError: When another ``run`` is already in flight
+                for the same ``thread_key`` on this agent (or any agent
+                sharing the same :class:`ThreadLocks` instance).
         """
+        saved_key, saved_prefix = self._peek_resume_thread_context()
+        effective_key = thread_key if thread_key is not None else saved_key
+        if effective_key is None:
+            return await self._run_in_span(input, thread_key=None, prefix=[])
+        async with self._thread_locks.hold(effective_key):
+            if saved_prefix is not None:
+                prefix = saved_prefix
+            else:
+                prefix = await self._load_thread_prefix(effective_key)
+            return await self._run_in_span(input, thread_key=effective_key, prefix=prefix)
+
+    def _peek_resume_thread_context(self) -> tuple[str | None, list[Message] | None]:
+        """Inspect ``_resume_state`` for a saved thread context.
+
+        Returns ``(thread_key, frozen_prefix)``. Both are ``None`` when
+        the resume state is absent or carries no thread information. The
+        peek does not consume ``_resume_state`` — the subclass's
+        ``_execute_resume`` still owns full restoration of the run.
+        """
+        if self._resume_state is None:
+            return None, None
+        key = self._resume_state.get("thread_key")
+        prefix_data = self._resume_state.get("thread_prefix")
+        if prefix_data is None:
+            return key, None
+        return key, [Message(**m) for m in prefix_data]
+
+    async def _run_in_span(self, input: AgentInput, *, thread_key: str | None, prefix: list[Message]) -> AgentResult:
         from nanitics.composition.durability.suspension import SuspendExecution
 
         with self._emitter.span(self._name):
             try:
-                self._emit_start(_input_to_text(input), self._get_tools_available(), self._get_tool_schemas())
-                result = await self._execute(input)
+                self._emit_start(
+                    _input_to_text(input),
+                    self._get_tools_available(),
+                    self._get_tool_schemas(),
+                    thread_key=thread_key,
+                    replayed_message_count=len(prefix),
+                )
+                result = await self._execute(input, thread_key=thread_key)
+                if thread_key is not None:
+                    result = result.model_copy(update={"thread_key": thread_key})
+                    if self._thread_store is not None:
+                        new_messages = self._new_messages_after_prefix(result.messages, prefix)
+                        await self._thread_store.append(thread_key, new_messages)
                 self._emit_complete(result)
                 return result
             except SuspendExecution as exc:
+                if thread_key is not None:
+                    state = exc.checkpoint_data if exc.checkpoint_data is not None else {}
+                    state["thread_key"] = thread_key
+                    state["thread_prefix"] = [m.model_dump() for m in prefix]
+                    exc.checkpoint_data = state
                 self._emitter.emit(
                     ExecutionSuspendedEvent(
                         trace_id=self._emitter.trace_id,
@@ -310,8 +415,19 @@ class Agent(ABC):
                 self._emit_error(e)
                 raise
 
+    def _new_messages_after_prefix(self, run_messages: list[Message], prefix: list[Message]) -> list[Message]:
+        """Slice ``run_messages`` to the messages produced during this run.
+
+        Returns ``run_messages[len(_initial_messages) + len(prefix):]``
+        — the messages added after the static seed and the dynamic
+        thread prefix. Only these advance the thread on append; the seed
+        and the prefix are not re-appended.
+        """
+        initial = getattr(self, "_initial_messages", None) or []
+        return list(run_messages[len(initial) + len(prefix) :])
+
     @abstractmethod
-    async def _execute(self, input: AgentInput) -> AgentResult: ...
+    async def _execute(self, input: AgentInput, *, thread_key: str | None = None) -> AgentResult: ...
 
     @abstractmethod
     def _agent_type(self) -> str:
@@ -614,7 +730,13 @@ class Agent(ABC):
         return self._cancellation_token.is_cancelled
 
     def _emit_start(
-        self, task_input: str, tools_available: list[str], tool_schemas: list[ToolInfo] | None = None
+        self,
+        task_input: str,
+        tools_available: list[str],
+        tool_schemas: list[ToolInfo] | None = None,
+        *,
+        thread_key: str | None = None,
+        replayed_message_count: int = 0,
     ) -> None:
         model_name = getattr(self._llm_client, "model", None)
         self._emitter.emit(
@@ -629,6 +751,8 @@ class Agent(ABC):
                 agent_type=self._agent_type(),
                 capabilities=self._active_capabilities(),
                 model_name=model_name,
+                thread_key=thread_key,
+                replayed_message_count=replayed_message_count,
             )
         )
 

@@ -118,6 +118,10 @@ the recommended reading order.
 - `memory/shared_memory.py` — shared-memory coordination under real LLMs.
 - `memory/persistent_semantic_memory.py` — `PostgresSemanticStore` + pgvector end-to-end.
 
+### Threads
+
+- `threads/thread_identity_replay.py` — `ThreadStore` + `thread_key` behavioral continuity across two real-LLM runs; verifies replayed prior assistant turns are treated as the model's own work (quick).
+
 ### Multi-agent
 
 - `multi_agent/agent_tool.py` — caller `ReActAgent` delegates to specialist via `AgentTool` (quick).

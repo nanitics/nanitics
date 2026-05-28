@@ -136,6 +136,11 @@ from nanitics.composition.orchestration import (
     WorkflowStep,
 )
 from nanitics.composition.orchestration.plan_bridge import plan_to_workflow
+from nanitics.composition.threads import (
+    InMemoryThreadStore,
+    ThreadLocks,
+    ThreadStore,
+)
 
 __all__ = [
     "CHECKPOINT_SCHEMA_VERSION",
@@ -201,6 +206,7 @@ __all__ = [
     "HandoffTransfer",
     "HighestConfidence",
     "InMemoryCheckpointStore",
+    "InMemoryThreadStore",
     "JudgeResolution",
     "JudgeRouter",
     "JudgeRouterResult",
@@ -255,6 +261,8 @@ __all__ = [
     "SuspendedRun",
     "SuspensionInfo",
     "TerminationCondition",
+    "ThreadLocks",
+    "ThreadStore",
     "TopicSubscription",
     "TrajectoryTransfer",
     "WeightedScore",

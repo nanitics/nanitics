@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Thread identity primitive — `thread_key` + `ThreadStore`.** A new
+  substrate for behavioral continuity: `Agent.run(input, thread_key=...)`
+  loads a per-thread `Message` prefix from a configured
+  `ThreadStore` before `_execute` and appends the run's new messages on
+  successful completion, so a subsequent run on the same key sees prior
+  assistant turns, tool calls, and tool results as its own conversation
+  history. New public surface under `nanitics.composition`:
+  `ThreadStore` protocol (`load` / `append` / `clear`),
+  `InMemoryThreadStore` reference implementation, `ThreadLocks`
+  in-process per-key serialization. Concurrent same-key runs raise
+  `ThreadInUseError` (also re-exported from `nanitics.errors`);
+  different-key runs proceed in parallel. `Agent.__init__` gains
+  `thread_store` and `thread_locks` keyword parameters; `Agent.run`
+  gains a `thread_key` keyword. `AgentResult.thread_key` echoes the
+  active key for downstream correlation; `AgentStartEvent` gains
+  `thread_key` and `replayed_message_count` fields (additive, defaults
+  preserved so existing consumers ingest unchanged). Replayed messages
+  bypass the `<nanitics:context>` wrapper by design — the model treats
+  them as its own prior turns, not as injected context. On suspend
+  inside a thread-keyed run, the prefix is snapshotted into
+  `RunCheckpoint.state` and the resume uses that frozen view rather
+  than re-consulting the live store. `ReActAgent._execute` opts in;
+  other agent subtypes accept `thread_key` for signature uniformity
+  but do not replay the prefix in this phase. No default trimming or
+  compaction ships with this primitive — consumers configure
+  `ContextManagement` at the LLM-call boundary or wrap the store.
+
 - **`MCPAuthError` distinguishes 401/403 from generic MCP transport
   failures.** A new exception class under
   `nanitics.infrastructure.errors` (also re-exported from
