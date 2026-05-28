@@ -10,8 +10,19 @@ from nanitics.composition.threads.store import (
     ThreadStore,
 )
 
+try:
+    from nanitics.composition.threads.postgres_thread_store import (
+        PostgresThreadStore,
+        get_thread_schema_sql,
+    )
+except ImportError:
+    PostgresThreadStore = None  # type: ignore[assignment,misc]
+    get_thread_schema_sql = None  # type: ignore[assignment]
+
 __all__ = [
     "InMemoryThreadStore",
+    "PostgresThreadStore",
     "ThreadLocks",
     "ThreadStore",
+    "get_thread_schema_sql",
 ]
