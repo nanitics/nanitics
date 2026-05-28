@@ -245,7 +245,7 @@ See [Context Management](context-management.md) for strategies to manage context
 
 **Context budget.** Each context provider adds content to every LLM call. Multiple memory providers can consume significant context. Monitor `ContextUsage` and consider which providers truly need to be automatic vs. tool-based.
 
-**Working memory reset on run start.** `ReActAgent` calls `working_memory.reset()` at the start of every run. Pre-populated data is lost before the first LLM call unless you override `reset()` in a custom implementation or use a context provider to inject initial state.
+**Working memory reset on run start.** `ReActAgent` calls `working_memory.reset()` at the start of every run. Pre-populated data is lost before the first LLM call unless you override `reset()` in a custom implementation or use a context provider to inject initial state. See: [Migrating from the `WorkingMemory` workaround](migrating-from-working-memory-workaround.md).
 
 **Behavioral continuity bypasses the `<nanitics:context>` wrapper.** Replayed thread-prefix messages are inserted as plain `Message` objects, not wrapped like provider contributions. This is deliberate — the wrapper marks "SDK-injected context"; an unwrapped `assistant` message marks "your prior turn." See [Behavioral Continuity](#behavioral-continuity).
 
@@ -255,6 +255,7 @@ The memory types above are about **information continuity**: the agent reads sid
 
 **API.**
 
+<!-- verify: skip — illustrative wiring; `client` and `emitter` are caller-supplied and the `await` runs inside an async context -->
 ```python
 from nanitics.composition import InMemoryThreadStore
 
@@ -295,6 +296,50 @@ initial_messages  →  thread prefix from ThreadStore  →  new user input
 - Only `ReActAgent` consumes the prefix in this phase. Other subtypes accept `thread_key` on `Agent.run` (so wrapping code can pass it unconditionally) but do not replay the prefix; wiring lands in a follow-up phase.
 
 **Multi-agent constructs.** Every multi-agent primitive (`AgentTool`, `HandoffStep`, `PeerNetwork`, `Blackboard`, `Broadcast`, `Consensus`, `Bidding`, `JudgeRouter`, `Supervisor`, `MessageBus`, `Debate`) exposes a shape for routing thread keys to the agents it owns — repeated delegations, peers, debaters, subscribers each accumulate their own behavioral state. See [Multi-Agent Foundations § Behavioral Continuity](multi-agent-foundations.md#behavioral-continuity-in-multi-agent-patterns) for the per-construct API and recipes.
+
+### Recipe: information continuity vs behavioral continuity, side by side
+
+Same haiku-revision scenario, both substrates wired into one agent.
+`WorkingMemory` carries the brief — the fact "warmer imagery" the
+agent should know on every turn but shouldn't believe it produced.
+`thread_key` carries the prior draft — what the agent itself said
+last run. The two compose without conflict.
+
+<!-- verify: skip — illustrative wiring; `client` and `emitter` are caller-supplied and the `await` runs inside an async context -->
+```python
+from nanitics.composition import InMemoryThreadStore
+from nanitics.memory import InMemoryWorkingMemory, WorkingMemoryProvider
+from nanitics.strategies import ReActAgent
+
+memory = InMemoryWorkingMemory()
+memory.update({"Brief": "Revise for warmer imagery."})
+store = InMemoryThreadStore()
+
+agent = ReActAgent(
+    name="poet",
+    llm_client=client,
+    emitter=emitter,
+    system_prompt="You are a haiku poet.",
+    tools=[],
+    working_memory=memory,
+    context_providers=[WorkingMemoryProvider(memory)],
+    thread_store=store,
+)
+
+await agent.run("Draft a haiku about a quiet morning.", thread_key="poem-1")
+await agent.run("Revise the previous draft.", thread_key="poem-1")
+# On run 2: the brief reaches the model wrapped in <nanitics:context
+# provider="working_memory">…</nanitics:context>; the prior draft is
+# replayed as an unwrapped assistant-role message.
+```
+
+Threads are not a replacement for `WorkingMemory`; they sit on a
+different axis. See
+[Migrating from the `WorkingMemory` workaround](migrating-from-working-memory-workaround.md)
+for the symptom-first version of this distinction, and
+[`examples/memory/working_memory_vs_threads.py`](../../examples/memory/working_memory_vs_threads.py)
+for the runnable proof that asserts the wrapper's presence in one
+scenario and its absence in the other.
 
 ## Custom Implementations
 
