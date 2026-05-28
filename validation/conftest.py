@@ -24,7 +24,11 @@ try:
 
     _env_file = Path(__file__).resolve().parents[1] / ".env"
     if _env_file.exists():
-        load_dotenv(_env_file)
+        # ``override=True`` so an empty or stale ``ANTHROPIC_API_KEY=`` (or any
+        # other key) inherited from the parent shell cannot shadow the real
+        # value in ``.env``. The dev-environment contract is that ``.env`` is
+        # the source of truth for credentials.
+        load_dotenv(_env_file, override=True)
 except ImportError:  # pragma: no cover — dotenv is a dev dep, not a hard requirement.
     pass
 
