@@ -405,6 +405,7 @@ class DAG(Workflow):
                 step_index=node_index[node_name],
                 step_duration_ms=step_duration_ms,
                 step_output=str(result.output) if result.output is not None else None,
+                step_metadata=result.metadata,
             )
         )
         return result

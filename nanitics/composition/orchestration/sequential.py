@@ -173,6 +173,7 @@ class Sequential(Workflow):
                     step_index=index,
                     step_duration_ms=step_duration_ms,
                     step_output=str(result.output) if result.output is not None else None,
+                    step_metadata=result.metadata,
                 )
             )
 
