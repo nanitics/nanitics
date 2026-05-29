@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-05-29
+
+### Added
+
+- **`step_metadata` on `WorkflowStepCompleteEvent` — full `StepResult.metadata`
+  surfaced to observers.** Workflow orchestrators (`Sequential`, `Parallel`,
+  `DAG`, `Pipeline`, `MapReduce`, `Loop`, `Conditional`) previously emitted
+  only `step_output` on step completion, dropping `StepResult.metadata`.
+  Consumers that needed structured side-info — `final_output`,
+  `termination_reason`, `total_steps`, etc. — had to thread a side-channel
+  callback through the step. The event now carries a new
+  `step_metadata: dict[str, Any]` field populated from `result.metadata` at
+  every emission site, mirroring the in-memory contract. A field validator
+  coerces values to a JSON-safe shape via
+  `pydantic_core.to_jsonable_python` with `repr()` as the fallback, so
+  sinks can rely on the event round-tripping through `model_dump_json()`.
+  Strictly additive: the field defaults to `{}` and no existing consumer
+  changes behaviour.
+
 ## [0.5.1] - 2026-05-28
 
 ### Added

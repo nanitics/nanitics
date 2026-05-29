@@ -2,7 +2,8 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag, computed_field
+from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag, computed_field, field_validator
+from pydantic_core import to_jsonable_python
 
 
 class Usage(BaseModel):
@@ -581,7 +582,17 @@ class WorkflowStructureEvent(BaseEvent):
 
 
 class WorkflowStepCompleteEvent(BaseEvent):
-    """Emitted when a workflow step finishes."""
+    """Emitted when a workflow step finishes.
+
+    ``step_metadata`` mirrors ``StepResult.metadata`` from the completed step
+    so observers (persistence, UIs, replay) can see structured side-info
+    such as ``final_output`` or ``termination_reason`` without threading a
+    side-channel callback through the step. Values are coerced to a
+    JSON-safe shape at construction time via
+    :func:`pydantic_core.to_jsonable_python`, with ``repr()`` as the
+    fallback for non-serializable objects, so event sinks can rely on the
+    payload round-tripping through ``model_dump_json()``.
+    """
 
     event_type: Literal["workflow.step.complete"] = "workflow.step.complete"
     workflow_name: str
@@ -589,6 +600,12 @@ class WorkflowStepCompleteEvent(BaseEvent):
     step_index: int
     step_duration_ms: int | None = None
     step_output: str | None = None
+    step_metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("step_metadata", mode="before")
+    @classmethod
+    def _coerce_metadata(cls, value: Any) -> Any:
+        return to_jsonable_python(value, fallback=repr)
 
 
 class WorkflowCompleteEvent(BaseEvent):

@@ -27,7 +27,11 @@ class StepResult(BaseModel):
     Attributes:
         output: The step's output value, passed as input to downstream steps.
         metadata: Workflow-level information such as step counts, termination
-            reasons, intermediate results, and failure details.
+            reasons, intermediate results, and failure details. Surfaced on
+            :class:`WorkflowStepCompleteEvent` as ``step_metadata``; values
+            are coerced to a JSON-safe shape at event-construction time
+            (non-serializable objects fall back to ``repr()``), so prefer
+            JSON-serializable values to preserve fidelity for event sinks.
         usage: Token usage produced by the step. ``None`` when the step did
             not run an LLM call (e.g. ``FunctionStep``) or when the step's
             underlying agent produced no usage. For ``Sequential`` and

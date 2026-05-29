@@ -7,6 +7,7 @@ from nanitics.composition.orchestration.loop import Loop
 from nanitics.composition.orchestration.mapreduce import MapReduce
 from nanitics.composition.orchestration.parallel import Parallel
 from nanitics.composition.orchestration.pipeline import Pipeline, Stage
+from nanitics.composition.orchestration.protocol import StepResult
 from nanitics.composition.orchestration.sequential import Sequential
 from nanitics.infrastructure.observability.events import (
     WorkflowStepCompleteEvent,
@@ -283,6 +284,60 @@ class TestStepDuration:
         assert len(step_events) == 1
         assert step_events[0].step_output is not None
         assert len(step_events[0].step_output) == 500
+
+    async def test_step_metadata_defaults_empty(self) -> None:
+        emitter = make_emitter()
+        seq = Sequential(
+            name="no-meta",
+            steps=[make_step("s1")],
+            emitter=emitter,
+        )
+        await seq.execute("input")
+
+        step_events = [e for e in emitter.events if isinstance(e, WorkflowStepCompleteEvent)]
+        assert step_events[0].step_metadata == {}
+
+    async def test_step_metadata_populated_from_step_result(self) -> None:
+        async def with_meta(x):
+            return StepResult(
+                output=x,
+                metadata={"final_output": "the answer", "termination_reason": "done"},
+            )
+
+        emitter = make_emitter()
+        seq = Sequential(
+            name="meta",
+            steps=[make_step("s1", with_meta)],
+            emitter=emitter,
+        )
+        await seq.execute("input")
+
+        step_events = [e for e in emitter.events if isinstance(e, WorkflowStepCompleteEvent)]
+        assert step_events[0].step_metadata == {
+            "final_output": "the answer",
+            "termination_reason": "done",
+        }
+
+    async def test_step_metadata_coerces_non_serializable(self) -> None:
+        class Opaque:
+            def __repr__(self) -> str:
+                return "Opaque()"
+
+        async def with_meta(x):
+            return StepResult(output=x, metadata={"obj": Opaque()})
+
+        emitter = make_emitter()
+        seq = Sequential(
+            name="coerce",
+            steps=[make_step("s1", with_meta)],
+            emitter=emitter,
+        )
+        await seq.execute("input")
+
+        step_events = [e for e in emitter.events if isinstance(e, WorkflowStepCompleteEvent)]
+        assert step_events[0].step_metadata == {"obj": "Opaque()"}
+        # Sinks must be able to JSON-serialize the event.
+        step_events[0].model_dump_json()
 
 
 # ── Step Type Classification ──────────────────────────────

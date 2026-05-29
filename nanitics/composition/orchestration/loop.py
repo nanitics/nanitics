@@ -148,6 +148,7 @@ class Loop(Workflow):
                     step_index=iteration - 1,
                     step_duration_ms=step_duration_ms,
                     step_output=str(result.output) if result.output is not None else None,
+                    step_metadata=result.metadata,
                 )
             )
 

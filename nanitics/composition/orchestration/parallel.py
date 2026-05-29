@@ -120,6 +120,8 @@ class Parallel(Workflow):
                     workflow_name=self._name,
                     step_name=suspended_step.name,
                     step_index=suspended_index,
+                    step_output=str(result.output) if result.output is not None else None,
+                    step_metadata=result.metadata,
                 )
             )
 
@@ -155,6 +157,7 @@ class Parallel(Workflow):
                     step_index=index,
                     step_duration_ms=step_duration_ms,
                     step_output=str(result.output) if result.output is not None else None,
+                    step_metadata=result.metadata,
                 )
             )
             return result
