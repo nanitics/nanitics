@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-29
+
+### Added
+
+- **Nested workflows resume at their own suspension point.** A `Workflow`
+  nested inside another workflow via `WorkflowStep` (e.g. a `Sequential`
+  inside a `Conditional` branch) previously re-executed from the top on
+  resume: the parent could not thread the resume checkpoint into the
+  suspended child, so a nested `Conditional`'s router fired again on every
+  resume (an extra LLM call, and unstable under a non-deterministic router),
+  and any step before the suspension point in the nested workflow re-ran.
+  Each orchestrator now surfaces its suspension state up through
+  `SuspendExecution.orchestration_state`, the parent embeds it under a new
+  recursive `nested_checkpoint` key in the single persisted checkpoint, and
+  on resume the parent reconstructs the child checkpoint and re-enters the
+  nested workflow exactly where it suspended. Applies uniformly across
+  `Sequential`, `Conditional`, `Parallel`, `DAG`, `Loop`, `Pipeline`, and
+  `MapReduce`. The leaf agent-resume path (`agent_checkpoint`) is unchanged;
+  `agent_checkpoint` and `nested_checkpoint` are mutually exclusive per
+  suspended step.
+
+### Changed
+
+- **`CHECKPOINT_SCHEMA_VERSION` bumped `2` → `3`.** The recursive
+  `nested_checkpoint` frame changes the checkpoint `state` shape. There is no
+  in-place migration: a v2 checkpoint loaded by v3 code raises
+  `CheckpointVersionError` (existing behavior). **Operational note:** drain
+  any in-flight suspended runs before upgrading — a run suspended under 0.5.x
+  cannot be resumed under 0.6.0. Non-nested checkpoints are otherwise
+  unaffected; only the schema constant and the optional new key differ.
+- **`SuspendExecution` gains an optional `orchestration_state` field**
+  (default `None`). Additive; existing constructors are unaffected. It
+  carries the suspending workflow frame's checkpoint state up to its parent
+  during nested suspension.
+
 ## [0.5.2] - 2026-05-29
 
 ### Added

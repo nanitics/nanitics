@@ -12,7 +12,6 @@ from nanitics.composition.orchestration.protocol import Step, StepResult
 from nanitics.composition.orchestration.workflow import Workflow
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
-    ExecutionSuspendedEvent,
     WorkflowStepCompleteEvent,
     WorkflowStepDefinition,
 )
@@ -103,6 +102,9 @@ class Conditional(Workflow):
         return defs
 
     async def _run(self, input: Any, *, resume_from: RunCheckpoint | None = None) -> StepResult:
+        from nanitics.composition.orchestration.adapters import WorkflowStep
+
+        child_resume: RunCheckpoint | None = None
         if resume_from is not None:
             # Resume: skip routing, directly execute the stored branch
             state = resume_from.state
@@ -111,6 +113,10 @@ class Conditional(Workflow):
             if step is None and self._default is not None:
                 step = self._default
             assert step is not None
+            if isinstance(step, WorkflowStep):
+                nested = state.get("nested_checkpoint")
+                assert nested is not None
+                child_resume = self._child_checkpoint(resume_from, nested)
             self._emit_resumed(resume_from, branch_name)
         else:
             branch_name = self._router(input)
@@ -130,30 +136,18 @@ class Conditional(Workflow):
             bound_step = self._bind_step(step)
             with self._emitter.span(step.name):
                 step_start = time.monotonic()
-                result = await bound_step.execute(input)
+                if child_resume is not None:
+                    result = await self._execute_resumable(bound_step, input, child_resume)
+                else:
+                    result = await bound_step.execute(input)
                 step_duration_ms = int((time.monotonic() - step_start) * 1000)
         except SuspendExecution as exc:
-            if self._checkpoint_store:
-                checkpoint_state: dict[str, Any] = {
-                    "orchestrator_type": "conditional",
-                    "selected_branch": branch_name,
-                    "original_input": input,
-                }
-                if exc.checkpoint_data:
-                    checkpoint_state["agent_checkpoint"] = exc.checkpoint_data
-                checkpoint = await self._save_checkpoint(exc, checkpoint_state)
-                self._emitter.emit(
-                    ExecutionSuspendedEvent(
-                        trace_id=self._emitter.trace_id,
-                        span_id=self._emitter.span_id,
-                        parent_span_id=self._emitter.parent_span_id,
-                        suspension_id=exc.suspension_info.suspension_id,
-                        suspension_type="hitl",
-                        checkpoint_id=checkpoint.checkpoint_id,
-                        step_name=step.name,
-                        agent_name=exc.suspension_info.agent_name,
-                    )
-                )
+            checkpoint_state: dict[str, Any] = {
+                "orchestrator_type": "conditional",
+                "selected_branch": branch_name,
+                "original_input": input,
+            }
+            await self._surface_suspension(exc, checkpoint_state, step_name=step.name)
             raise
 
         self._emitter.emit(

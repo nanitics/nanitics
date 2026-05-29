@@ -12,7 +12,6 @@ from nanitics.composition.orchestration.protocol import FailurePolicy, Step, Ste
 from nanitics.composition.orchestration.workflow import Workflow
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
-    ExecutionSuspendedEvent,
     WorkflowStepCompleteEvent,
     WorkflowStepDefinition,
 )
@@ -90,6 +89,8 @@ class Parallel(Workflow):
         return defs
 
     async def _run(self, input: Any, *, resume_from: RunCheckpoint | None = None) -> StepResult:
+        from nanitics.composition.orchestration.adapters import WorkflowStep
+
         # Resume path: only re-execute the suspended branch
         if resume_from is not None:
             state = resume_from.state
@@ -108,10 +109,18 @@ class Parallel(Workflow):
             assert suspended_step is not None
             assert suspended_index is not None
 
-            # Re-execute suspended branch
+            # Re-execute suspended branch (recursing into a nested workflow if needed)
+            child_resume: RunCheckpoint | None = None
+            if isinstance(suspended_step, WorkflowStep):
+                nested = state.get("nested_checkpoint")
+                assert nested is not None
+                child_resume = self._child_checkpoint(resume_from, nested)
             bound_step = self._bind_step(suspended_step)
             with self._emitter.span(suspended_step.name):
-                result = await bound_step.execute(input)
+                if child_resume is not None:
+                    result = await self._execute_resumable(bound_step, input, child_resume)
+                else:
+                    result = await bound_step.execute(input)
             self._emitter.emit(
                 WorkflowStepCompleteEvent(
                     trace_id=self._emitter.trace_id,
@@ -199,28 +208,13 @@ class Parallel(Workflow):
                         raise
 
         if suspended_name is not None and suspended_exc is not None:
-            if self._checkpoint_store:
-                checkpoint_state: dict[str, Any] = {
-                    "orchestrator_type": "parallel",
-                    "completed_branches": {k: v.output for k, v in completed_results.items()},
-                    "suspended_branch": suspended_name,
-                    "original_input": input,
-                }
-                if suspended_exc.checkpoint_data:
-                    checkpoint_state["agent_checkpoint"] = suspended_exc.checkpoint_data
-                checkpoint = await self._save_checkpoint(suspended_exc, checkpoint_state)
-                self._emitter.emit(
-                    ExecutionSuspendedEvent(
-                        trace_id=self._emitter.trace_id,
-                        span_id=self._emitter.span_id,
-                        parent_span_id=self._emitter.parent_span_id,
-                        suspension_id=suspended_exc.suspension_info.suspension_id,
-                        suspension_type="hitl",
-                        checkpoint_id=checkpoint.checkpoint_id,
-                        step_name=suspended_name,
-                        agent_name=suspended_exc.suspension_info.agent_name,
-                    )
-                )
+            checkpoint_state: dict[str, Any] = {
+                "orchestrator_type": "parallel",
+                "completed_branches": {k: v.output for k, v in completed_results.items()},
+                "suspended_branch": suspended_name,
+                "original_input": input,
+            }
+            await self._surface_suspension(suspended_exc, checkpoint_state, step_name=suspended_name)
             raise suspended_exc
 
         if self._failure_policy == FailurePolicy.BEST_EFFORT:

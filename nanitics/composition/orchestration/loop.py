@@ -12,7 +12,6 @@ from nanitics.composition.orchestration.protocol import Step, StepResult
 from nanitics.composition.orchestration.workflow import Workflow
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
-    ExecutionSuspendedEvent,
     WorkflowStepCompleteEvent,
     WorkflowStepDefinition,
 )
@@ -85,14 +84,21 @@ class Loop(Workflow):
         ]
 
     async def _run(self, input: Any, *, resume_from: RunCheckpoint | None = None) -> StepResult:
+        from nanitics.composition.orchestration.adapters import WorkflowStep
+
         current_input = input
         result: StepResult | None = None
         start_iteration = 1
+        child_resume: RunCheckpoint | None = None
 
         if resume_from is not None:
             state = resume_from.state
             start_iteration = state["iteration"]
             current_input = state.get("last_result", {}).get("output", input) if state.get("last_result") else input
+            if isinstance(self._step, WorkflowStep):
+                nested = state.get("nested_checkpoint")
+                assert nested is not None
+                child_resume = self._child_checkpoint(resume_from, nested)
             self._emit_resumed(resume_from, self._step.name)
 
         for iteration in range(start_iteration, self._max_iterations + 1):
@@ -111,31 +117,19 @@ class Loop(Workflow):
                 with self._emitter.span(f"{self._step.name}-iteration-{iteration}"):
                     bound_step = self._bind_step(self._step)
                     step_start = time.monotonic()
-                    result = await bound_step.execute(current_input)
+                    if child_resume is not None and iteration == start_iteration:
+                        result = await self._execute_resumable(bound_step, current_input, child_resume)
+                    else:
+                        result = await bound_step.execute(current_input)
                     step_duration_ms = int((time.monotonic() - step_start) * 1000)
             except SuspendExecution as exc:
-                if self._checkpoint_store:
-                    checkpoint_state: dict[str, Any] = {
-                        "orchestrator_type": "loop",
-                        "iteration": iteration,
-                        "last_result": ({"output": result.output, "metadata": result.metadata} if result else None),
-                        "original_input": input,
-                    }
-                    if exc.checkpoint_data:
-                        checkpoint_state["agent_checkpoint"] = exc.checkpoint_data
-                    checkpoint = await self._save_checkpoint(exc, checkpoint_state)
-                    self._emitter.emit(
-                        ExecutionSuspendedEvent(
-                            trace_id=self._emitter.trace_id,
-                            span_id=self._emitter.span_id,
-                            parent_span_id=self._emitter.parent_span_id,
-                            suspension_id=exc.suspension_info.suspension_id,
-                            suspension_type="hitl",
-                            checkpoint_id=checkpoint.checkpoint_id,
-                            step_name=self._step.name,
-                            agent_name=exc.suspension_info.agent_name,
-                        )
-                    )
+                checkpoint_state: dict[str, Any] = {
+                    "orchestrator_type": "loop",
+                    "iteration": iteration,
+                    "last_result": ({"output": result.output, "metadata": result.metadata} if result else None),
+                    "original_input": input,
+                }
+                await self._surface_suspension(exc, checkpoint_state, step_name=self._step.name)
                 raise
 
             self._emitter.emit(

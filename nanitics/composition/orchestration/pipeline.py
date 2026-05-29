@@ -13,7 +13,6 @@ from nanitics.composition.orchestration.workflow import Workflow
 from nanitics.infrastructure.errors import NaniticsError
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
-    ExecutionSuspendedEvent,
     Usage,
     WorkflowStepCompleteEvent,
     WorkflowStepDefinition,
@@ -211,9 +210,12 @@ class Pipeline(Workflow):
         return defs
 
     async def _run(self, input: Any, *, resume_from: RunCheckpoint | None = None) -> StepResult:
+        from nanitics.composition.orchestration.adapters import WorkflowStep
+
         current_input = input
         intermediate_results: dict[str, StepResult] = {}
         start_index = 0
+        child_resume: RunCheckpoint | None = None
 
         if resume_from is not None:
             state = resume_from.state
@@ -225,6 +227,10 @@ class Pipeline(Workflow):
                 restored_usage = Usage.model_validate(usage_dict) if usage_dict is not None else None
                 restored[k] = StepResult(output=d["output"], metadata=d["metadata"], usage=restored_usage)
             intermediate_results = restored
+            if isinstance(self._stages[start_index]._step, WorkflowStep):
+                nested = state.get("nested_checkpoint")
+                assert nested is not None
+                child_resume = self._child_checkpoint(resume_from, nested)
             self._emit_resumed(resume_from, self._stages[start_index].name)
 
         for index in range(start_index, len(self._stages)):
@@ -247,39 +253,27 @@ class Pipeline(Workflow):
                 with self._emitter.span(stage.name):
                     bound_step = self._bind_step(stage._step)
                     step_start = time.monotonic()
-                    result = await bound_step.execute(current_input)
+                    if child_resume is not None and index == start_index:
+                        result = await self._execute_resumable(bound_step, current_input, child_resume)
+                    else:
+                        result = await bound_step.execute(current_input)
                     step_duration_ms = int((time.monotonic() - step_start) * 1000)
             except SuspendExecution as exc:
-                if self._checkpoint_store:
-                    checkpoint_state: dict[str, Any] = {
-                        "orchestrator_type": "pipeline",
-                        "suspended_stage_index": index,
-                        "completed_results": {
-                            k: {
-                                "output": v.output,
-                                "metadata": v.metadata,
-                                "usage": v.usage.model_dump() if v.usage is not None else None,
-                            }
-                            for k, v in intermediate_results.items()
-                        },
-                        "last_output": current_input,
-                        "original_input": input,
-                    }
-                    if exc.checkpoint_data:
-                        checkpoint_state["agent_checkpoint"] = exc.checkpoint_data
-                    checkpoint = await self._save_checkpoint(exc, checkpoint_state)
-                    self._emitter.emit(
-                        ExecutionSuspendedEvent(
-                            trace_id=self._emitter.trace_id,
-                            span_id=self._emitter.span_id,
-                            parent_span_id=self._emitter.parent_span_id,
-                            suspension_id=exc.suspension_info.suspension_id,
-                            suspension_type="hitl",
-                            checkpoint_id=checkpoint.checkpoint_id,
-                            step_name=stage.name,
-                            agent_name=exc.suspension_info.agent_name,
-                        )
-                    )
+                checkpoint_state: dict[str, Any] = {
+                    "orchestrator_type": "pipeline",
+                    "suspended_stage_index": index,
+                    "completed_results": {
+                        k: {
+                            "output": v.output,
+                            "metadata": v.metadata,
+                            "usage": v.usage.model_dump() if v.usage is not None else None,
+                        }
+                        for k, v in intermediate_results.items()
+                    },
+                    "last_output": current_input,
+                    "original_input": input,
+                }
+                await self._surface_suspension(exc, checkpoint_state, step_name=stage.name)
                 raise
 
             stage.validate_output(result.output, index)

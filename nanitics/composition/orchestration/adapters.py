@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from nanitics.composition.durability.models import RunCheckpoint
 from nanitics.composition.orchestration.protocol import StepResult
 from nanitics.composition.orchestration.workflow import Workflow
 from nanitics.strategies.agents.base import Agent
@@ -87,8 +88,8 @@ class WorkflowStep:
         """The wrapped workflow."""
         return self._workflow
 
-    async def execute(self, input: Any) -> StepResult:
-        return await self._workflow.execute(input)
+    async def execute(self, input: Any, *, resume_from: RunCheckpoint | None = None) -> StepResult:
+        return await self._workflow.execute(input, resume_from=resume_from)
 
 
 class FunctionStep:

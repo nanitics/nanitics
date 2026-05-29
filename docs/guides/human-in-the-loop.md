@@ -175,6 +175,12 @@ Both `DurableRun.start` and `ResumeService.resume` return `ResumeResult | Suspen
 
 > **See also:** [examples/durability/durable_resume_service.py](../../examples/durability/durable_resume_service.py), `DurableRun` and `ResumeService` docstrings.
 
+### Nested workflows
+
+A workflow nested inside another workflow (via `WorkflowStep` — e.g. a `Sequential` inside a `Conditional` branch, or a `Parallel` branch) that suspends on a human gate resumes at its own suspension point, not from the top of the nested workflow. The parent orchestrator threads the resume checkpoint into the suspended child, so a nested `Conditional`'s router is not re-invoked on resume and no step before the suspension point in the nested workflow re-runs. This works to arbitrary nesting depth and across every orchestrator (`Sequential`, `Conditional`, `Parallel`, `DAG`, `Loop`, `Pipeline`, `MapReduce`) — only the top-level workflow needs a `checkpoint_store`; nested workflows surface their state up into the single persisted checkpoint automatically.
+
+> **Migration (0.6.0):** the checkpoint schema bumped from `2` to `3` to carry nested-workflow state. There is no in-place migration — a checkpoint persisted by 0.5.x raises `CheckpointVersionError` when resumed under 0.6.0. Drain any in-flight suspended runs before upgrading.
+
 ## Testing HITL Flows
 
 `CallbackHumanInputProvider` is the primary tool for testing. Pass a lambda or function that returns the desired `HumanInputResponse` for each request — auto-approve, auto-reject, or a conditional function that inspects the request and responds accordingly.
