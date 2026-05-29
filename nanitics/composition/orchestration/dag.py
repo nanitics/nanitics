@@ -13,7 +13,6 @@ from nanitics.composition.orchestration.protocol import FailurePolicy, Step, Ste
 from nanitics.composition.orchestration.workflow import Workflow
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
-    ExecutionSuspendedEvent,
     WorkflowErrorEvent,
     WorkflowStartEvent,
     WorkflowStepCompleteEvent,
@@ -176,6 +175,8 @@ class DAG(Workflow):
         )
 
     async def _run(self, input: Any, *, resume_from: RunCheckpoint | None = None) -> StepResult:
+        from nanitics.composition.orchestration.adapters import WorkflowStep
+
         completed: dict[str, StepResult] = {}
         failed_nodes: dict[str, dict[str, str]] = {}
         skipped_nodes: list[str] = []
@@ -194,6 +195,7 @@ class DAG(Workflow):
 
         # Resume path: restore completed nodes
         suspended_node_name: str | None = None
+        child_resume: RunCheckpoint | None = None
         if resume_from is not None:
             state = resume_from.state
             suspended_node_name = state["suspended_node"]
@@ -202,6 +204,10 @@ class DAG(Workflow):
                 # Reduce in-degrees for dependents of completed nodes
                 for dep_name in dependents[name]:
                     in_degree[dep_name] -= 1
+            if isinstance(self._nodes[suspended_node_name].step, WorkflowStep):
+                nested = state.get("nested_checkpoint")
+                assert nested is not None
+                child_resume = self._child_checkpoint(resume_from, nested)
             self._emit_resumed(resume_from, suspended_node_name)
 
         # Ready nodes: those with in_degree == 0 and not already completed
@@ -216,10 +222,11 @@ class DAG(Workflow):
                 async def _execute_node(
                     n_name: str = node_name,
                 ) -> StepResult:
+                    node_resume = child_resume if n_name == suspended_node_name else None
                     if semaphore:
                         async with semaphore:
-                            return await self._run_node(n_name, input, completed, node_index)
-                    return await self._run_node(n_name, input, completed, node_index)
+                            return await self._run_node(n_name, input, completed, node_index, resume_from=node_resume)
+                    return await self._run_node(n_name, input, completed, node_index, resume_from=node_resume)
 
                 task = asyncio.create_task(_execute_node())
                 in_flight[node_name] = task
@@ -249,28 +256,13 @@ class DAG(Workflow):
                     completed.update(drained_results)
                     in_flight.clear()
 
-                    if self._checkpoint_store:
-                        checkpoint_state: dict[str, Any] = {
-                            "orchestrator_type": "dag",
-                            "completed_nodes": {k: v.output for k, v in completed.items()},
-                            "suspended_node": finished_name,
-                            "original_input": input,
-                        }
-                        if exc.checkpoint_data:
-                            checkpoint_state["agent_checkpoint"] = exc.checkpoint_data
-                        checkpoint = await self._save_checkpoint(exc, checkpoint_state)
-                        self._emitter.emit(
-                            ExecutionSuspendedEvent(
-                                trace_id=self._emitter.trace_id,
-                                span_id=self._emitter.span_id,
-                                parent_span_id=self._emitter.parent_span_id,
-                                suspension_id=exc.suspension_info.suspension_id,
-                                suspension_type="hitl",
-                                checkpoint_id=checkpoint.checkpoint_id,
-                                step_name=finished_name,
-                                agent_name=exc.suspension_info.agent_name,
-                            )
-                        )
+                    checkpoint_state: dict[str, Any] = {
+                        "orchestrator_type": "dag",
+                        "completed_nodes": {k: v.output for k, v in completed.items()},
+                        "suspended_node": finished_name,
+                        "original_input": input,
+                    }
+                    await self._surface_suspension(exc, checkpoint_state, step_name=finished_name)
                     raise
                 except Exception as exc:
                     if self._failure_policy == FailurePolicy.ALL_OR_NOTHING:
@@ -376,6 +368,8 @@ class DAG(Workflow):
         dag_input: Any,
         completed: dict[str, StepResult],
         node_index: dict[str, int],
+        *,
+        resume_from: RunCheckpoint | None = None,
     ) -> StepResult:
         node = self._nodes[node_name]
 
@@ -392,7 +386,10 @@ class DAG(Workflow):
             if self._cancellation_token and self._cancellation_token.is_cancelled:
                 return StepResult(output=None, metadata={"terminated": "cancelled"})
             step_start = time.monotonic()
-            result = await bound_step.execute(node_input)
+            if resume_from is not None:
+                result = await self._execute_resumable(bound_step, node_input, resume_from)
+            else:
+                result = await bound_step.execute(node_input)
             step_duration_ms = int((time.monotonic() - step_start) * 1000)
 
         self._emitter.emit(

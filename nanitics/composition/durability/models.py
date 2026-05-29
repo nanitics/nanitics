@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from nanitics.infrastructure.errors import NaniticsError
 
-CHECKPOINT_SCHEMA_VERSION = 2
+CHECKPOINT_SCHEMA_VERSION = 3
 
 
 class CheckpointVersionError(NaniticsError):
@@ -74,6 +74,13 @@ class RunCheckpoint(BaseModel):
         checkpoint_type: Whether this is an orchestration or agent checkpoint.
         schema_version: Version for forward-compatibility checking.
         state: Serialized execution state (completed results, position, etc.).
+            For a suspended step that is an agent, ``state`` carries an
+            optional ``agent_checkpoint`` dict; for a suspended step that is
+            a nested ``Workflow`` (via ``WorkflowStep``), it carries an
+            optional ``nested_checkpoint`` dict — itself a full orchestrator
+            state, recursive to arbitrary nesting depth. The two keys are
+            mutually exclusive: a suspended step is either an agent or a
+            nested workflow.
         suspension_info: Details about the suspension that produced this checkpoint.
         created_at: When the checkpoint was created (UTC).
     """

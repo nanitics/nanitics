@@ -20,6 +20,7 @@ from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
     CheckpointSavedEvent,
     ExecutionResumedEvent,
+    ExecutionSuspendedEvent,
     RunCompleteEvent,
     RunFailedEvent,
     RunStartEvent,
@@ -186,6 +187,45 @@ class Workflow(ABC):
             )
         return checkpoint
 
+    async def _surface_suspension(
+        self,
+        exc: SuspendExecution,
+        checkpoint_state: dict[str, Any],
+        *,
+        step_name: str,
+    ) -> None:
+        """Fold child resume-state into this frame, surface it up, persist at root.
+
+        Common to every orchestrator's suspend path. Folds the leaf agent's
+        resume state (``exc.checkpoint_data``) or a nested workflow's frame
+        (``exc.orchestration_state``) into ``checkpoint_state``, then sets
+        ``checkpoint_state`` as this frame's ``orchestration_state`` so the
+        parent can embed it under ``nested_checkpoint``. The consumed carriers
+        are cleared so an ancestor does not re-consume them. The checkpoint is
+        persisted and :class:`ExecutionSuspendedEvent` emitted only when this
+        frame owns a ``checkpoint_store`` — i.e. only at the durable root.
+        """
+        if exc.checkpoint_data:
+            checkpoint_state["agent_checkpoint"] = exc.checkpoint_data
+        if exc.orchestration_state is not None:
+            checkpoint_state["nested_checkpoint"] = exc.orchestration_state
+        exc.checkpoint_data = None
+        exc.orchestration_state = checkpoint_state
+        if self._checkpoint_store:
+            checkpoint = await self._save_checkpoint(exc, checkpoint_state)
+            self._emitter.emit(
+                ExecutionSuspendedEvent(
+                    trace_id=self._emitter.trace_id,
+                    span_id=self._emitter.span_id,
+                    parent_span_id=self._emitter.parent_span_id,
+                    suspension_id=exc.suspension_info.suspension_id,
+                    suspension_type="hitl",
+                    checkpoint_id=checkpoint.checkpoint_id,
+                    step_name=step_name,
+                    agent_name=exc.suspension_info.agent_name,
+                )
+            )
+
     def _emit_resumed(self, checkpoint: RunCheckpoint, step_name: str | None = None) -> None:
         self._emitter.emit(
             ExecutionResumedEvent(
@@ -196,6 +236,39 @@ class Workflow(ABC):
                 suspension_id=checkpoint.suspension_info.suspension_id,
                 resumed_from_step=step_name,
             )
+        )
+
+    @staticmethod
+    async def _execute_resumable(bound_step: Step, input: Any, resume_from: RunCheckpoint) -> StepResult:
+        """Execute a bound nested-workflow step on its resume path.
+
+        Callers guard on ``isinstance(step, WorkflowStep)``, so the bound
+        step is always a :class:`_BoundWorkflowStep`. The cast narrows the
+        ``Step`` protocol to the resume-aware ``execute`` here rather than
+        widening the base protocol — non-workflow step types keep the plain
+        ``execute(self, input)`` contract.
+        """
+        resumable = cast("_BoundWorkflowStep", bound_step)
+        return await resumable.execute(input, resume_from=resume_from)
+
+    @staticmethod
+    def _child_checkpoint(parent: RunCheckpoint, nested_state: dict[str, Any]) -> RunCheckpoint:
+        """Reconstruct a nested workflow's checkpoint from an embedded frame.
+
+        On resume, an orchestrator whose suspended step is a
+        :class:`WorkflowStep` lifts the child frame stored under its own
+        ``state["nested_checkpoint"]`` back into a :class:`RunCheckpoint`
+        and threads it down as the child's ``resume_from``. The parent's
+        ``run_id``, ``schema_version``, and ``suspension_info`` carry
+        through; ``checkpoint_id`` / ``created_at`` default fresh and are
+        not load-bearing on the resume read path.
+        """
+        return RunCheckpoint(
+            run_id=parent.run_id,
+            checkpoint_type="orchestration",
+            schema_version=parent.schema_version,
+            state=nested_state,
+            suspension_info=parent.suspension_info,
         )
 
     @staticmethod
@@ -559,6 +632,6 @@ class _BoundWorkflowStep:
     def name(self) -> str:
         return self._step.name
 
-    async def execute(self, input: Any) -> StepResult:
-        result: StepResult = await self._bound.execute(input)
+    async def execute(self, input: Any, *, resume_from: RunCheckpoint | None = None) -> StepResult:
+        result: StepResult = await self._bound.execute(input, resume_from=resume_from)
         return result

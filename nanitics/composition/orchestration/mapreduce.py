@@ -12,7 +12,6 @@ from nanitics.composition.orchestration.protocol import FailurePolicy, Step, Ste
 from nanitics.composition.orchestration.workflow import Workflow
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
-    ExecutionSuspendedEvent,
     WorkflowStepCompleteEvent,
     WorkflowStepDefinition,
 )
@@ -87,6 +86,8 @@ class MapReduce(Workflow):
         ]
 
     async def _run(self, input: Any, *, resume_from: RunCheckpoint | None = None) -> StepResult:
+        from nanitics.composition.orchestration.adapters import WorkflowStep
+
         # Resume path: skip splitting, use stored items
         if resume_from is not None:
             state = resume_from.state
@@ -95,6 +96,11 @@ class MapReduce(Workflow):
             completed_items: dict[int, StepResult] = {
                 int(k): StepResult(output=v) for k, v in state["completed_items"].items()
             }
+            child_resume: RunCheckpoint | None = None
+            if isinstance(self._step, WorkflowStep):
+                nested = state.get("nested_checkpoint")
+                assert nested is not None
+                child_resume = self._child_checkpoint(resume_from, nested)
             self._emit_resumed(resume_from, f"{self._step.name}-{suspended_item_index}")
 
             # Execute suspended + remaining items
@@ -103,6 +109,8 @@ class MapReduce(Workflow):
                 items,
                 remaining_indices,
                 input,
+                resume_index=suspended_item_index,
+                resume_from=child_resume,
             )
             if isinstance(result, StepResult):
                 return result  # pragma: no cover — defensive; suspension always raises
@@ -177,19 +185,25 @@ class MapReduce(Workflow):
         items: list[Any],
         indices: list[int],
         original_input: Any,
+        *,
+        resume_index: int | None = None,
+        resume_from: RunCheckpoint | None = None,
     ) -> tuple[dict[int, StepResult], list[int]] | StepResult:
         """Execute map items.
 
         Returns (completed_dict, failed_indices) or a StepResult if suspended.
+        On resume, ``resume_from`` is threaded only into the item at
+        ``resume_index`` (a nested workflow re-entered at its own checkpoint).
         """
         semaphore = asyncio.Semaphore(self._max_concurrency) if self._max_concurrency is not None else None
 
         async def _run_item(item: Any, index: int) -> tuple[int, StepResult]:
+            item_resume = resume_from if index == resume_index else None
             if semaphore:
                 async with semaphore:
-                    r = await self._execute_item(item, index)
+                    r = await self._execute_item(item, index, resume_from=item_resume)
                     return (index, r)
-            r = await self._execute_item(item, index)
+            r = await self._execute_item(item, index, resume_from=item_resume)
             return (index, r)
 
         tasks: dict[int, asyncio.Task[tuple[int, StepResult]]] = {}
@@ -234,41 +248,31 @@ class MapReduce(Workflow):
                     failed_items.append(idx)
 
         if suspended_index is not None and suspended_exc is not None:
-            if self._checkpoint_store:
-                checkpoint_state: dict[str, Any] = {
-                    "orchestrator_type": "mapreduce",
-                    "completed_items": {str(k): v.output for k, v in completed.items()},
-                    "suspended_item_index": suspended_index,
-                    "split_items": items,
-                    "original_input": original_input,
-                }
-                if suspended_exc.checkpoint_data:
-                    checkpoint_state["agent_checkpoint"] = suspended_exc.checkpoint_data
-                checkpoint = await self._save_checkpoint(suspended_exc, checkpoint_state)
-                self._emitter.emit(
-                    ExecutionSuspendedEvent(
-                        trace_id=self._emitter.trace_id,
-                        span_id=self._emitter.span_id,
-                        parent_span_id=self._emitter.parent_span_id,
-                        suspension_id=suspended_exc.suspension_info.suspension_id,
-                        suspension_type="hitl",
-                        checkpoint_id=checkpoint.checkpoint_id,
-                        step_name=f"{self._step.name}-{suspended_index}",
-                        agent_name=suspended_exc.suspension_info.agent_name,
-                    )
-                )
+            checkpoint_state: dict[str, Any] = {
+                "orchestrator_type": "mapreduce",
+                "completed_items": {str(k): v.output for k, v in completed.items()},
+                "suspended_item_index": suspended_index,
+                "split_items": items,
+                "original_input": original_input,
+            }
+            await self._surface_suspension(
+                suspended_exc, checkpoint_state, step_name=f"{self._step.name}-{suspended_index}"
+            )
             raise suspended_exc
 
         return (completed, failed_items)
 
-    async def _execute_item(self, item: Any, index: int) -> StepResult:
+    async def _execute_item(self, item: Any, index: int, *, resume_from: RunCheckpoint | None = None) -> StepResult:
         span_name = f"{self._step.name}-{index}"
         with self._emitter.span(span_name):
             bound_step = self._bind_step(self._step)
             if self._cancellation_token and self._cancellation_token.is_cancelled:
                 return StepResult(output=None, metadata={"terminated": "cancelled"})
             step_start = time.monotonic()
-            result = await bound_step.execute(item)
+            if resume_from is not None:
+                result = await self._execute_resumable(bound_step, item, resume_from)
+            else:
+                result = await bound_step.execute(item)
             step_duration_ms = int((time.monotonic() - step_start) * 1000)
         self._emitter.emit(
             WorkflowStepCompleteEvent(
