@@ -50,7 +50,7 @@ Start here. Match your task requirements to the right agent type.
 
 ## ReActAgent
 
-The default agent type. On each step, the LLM either calls a tool or produces a final text answer. The loop continues until the LLM responds without tool calls, the iteration limit is reached, or the agent is cancelled.
+The default agent type. On each step, the LLM either calls a tool or produces a final text answer. The loop continues until the LLM responds without tool calls, a tool marked `return_direct` fires, the iteration limit is reached, or the agent is cancelled.
 
 Key capabilities that inform when to choose ReAct:
 
@@ -58,6 +58,7 @@ Key capabilities that inform when to choose ReAct:
 - **Output evaluation** — attach an `OutputEvaluator` and the agent self-revises its final answer until accepted or `max_revisions` exhausted. When combined with `output_schema`, evaluation runs on the structured output.
 - **Error self-correction** — with an `ErrorHandler`, tool errors are fed back to the LLM as correction prompts rather than crashing the run.
 - **Structured output** — set `output_schema` to a Pydantic `BaseModel` subclass. After the tool-use loop, one additional schema-constrained LLM call produces typed JSON in `result.parsed`.
+- **Tool-terminated runs** — mark a tool `return_direct=True` (on the `tool()` decorator, `FunctionTool`, or `AgentTool`) and the run ends on the first call to that tool, using its `ToolResult.content` as the output with `termination_reason="return_direct"`. The closing LLM turn is skipped — and so is the `output_schema` synthesis call, so `result.parsed` is `None`; structured terminal data travels in `ToolResult.metadata`. Use it when an agent's terminal action is a tool call and the closing prose would be discarded.
 - **Durable execution** — supports checkpoint/resume for human-in-the-loop suspension. See [Human-in-the-Loop](human-in-the-loop.md).
 - **Dynamic tool injection** — the only agent type compatible with Blackboard, MessageBus, and PeerNetwork coordination patterns.
 

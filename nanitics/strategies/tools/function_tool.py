@@ -35,6 +35,10 @@ class FunctionTool:
             Mutually exclusive with *parameters_schema*.
         parameters_schema: Raw JSON Schema dict for the parameters.
             Mutually exclusive with *parameters_model*.
+        return_direct: When ``True``, a ``ReActAgent`` ends the run on the
+            first call to this tool and uses its ``ToolResult`` content as
+            the output. Defaults to ``False``. See
+            :class:`~nanitics.infrastructure.llm.protocol.ToolSchema`.
 
     Raises:
         ValueError: If both or neither of *parameters_model* and
@@ -49,6 +53,7 @@ class FunctionTool:
         *,
         parameters_model: type[BaseModel] | None = None,
         parameters_schema: dict[str, Any] | None = None,
+        return_direct: bool = False,
     ) -> None:
         if parameters_model is not None and parameters_schema is not None:
             raise ValueError("Provide either parameters_model or parameters_schema, not both")
@@ -81,6 +86,7 @@ class FunctionTool:
             name=name,
             description=description,
             parameters=schema_dict,
+            return_direct=return_direct,
         )
 
     @property
@@ -135,6 +141,7 @@ def tool(
     description: str,
     *,
     parameters_model: type[BaseModel] | None = None,
+    return_direct: bool = False,
 ) -> Callable[
     [Callable[..., Awaitable[str | ToolResult]]],
     FunctionTool,
@@ -151,6 +158,11 @@ def tool(
             the tool.
         parameters_model: Optional explicit Pydantic model for parameter
             validation and schema generation.
+        return_direct: When ``True``, a ``ReActAgent`` ends the run on the
+            first call to this tool and uses its ``ToolResult`` content as
+            the output, skipping the closing LLM turn. Defaults to
+            ``False``. See
+            :class:`~nanitics.infrastructure.llm.protocol.ToolSchema`.
 
     Returns:
         A decorator that transforms the function into a ``FunctionTool``.
@@ -174,6 +186,7 @@ def tool(
             name=name,
             description=description,
             parameters_model=model,
+            return_direct=return_direct,
         )
 
     return decorator

@@ -94,8 +94,13 @@ class AgentResult(PydanticBaseModel):
             serialization.
         total_steps: Number of reasoning steps the agent executed.
         termination_reason: Why the agent stopped — ``"complete"``,
-            ``"iteration_limit"``, ``"cancelled"``, or
-            ``"evaluation_failed"``.
+            ``"iteration_limit"``, ``"cancelled"``, ``"evaluation_failed"``,
+            or ``"return_direct"`` (a tool marked ``return_direct`` ended the
+            run on its result). Consumers may switch on this value. On
+            ``"return_direct"``, ``parsed`` is ``None`` even when
+            ``output_schema`` was configured, and structured terminal data is
+            read from the last ``tool_result`` message's ``metadata`` in
+            ``messages``.
         messages: Full conversation history including user input, assistant
             responses, and tool results.
         usage: Aggregated token usage across all LLM calls in the run.

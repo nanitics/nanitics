@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-01
+
+### Added
+
+- **Tool-terminated runs (`return_direct`).** A tool can now end a
+  `ReActAgent` run on its own result instead of forcing one more LLM turn to
+  produce a closing message. Mark a tool `return_direct=True` — on the
+  `tool()` decorator, `FunctionTool`, or `AgentTool` — and when the model
+  calls it, the loop runs the whole tool batch (co-called tools' side effects
+  still fire), then ends on the first `return_direct` call in batch order,
+  using that call's `ToolResult.content` as `output` with
+  `termination_reason="return_direct"`. The closing LLM generation is skipped.
+  This is the pattern other frameworks call `return_direct`; it removes the
+  wasted generation a headless caller pays when an agent's terminal action is
+  a tool call (e.g. a delegate whose proposal is read straight from the tool
+  result). The flag is SDK-side only and is never serialized to any LLM
+  provider, matching `requires_approval` and `timeout_seconds`. Resume-safe: a
+  `return_direct` call reached across a human-in-the-loop suspension (in either
+  order relative to the suspending tool) terminates correctly on resume.
+  - When `output_schema` is also set, the structured-synthesis call is
+    likewise skipped: `output` is the tool's content and `parsed` is `None`.
+    A `return_direct` tool that needs to hand back structured data puts it in
+    `ToolResult.metadata`, which round-trips onto the `tool_result`
+    `Message.metadata` (read from the last `tool_result` message in
+    `messages`) and is never sent to the LLM.
+  - `output_evaluator` is bypassed on a `return_direct` termination — there is
+    no free-text output to gate.
+
 ## [0.6.0] - 2026-05-29
 
 ### Added
