@@ -80,7 +80,16 @@ class ReActAgent(Agent):
             ``ToolContext``.
         output_schema: Pydantic model for structured output. When
             provided, an additional LLM call is made after the tool-use
-            loop to produce schema-constrained JSON.
+            loop to produce schema-constrained JSON. If a tool marked
+            ``return_direct`` fires, that synthesis call is skipped:
+            ``termination_reason`` is ``"return_direct"``, ``output`` is the
+            tool's ``ToolResult.content``, and ``parsed`` is ``None``
+            regardless of ``output_schema``. A ``return_direct`` tool that
+            needs to hand back structured data puts it in
+            ``ToolResult.metadata``, which round-trips onto the
+            ``tool_result`` ``Message.metadata`` (read from the last
+            ``tool_result`` message in ``messages``) and is never sent to
+            the LLM.
         initial_messages: Optional prior conversation messages to prepend
             before the current user input. Enables multi-turn conversations
             where history is loaded from an external store.
@@ -240,6 +249,7 @@ class ReActAgent(Agent):
         step_number: int,
         revision_count: int,
         usages: list[Usage],
+        pending_return_direct: tuple[int, str] | None = None,
     ) -> AgentResult:
         output: str | None = None
         parsed = None
@@ -249,6 +259,16 @@ class ReActAgent(Agent):
             termination_reason = "complete"
 
             while True:  # Tool loop
+                # A return_direct tool that fired in a batch dispatched before
+                # this loop was (re-)entered — only the resume path supplies
+                # this, when the suspended batch's terminal call is a
+                # return_direct tool. Apply it once, before any LLM call.
+                if pending_return_direct is not None:
+                    output = pending_return_direct[1]
+                    termination_reason = "return_direct"
+                    pending_return_direct = None
+                    break
+
                 if self._is_cancelled:
                     self._emit_safety_cancellation(step_number)
                     termination_reason = "cancelled"
@@ -368,7 +388,7 @@ class ReActAgent(Agent):
                     )
 
                     try:
-                        await self._dispatch_tool_batch(
+                        return_direct_hit = await self._dispatch_tool_batch(
                             response.tool_calls,
                             messages,
                             available_tools,
@@ -409,6 +429,18 @@ class ReActAgent(Agent):
                         action=action,
                         observation=observation,
                     )
+
+                    # A return_direct tool fired in this batch: end the run on
+                    # its result, skipping the closing LLM turn. The whole batch
+                    # already ran (co-called side effects fired); the lowest-index
+                    # return_direct call wins. The output_schema guard below sees
+                    # termination_reason != "complete" and skips structured
+                    # synthesis, and the output_evaluator paths are never reached,
+                    # so both are bypassed without extra branching.
+                    if return_direct_hit is not None:
+                        output = return_direct_hit[1]
+                        termination_reason = "return_direct"
+                        break
 
             # --- Structured final call ---
             if self._output_schema is not None and termination_reason == "complete":
@@ -497,8 +529,19 @@ class ReActAgent(Agent):
         usages: list[Usage],
         *,
         start_index: int = 0,
-    ) -> None:
-        """Dispatch tool calls, catching SuspendExecution to build checkpoint state."""
+        return_direct_hit: tuple[int, str] | None = None,
+    ) -> tuple[int, str] | None:
+        """Dispatch tool calls, catching SuspendExecution to build checkpoint state.
+
+        Returns the ``(index, content)`` of the first call in batch order whose
+        tool has ``schema.return_direct`` set and executed successfully, or
+        ``None`` if no such call fired. The whole batch always runs to
+        completion — detection records the hit but never breaks early, so
+        co-called tools' side effects fire regardless. ``return_direct_hit``
+        carries a hit found by an earlier (pre-suspension) dispatch of the same
+        batch into a resumed dispatch, so a return_direct call that ran before
+        the suspension point still wins on the lowest index.
+        """
         from nanitics.composition.durability.suspension import SuspendExecution
 
         tool_attempts: dict[int, int] = {}
@@ -535,6 +578,12 @@ class ReActAgent(Agent):
                     "tool_call_id": tool_call.id,
                     "metadata": tr_metadata,
                 }
+                # Record the first successful return_direct call in batch order.
+                # Only successful ToolResults qualify — the error-correction and
+                # degradation branches below synthesise a string with no
+                # ToolResult, so a tool that raised never terminates the run.
+                if return_direct_hit is None and self._tool_registry.get(tool_call.name).schema.return_direct:
+                    return_direct_hit = (i, result.content)
             except SuspendExecution as exc:
                 exc.checkpoint_data = self._build_checkpoint_state(
                     messages=messages,
@@ -544,6 +593,7 @@ class ReActAgent(Agent):
                     tool_calls=tool_calls,
                     completed_tool_results=completed_tool_results,
                     suspended_tool_index=i,
+                    return_direct_hit=return_direct_hit,
                 )
                 raise
             except RunCancelled:
@@ -613,6 +663,8 @@ class ReActAgent(Agent):
                 else:
                     raise
 
+        return return_direct_hit
+
     def _build_checkpoint_state(
         self,
         *,
@@ -623,6 +675,7 @@ class ReActAgent(Agent):
         tool_calls: list[ToolCall],
         completed_tool_results: dict[int, dict[str, Any]],
         suspended_tool_index: int,
+        return_direct_hit: tuple[int, str] | None = None,
     ) -> dict[str, Any]:
         state: dict[str, Any] = {
             "agent_type": "react",
@@ -641,6 +694,10 @@ class ReActAgent(Agent):
             "tool_calls": [tc.model_dump() for tc in tool_calls],
             "completed_tool_results": {str(k): v for k, v in completed_tool_results.items()},
             "suspended_tool_index": suspended_tool_index,
+            # A return_direct call that ran before the suspension point. Stored
+            # as a ``[index, content]`` list (JSON has no tuples) so it survives
+            # the checkpoint and still wins on the lowest index after resume.
+            "return_direct_hit": list(return_direct_hit) if return_direct_hit is not None else None,
         }
         return state
 
@@ -675,6 +732,12 @@ class ReActAgent(Agent):
             int(k): v for k, v in state["completed_tool_results"].items()
         }
         suspended_tool_index: int = state["suspended_tool_index"]
+        # A return_direct call that fired before the suspension point, restored
+        # as a tuple. ``.get`` keeps pre-return_direct checkpoints loadable.
+        stored_hit = state.get("return_direct_hit")
+        pre_suspend_hit: tuple[int, str] | None = (
+            (int(stored_hit[0]), str(stored_hit[1])) if stored_hit is not None else None
+        )
 
         self._emitter.emit(
             ExecutionResumedEvent(
@@ -703,8 +766,10 @@ class ReActAgent(Agent):
                     )
                 )
 
-        # Re-execute from the suspended tool call onward
-        await self._dispatch_tool_batch(
+        # Re-execute from the suspended tool call onward. A pre-suspension
+        # return_direct hit is seeded so it still wins on the lowest index over
+        # any return_direct call in the re-dispatched tail.
+        return_direct_hit = await self._dispatch_tool_batch(
             tool_calls,
             messages,
             available_tools,
@@ -712,6 +777,7 @@ class ReActAgent(Agent):
             revision_count,
             usages,
             start_index=suspended_tool_index,
+            return_direct_hit=pre_suspend_hit,
         )
 
         # Emit step event for the completed batch
@@ -724,12 +790,15 @@ class ReActAgent(Agent):
             observation=observation,
         )
 
-        # Continue the main loop
+        # Continue the main loop. A return_direct hit terminates through the
+        # same one-shot path at the top of ``_run_loop``'s tool loop — no
+        # second copy of the termination logic.
         return await self._run_loop(
             task_input=input,
             messages=messages,
             tool_schemas=tool_schemas,
             available_tools=available_tools,
+            pending_return_direct=return_direct_hit,
             step_number=step_number,
             revision_count=revision_count,
             usages=usages,

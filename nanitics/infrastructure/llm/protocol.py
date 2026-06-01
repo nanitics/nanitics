@@ -48,6 +48,14 @@ class ToolSchema(BaseModel):
         parameters: JSON Schema describing the tool's input parameters.
         requires_approval: If ``True``, indicates this tool needs human
             approval before execution.
+        return_direct: If ``True``, a :class:`~nanitics.strategies.agents.react.ReActAgent`
+            ends the run on the first call to this tool within a tool batch
+            and uses that call's :class:`~nanitics.strategies.tools.protocol.ToolResult`
+            content as the run output, skipping the closing LLM turn (and,
+            when ``output_schema`` is set, the structured-synthesis call).
+            SDK-side only, like ``requires_approval`` and ``timeout_seconds``:
+            never serialized to any LLM provider. Defaults to ``False`` so
+            existing tools are unaffected.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -57,6 +65,7 @@ class ToolSchema(BaseModel):
     parameters: dict[str, Any]
     requires_approval: bool = False
     timeout_seconds: float | None = None
+    return_direct: bool = False
 
 
 class TextContentBlock(BaseModel):

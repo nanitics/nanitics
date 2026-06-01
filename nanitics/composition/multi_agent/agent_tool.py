@@ -54,6 +54,11 @@ class AgentTool:
             ignored. When ``None`` (the default) the delegate runs
             stateless across calls. See ``docs/guides/memory.md`` §
             Behavioral Continuity for the substrate distinction.
+        return_direct: When ``True``, the calling ``ReActAgent`` ends its
+            run on this delegation and uses the delegate's extracted
+            output as the calling run's output, skipping the caller's
+            closing LLM turn. Defaults to ``False``. See
+            :class:`~nanitics.infrastructure.llm.protocol.ToolSchema`.
     """
 
     def __init__(
@@ -68,6 +73,7 @@ class AgentTool:
         cancellation_token: CancellationToken | None = None,
         content_blocks: list[ContentBlock] | None = None,
         thread_key: str | None = None,
+        return_direct: bool = False,
     ) -> None:
         self._agent = agent
         self._emitter = emitter
@@ -78,6 +84,7 @@ class AgentTool:
         self.cancellation_token = cancellation_token
         self._content_blocks = content_blocks
         self._thread_key = thread_key
+        self._return_direct = return_direct
 
     @property
     def schema(self) -> ToolSchema:
@@ -95,6 +102,7 @@ class AgentTool:
                 },
                 "required": ["task"],
             },
+            return_direct=self._return_direct,
         )
 
     async def execute(self, **params: Any) -> ToolResult:
