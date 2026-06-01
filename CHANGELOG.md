@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-06-01
+
+### Added
+
+- **Generalized tool copy: `FunctionTool.replace` / `AgentTool.replace`.** A
+  single method derives a copy of a tool with selected schema metadata
+  overridden, leaving everything else unchanged. Arguments left unset keep
+  their current values, so `tool.replace(return_direct=True)` flips one flag
+  and `tool.replace(name="…", description="…")` relabels. `FunctionTool.replace`
+  accepts `name`, `description`, `return_direct`, `requires_approval`, and
+  `timeout_seconds`; `AgentTool.replace` accepts `name`, `description`, and
+  `return_direct`. Only schema metadata is overridable — the wrapped function,
+  its parameter schema, and `ToolContext` injection are preserved, so a copy
+  cannot desync its validation from its implementation. To change those, build
+  a new tool.
+
+### Deprecated
+
+- **`FunctionTool.with_return_direct` / `AgentTool.with_return_direct`.**
+  Superseded by the general `replace`; `with_return_direct(value)` is now a thin
+  alias for `replace(return_direct=value)` and emits a `DeprecationWarning`.
+  Migrate to `tool.replace(return_direct=…)`. Removed in 1.0.
+
 ## [0.8.0] - 2026-06-01
 
 ### Added

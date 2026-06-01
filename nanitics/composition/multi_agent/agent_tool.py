@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 from nanitics.composition.multi_agent.context_transfer import (
@@ -15,7 +16,7 @@ from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import DelegationEvent
 from nanitics.safety.cancellation import CancellationToken
 from nanitics.strategies.agents.base import Agent, AgentInput
-from nanitics.strategies.tools.protocol import ToolResult
+from nanitics.strategies.tools.protocol import _UNSET, ToolResult, _Unset
 
 
 class AgentTool:
@@ -105,37 +106,65 @@ class AgentTool:
             return_direct=self._return_direct,
         )
 
-    def with_return_direct(self, value: bool = True) -> AgentTool:
-        """Return a copy of this delegation tool with ``return_direct`` set to
-        ``value``.
+    def replace(
+        self,
+        *,
+        name: str | _Unset = _UNSET,
+        description: str | _Unset = _UNSET,
+        return_direct: bool | _Unset = _UNSET,
+    ) -> AgentTool:
+        """Return a copy of this delegation tool with the given schema
+        metadata replaced.
 
-        The wrapped agent, transfer strategy, thread key, content blocks, and
-        all other configuration are preserved; only ``return_direct`` changes.
+        Only ``name``, ``description``, and ``return_direct`` may be
+        overridden; the wrapped agent, transfer strategy, thread key, content
+        blocks, and all other configuration are preserved. Arguments left
+        unset keep their current values. Returns a new instance; the original
+        is untouched.
+
         Lets a single delegation be defined once and used both interactively
-        (``return_direct=False``, the caller keeps its closing turn) and
-        headlessly (``return_direct=True``, the run ends on the delegate's
-        output).
+        (the caller keeps its closing turn) and headlessly
+        (``return_direct=True``, the run ends on the delegate's output)::
+
+            headless = delegate_tool.replace(return_direct=True)
 
         Args:
-            value: The ``return_direct`` value for the returned copy.
-                Defaults to ``True``.
+            name: New tool name, if overriding.
+            description: New description, if overriding.
+            return_direct: New ``return_direct`` flag, if overriding.
 
         Returns:
             A new ``AgentTool`` delegating to the same agent, differing only
-            in ``return_direct``.
+            in the overridden schema fields.
         """
         return AgentTool(
             agent=self._agent,
             emitter=self._emitter,
-            description=self._description,
-            name=self._name,
+            description=self._description if isinstance(description, _Unset) else description,
+            name=self._name if isinstance(name, _Unset) else name,
             transfer_strategy=self._transfer_strategy,
             caller_name=self._caller_name,
             cancellation_token=self.cancellation_token,
             content_blocks=self._content_blocks,
             thread_key=self._thread_key,
-            return_direct=value,
+            return_direct=self._return_direct if isinstance(return_direct, _Unset) else return_direct,
         )
+
+    def with_return_direct(self, value: bool = True) -> AgentTool:
+        """Return a copy of this delegation tool with ``return_direct`` set to
+        ``value``.
+
+        .. deprecated:: 0.9.0
+            Use :meth:`replace` instead:
+            ``tool.replace(return_direct=value)``. ``with_return_direct``
+            will be removed in 1.0.
+        """
+        warnings.warn(
+            "AgentTool.with_return_direct is deprecated; use replace(return_direct=...) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.replace(return_direct=value)
 
     async def execute(self, **params: Any) -> ToolResult:
         """Run the delegate agent and return its extracted output.

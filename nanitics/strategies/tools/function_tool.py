@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import types
+import warnings
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -11,7 +12,7 @@ from nanitics.infrastructure.errors import ToolParameterError
 from nanitics.infrastructure.llm.protocol import ToolSchema
 
 from .context import ToolContext, _current_tool_context
-from .protocol import ToolResult
+from .protocol import _UNSET, ToolResult, _Unset
 
 
 class FunctionTool:
@@ -94,45 +95,85 @@ class FunctionTool:
         """Return the tool schema describing this tool's interface."""
         return self._schema
 
-    def with_return_direct(self, value: bool = True) -> FunctionTool:
-        """Return a copy of this tool with ``return_direct`` set to ``value``.
+    def replace(
+        self,
+        *,
+        name: str | _Unset = _UNSET,
+        description: str | _Unset = _UNSET,
+        return_direct: bool | _Unset = _UNSET,
+        requires_approval: bool | _Unset = _UNSET,
+        timeout_seconds: float | None | _Unset = _UNSET,
+    ) -> FunctionTool:
+        """Return a copy of this tool with the given schema metadata replaced.
 
-        The wrapped function, parameter schema, ``ToolContext`` injection,
-        and every other ``ToolSchema`` flag (``requires_approval``,
-        ``timeout_seconds``) are preserved; only ``return_direct`` changes.
+        Only schema metadata may be overridden: ``name``, ``description``,
+        and the SDK-side flags ``return_direct``, ``requires_approval``, and
+        ``timeout_seconds``. The wrapped function, its parameter schema, and
+        ``ToolContext`` injection are preserved unchanged; to change those,
+        build a new tool. Arguments left unset keep their current values.
+        Returns a new instance; the original is untouched.
 
-        Use this to derive a tool-terminating variant of a tool defined once
-        with the :func:`tool` decorator. The same logical write can keep its
-        closing LLM turn in an interactive caller (``return_direct=False``)
-        and skip it in a headless caller (``return_direct=True``) without
-        duplicating the definition.
+        Use this to derive a variant of a tool defined once with the
+        :func:`tool` decorator. The same logical write can keep its closing
+        LLM turn in an interactive caller and skip it in a headless caller::
+
+            headless = write_tool.replace(return_direct=True)
 
         Args:
-            value: The ``return_direct`` value for the returned copy.
-                Defaults to ``True``.
+            name: New tool name, if overriding.
+            description: New description, if overriding.
+            return_direct: New ``return_direct`` flag, if overriding.
+            requires_approval: New ``requires_approval`` flag, if overriding.
+            timeout_seconds: New ``timeout_seconds``, if overriding.
 
         Returns:
             A new ``FunctionTool`` wrapping the same callable, differing only
-            in ``return_direct``.
+            in the overridden schema fields.
         """
+        updates: dict[str, Any] = {}
+        if not isinstance(name, _Unset):
+            updates["name"] = name
+        if not isinstance(description, _Unset):
+            updates["description"] = description
+        if not isinstance(return_direct, _Unset):
+            updates["return_direct"] = return_direct
+        if not isinstance(requires_approval, _Unset):
+            updates["requires_approval"] = requires_approval
+        if not isinstance(timeout_seconds, _Unset):
+            updates["timeout_seconds"] = timeout_seconds
+
+        new_schema = self._schema.model_copy(update=updates)
         if self.parameters_model is not None:
             clone = FunctionTool(
                 fn=self._fn,
-                name=self._name,
-                description=self._description,
+                name=new_schema.name,
+                description=new_schema.description,
                 parameters_model=self.parameters_model,
-                return_direct=value,
             )
         else:
             clone = FunctionTool(
                 fn=self._fn,
-                name=self._name,
-                description=self._description,
+                name=new_schema.name,
+                description=new_schema.description,
                 parameters_schema=self._schema.parameters,
-                return_direct=value,
             )
-        clone._schema = self._schema.model_copy(update={"return_direct": value})
+        clone._schema = new_schema
         return clone
+
+    def with_return_direct(self, value: bool = True) -> FunctionTool:
+        """Return a copy of this tool with ``return_direct`` set to ``value``.
+
+        .. deprecated:: 0.9.0
+            Use :meth:`replace` instead:
+            ``tool.replace(return_direct=value)``. ``with_return_direct``
+            will be removed in 1.0.
+        """
+        warnings.warn(
+            "FunctionTool.with_return_direct is deprecated; use replace(return_direct=...) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.replace(return_direct=value)
 
     async def execute(self, **params: Any) -> ToolResult:
         """Run the wrapped function with the given parameters.
