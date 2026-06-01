@@ -94,6 +94,46 @@ class FunctionTool:
         """Return the tool schema describing this tool's interface."""
         return self._schema
 
+    def with_return_direct(self, value: bool = True) -> FunctionTool:
+        """Return a copy of this tool with ``return_direct`` set to ``value``.
+
+        The wrapped function, parameter schema, ``ToolContext`` injection,
+        and every other ``ToolSchema`` flag (``requires_approval``,
+        ``timeout_seconds``) are preserved; only ``return_direct`` changes.
+
+        Use this to derive a tool-terminating variant of a tool defined once
+        with the :func:`tool` decorator. The same logical write can keep its
+        closing LLM turn in an interactive caller (``return_direct=False``)
+        and skip it in a headless caller (``return_direct=True``) without
+        duplicating the definition.
+
+        Args:
+            value: The ``return_direct`` value for the returned copy.
+                Defaults to ``True``.
+
+        Returns:
+            A new ``FunctionTool`` wrapping the same callable, differing only
+            in ``return_direct``.
+        """
+        if self.parameters_model is not None:
+            clone = FunctionTool(
+                fn=self._fn,
+                name=self._name,
+                description=self._description,
+                parameters_model=self.parameters_model,
+                return_direct=value,
+            )
+        else:
+            clone = FunctionTool(
+                fn=self._fn,
+                name=self._name,
+                description=self._description,
+                parameters_schema=self._schema.parameters,
+                return_direct=value,
+            )
+        clone._schema = self._schema.model_copy(update={"return_direct": value})
+        return clone
+
     async def execute(self, **params: Any) -> ToolResult:
         """Run the wrapped function with the given parameters.
 

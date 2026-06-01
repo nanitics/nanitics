@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-01
+
+### Added
+
+- **Derive a `return_direct` variant of a tool.** `FunctionTool` and
+  `AgentTool` gain `with_return_direct(value=True)`, returning a copy of the
+  tool with `return_direct` set and everything else preserved: the wrapped
+  function, the parameter schema, `ToolContext` injection, and the other
+  SDK-side `ToolSchema` flags (`requires_approval`, `timeout_seconds`). Define
+  a write tool once with `@tool`, keep its closing LLM turn in an interactive
+  caller, and derive a tool-terminating variant for a headless caller without
+  duplicating the definition or reaching into private attributes. Additive and
+  non-breaking.
+
 ## [0.7.0] - 2026-06-01
 
 ### Added

@@ -44,6 +44,19 @@ Any object with a `schema` property and an async `execute()` method satisfies th
 | Reference tool (`nanitics.tools.*`) | A shipped factory (`create_web_search_tool`, `create_http_tool`, `create_file_read_tool`, `create_code_execution_tool`) already covers the capability. See [Built-in Tools](built-in-tools.md). |
 | MCP tool | An external MCP server exposes the capability (filesystem, git, Postgres, Slack, etc.). See [MCP Tools](#mcp-tools). |
 
+### Deriving a variant
+
+A tool's `return_direct` behavior can differ by caller: an interactive caller wants the closing LLM turn, a headless one discards it. Rather than defining the tool twice, define it once and derive the variant with `tool.with_return_direct()`. The copy keeps the same function, parameters, and `ToolContext` injection; only the flag changes. Available on both `FunctionTool` and `AgentTool`.
+
+```python
+@tool("set_prompt", "Set the specialist's system prompt")
+async def set_prompt(text: str) -> str:
+    ...
+
+interactive = set_prompt                       # keeps its closing turn
+headless = set_prompt.with_return_direct()     # run ends on the tool result
+```
+
 ## Parameter Validation
 
 The two parameter paths offer different validation guarantees:

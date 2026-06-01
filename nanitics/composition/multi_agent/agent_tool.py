@@ -105,6 +105,38 @@ class AgentTool:
             return_direct=self._return_direct,
         )
 
+    def with_return_direct(self, value: bool = True) -> AgentTool:
+        """Return a copy of this delegation tool with ``return_direct`` set to
+        ``value``.
+
+        The wrapped agent, transfer strategy, thread key, content blocks, and
+        all other configuration are preserved; only ``return_direct`` changes.
+        Lets a single delegation be defined once and used both interactively
+        (``return_direct=False``, the caller keeps its closing turn) and
+        headlessly (``return_direct=True``, the run ends on the delegate's
+        output).
+
+        Args:
+            value: The ``return_direct`` value for the returned copy.
+                Defaults to ``True``.
+
+        Returns:
+            A new ``AgentTool`` delegating to the same agent, differing only
+            in ``return_direct``.
+        """
+        return AgentTool(
+            agent=self._agent,
+            emitter=self._emitter,
+            description=self._description,
+            name=self._name,
+            transfer_strategy=self._transfer_strategy,
+            caller_name=self._caller_name,
+            cancellation_token=self.cancellation_token,
+            content_blocks=self._content_blocks,
+            thread_key=self._thread_key,
+            return_direct=value,
+        )
+
     async def execute(self, **params: Any) -> ToolResult:
         """Run the delegate agent and return its extracted output.
 
