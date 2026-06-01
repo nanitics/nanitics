@@ -46,7 +46,9 @@ Any object with a `schema` property and an async `execute()` method satisfies th
 
 ### Deriving a variant
 
-A tool's `return_direct` behavior can differ by caller: an interactive caller wants the closing LLM turn, a headless one discards it. Rather than defining the tool twice, define it once and derive the variant with `tool.with_return_direct()`. The copy keeps the same function, parameters, and `ToolContext` injection; only the flag changes. Available on both `FunctionTool` and `AgentTool`.
+A tool's behavior can differ by caller: an interactive caller wants the closing LLM turn, a headless one discards it. Rather than defining the tool twice, define it once and derive a variant with `tool.replace(...)`. It returns a copy with the given schema metadata overridden, keeping the wrapped function, parameters, and `ToolContext` injection unchanged. Arguments left unset keep their current values. Available on both `FunctionTool` and `AgentTool`.
+
+`replace` overrides schema metadata only — `name`, `description`, and the SDK-side flags (`return_direct`, `requires_approval`, `timeout_seconds` on `FunctionTool`; `name`, `description`, `return_direct` on `AgentTool`). To change the function or its parameter schema, build a new tool.
 
 ```python
 @tool("set_prompt", "Set the specialist's system prompt")
@@ -54,7 +56,7 @@ async def set_prompt(text: str) -> str:
     ...
 
 interactive = set_prompt                       # keeps its closing turn
-headless = set_prompt.with_return_direct()     # run ends on the tool result
+headless = set_prompt.replace(return_direct=True)  # run ends on the tool result
 ```
 
 ## Parameter Validation

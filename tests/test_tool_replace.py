@@ -1,8 +1,9 @@
-"""Tests for ``with_return_direct`` on ``FunctionTool`` and ``AgentTool``.
+"""Tests for ``replace`` on ``FunctionTool`` and ``AgentTool``.
 
-Deriving a tool-terminating variant of a tool defined once: the copy flips
-``return_direct`` and preserves everything else (wrapped function, parameter
-schema, ``ToolContext`` injection, and the other SDK-side ``ToolSchema`` flags).
+``replace`` returns a copy of the tool with the given schema metadata
+overridden (name, description, and the SDK-side flags), preserving the wrapped
+function, parameter schema, and ``ToolContext`` injection. The deprecated
+``with_return_direct`` alias delegates to it.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from nanitics.strategies.tools import FunctionTool, ToolContext, tool
 from nanitics.strategies.tools.context import _current_tool_context
 
 # --------------------------------------------------------------------------- #
-# FunctionTool
+# FunctionTool.replace
 # --------------------------------------------------------------------------- #
 
 
@@ -29,11 +30,10 @@ async def _echo(text: str) -> str:
     return f"echo: {text}"
 
 
-@pytest.mark.asyncio
-async def test_function_tool_flips_and_preserves_original() -> None:
+async def test_replace_return_direct_flips_and_preserves_original() -> None:
     assert _echo.schema.return_direct is False
 
-    variant = _echo.with_return_direct()
+    variant = _echo.replace(return_direct=True)
 
     assert variant is not _echo
     assert variant.schema.return_direct is True
@@ -43,20 +43,46 @@ async def test_function_tool_flips_and_preserves_original() -> None:
     assert (await variant.execute(text="hi")).content == "echo: hi"
 
 
-@pytest.mark.asyncio
-async def test_function_tool_value_false() -> None:
-    @tool(name="terminal", description="A terminating tool", return_direct=True)
-    async def terminal() -> str:
-        return "done"
+def test_replace_no_args_copies_unchanged() -> None:
+    variant = _echo.replace()
 
-    variant = terminal.with_return_direct(False)
-
+    assert variant is not _echo
     assert variant.schema.return_direct is False
-    assert (await variant.execute()).content == "done"
+    assert variant.schema.name == "echo"
+    assert variant.schema.description == "Echo the text back"
 
 
-@pytest.mark.asyncio
-async def test_function_tool_raw_schema_path() -> None:
+async def test_replace_name_and_description() -> None:
+    variant = _echo.replace(name="shout", description="Shout it")
+
+    assert variant.schema.name == "shout"
+    assert variant.schema.description == "Shout it"
+    assert _echo.schema.name == "echo"  # original untouched
+    assert (await variant.execute(text="hi")).content == "echo: hi"
+
+
+def test_replace_approval_and_timeout_preserve_return_direct() -> None:
+    base = _echo.replace(return_direct=True)
+
+    variant = base.replace(requires_approval=True, timeout_seconds=5.0)
+
+    assert variant.schema.requires_approval is True
+    assert variant.schema.timeout_seconds == 5.0
+    assert variant.schema.return_direct is True  # carried forward
+
+
+def test_replace_timeout_none_is_distinct_from_unset() -> None:
+    # A tool with timeout set; replace(timeout_seconds=None) must clear it,
+    # not be treated as "unchanged" the way an unset argument would.
+    base = _echo.replace(timeout_seconds=5.0)
+    assert base.schema.timeout_seconds == 5.0
+
+    variant = base.replace(timeout_seconds=None)
+
+    assert variant.schema.timeout_seconds is None
+
+
+async def test_replace_raw_schema_path() -> None:
     async def impl(city: str) -> str:
         return f"weather in {city}"
 
@@ -72,7 +98,7 @@ async def test_function_tool_raw_schema_path() -> None:
         parameters_schema=schema,
     )
 
-    variant = base.with_return_direct()
+    variant = base.replace(return_direct=True)
 
     assert variant.parameters_model is None
     assert variant.schema.return_direct is True
@@ -80,21 +106,7 @@ async def test_function_tool_raw_schema_path() -> None:
     assert (await variant.execute(city="Oslo")).content == "weather in Oslo"
 
 
-def test_function_tool_preserves_other_schema_flags() -> None:
-    # requires_approval / timeout_seconds are SDK-side flags the constructor
-    # does not currently accept; the copy must still carry them forward.
-    tweaked = _echo.with_return_direct(False)
-    tweaked._schema = tweaked._schema.model_copy(update={"requires_approval": True, "timeout_seconds": 5.0})
-
-    variant = tweaked.with_return_direct()
-
-    assert variant.schema.return_direct is True
-    assert variant.schema.requires_approval is True
-    assert variant.schema.timeout_seconds == 5.0
-
-
-@pytest.mark.asyncio
-async def test_function_tool_preserves_context_injection() -> None:
+async def test_replace_preserves_context_injection() -> None:
     captured: list[ToolContext | None] = []
 
     @tool(name="needs_ctx", description="Captures the injected context")
@@ -102,7 +114,7 @@ async def test_function_tool_preserves_context_injection() -> None:
         captured.append(context)
         return text
 
-    variant = needs_ctx.with_return_direct()
+    variant = needs_ctx.replace(return_direct=True)
 
     ctx = ToolContext(run_id="run-1")
     token = _current_tool_context.set(ctx)
@@ -115,8 +127,18 @@ async def test_function_tool_preserves_context_injection() -> None:
     assert captured == [ctx]
 
 
+def test_function_tool_with_return_direct_deprecated() -> None:
+    with pytest.warns(DeprecationWarning, match="replace"):
+        variant = _echo.with_return_direct()
+    assert variant.schema.return_direct is True
+
+    with pytest.warns(DeprecationWarning, match="replace"):
+        off = _echo.replace(return_direct=True).with_return_direct(False)
+    assert off.schema.return_direct is False
+
+
 # --------------------------------------------------------------------------- #
-# AgentTool
+# AgentTool.replace
 # --------------------------------------------------------------------------- #
 
 
@@ -157,39 +179,54 @@ def _make_agent_tool() -> AgentTool:
     )
 
 
-def test_agent_tool_flips_and_preserves_original() -> None:
+def test_agent_tool_replace_return_direct() -> None:
     base = _make_agent_tool()
     assert base.schema.return_direct is False
 
-    variant = base.with_return_direct()
+    variant = base.replace(return_direct=True)
 
     assert variant is not base
     assert variant.schema.return_direct is True
     assert base.schema.return_direct is False  # original untouched
     assert variant.schema.name == "worker"
-    assert variant.schema.description == "Delegate work"
     assert variant._transfer_strategy is base._transfer_strategy
     assert variant._thread_key == "thread-1"
     assert variant._caller_name == "boss"
 
 
-def test_agent_tool_value_false() -> None:
-    base = AgentTool(
-        agent=_make_agent(),
-        emitter=InMemoryEmitter(trace_id="t"),
-        description="Delegate work",
-        return_direct=True,
-    )
+def test_agent_tool_replace_name_and_description() -> None:
+    variant = _make_agent_tool().replace(name="helper", description="Help out")
 
-    variant = base.with_return_direct(False)
+    assert variant.schema.name == "helper"
+    assert variant.schema.description == "Help out"
 
+
+def test_agent_tool_replace_no_args_copies_unchanged() -> None:
+    base = _make_agent_tool()
+
+    variant = base.replace()
+
+    assert variant is not base
+    assert variant.schema.name == "worker"
+    assert variant.schema.description == "Delegate work"
     assert variant.schema.return_direct is False
 
 
-@pytest.mark.asyncio
-async def test_agent_tool_variant_still_delegates() -> None:
-    variant = _make_agent_tool().with_return_direct()
+async def test_agent_tool_replace_still_delegates() -> None:
+    variant = _make_agent_tool().replace(return_direct=True)
 
     result = await variant.execute(task="do the thing")
 
     assert result.content == "delegate output"
+
+
+def test_agent_tool_with_return_direct_deprecated() -> None:
+    base = _make_agent_tool()
+
+    with pytest.warns(DeprecationWarning, match="replace"):
+        variant = base.with_return_direct()
+    assert variant.schema.return_direct is True
+
+    with pytest.warns(DeprecationWarning, match="replace"):
+        off = base.with_return_direct(False)
+    assert off.schema.return_direct is False

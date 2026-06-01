@@ -22,7 +22,7 @@ exclude = [
 
 [project]
 name = "nanitics"
-version = "0.8.0"
+version = "0.9.0"
 description = "Python SDK for building single-agent and multi-agent AI systems"
 readme = "README.md"
 license = "Apache-2.0"

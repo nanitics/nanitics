@@ -1,10 +1,23 @@
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Final, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from nanitics.infrastructure.llm.protocol import ToolSchema
+
+
+class _Unset:
+    """Sentinel type marking a ``replace`` argument left unchanged.
+
+    Distinct from ``None`` and any user-supplied value, so a tool's
+    ``replace`` can tell "keep the current value" apart from an explicit
+    override to ``None`` (e.g. ``timeout_seconds=None``). Detected with
+    ``isinstance``; the module-level ``_UNSET`` is the only instance used.
+    """
+
+
+_UNSET: Final[_Unset] = _Unset()
 
 
 class ToolResult(BaseModel):
