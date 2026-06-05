@@ -71,10 +71,10 @@ def create_request_approval_tool(provider: HumanInputProvider) -> FunctionTool:
     @tool(
         name="request_approval",
         description=(
-            "Request human approval before proceeding. Although your text responses "
-            "are not visible to the user, this tool allows you to get human "
-            "authorization. Use this before taking actions that are significant, "
-            "irreversible, or where you want confirmation."
+            "Request human authorization before proceeding with an action. Use this "
+            "before actions that are significant, irreversible, or where you want "
+            "explicit sign-off. The run pauses until the human decides, then continues "
+            "with their decision."
         ),
     )
     async def request_approval(
@@ -154,10 +154,10 @@ def create_ask_human_tool(provider: HumanInputProvider) -> FunctionTool:
     @tool(
         name="ask_human",
         description=(
-            "Ask the human user a question. Although your text responses are "
-            "not visible to the user, this tool allows you to communicate with "
-            "them directly. Use this when you need clarification, additional "
-            "context, or a decision from the human."
+            "Ask a person a question and receive their answer. Use this when you "
+            "need clarification, additional context, or information only a person "
+            "can provide. The run pauses until they respond, then continues with "
+            "their answer."
         ),
     )
     async def ask_human(

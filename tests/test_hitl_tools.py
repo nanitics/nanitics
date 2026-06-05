@@ -101,10 +101,12 @@ class TestCreateAskHumanTool:
         tool = create_ask_human_tool(make_provider())
         assert tool.schema.name == "ask_human"
 
-    def test_description_mentions_only_way(self) -> None:
+    def test_description_states_blocking_behavior(self) -> None:
         tool = create_ask_human_tool(make_provider())
-        assert "communicate" in tool.schema.description
-        assert "not visible" in tool.schema.description
+        assert "answer" in tool.schema.description
+        assert "pauses" in tool.schema.description
+        assert "not visible" not in tool.schema.description
+        assert "decision" not in tool.schema.description
 
     async def test_executes_correctly(self) -> None:
         tool = create_ask_human_tool(
@@ -123,10 +125,11 @@ class TestCreateRequestApprovalTool:
         tool = create_request_approval_tool(make_provider())
         assert tool.schema.name == "request_approval"
 
-    def test_description_mentions_only_way(self) -> None:
+    def test_description_states_blocking_behavior(self) -> None:
         tool = create_request_approval_tool(make_provider())
         assert "authorization" in tool.schema.description
-        assert "not visible" in tool.schema.description
+        assert "pauses" in tool.schema.description
+        assert "not visible" not in tool.schema.description
 
     async def test_executes_correctly(self) -> None:
         tool = create_request_approval_tool(

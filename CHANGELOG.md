@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-06-05
+
+### Changed
+
+- **HITL tool descriptions and the agent system prompt no longer assert that an
+  agent's text output is invisible to a human.** Whether a run's output is
+  surfaced to a person is a host decision, not something the SDK can know, so the
+  SDK stops claiming it. The `ask_human` and `request_approval` descriptions now
+  state only what the tool does plus its blocking/resume behavior (the run pauses
+  until the human responds, then continues with their answer/decision), and
+  `ask_human` no longer overlaps `request_approval` by mentioning "decision". The
+  baked-in `environment` system-prompt section keeps its autonomous,
+  not-a-chatbot framing but drops the "your text responses are not visible to any
+  user" clause. Hosts that surface output (or not) now own that framing via the
+  existing `SystemPromptContributor` seam, with nothing in the SDK to contradict
+  them. No public symbol, signature, event, or schema changed.
+
 ## [0.9.0] - 2026-06-01
 
 ### Added
