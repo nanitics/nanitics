@@ -58,7 +58,7 @@ The SDK ships three implementations:
 
 HITL tools let the agent decide when to involve a human. The agent calls them like any other tool — the SDK handles the request/response flow through the configured `HumanInputProvider`.
 
-The tool descriptions explicitly tell the LLM that these are the only way to communicate with the user — text responses from the agent are not visible to the human. Two tools are available:
+Each tool description states what the tool does and that the run pauses until the human responds, then resumes with their answer. The descriptions deliberately say nothing about whether the agent's own output is shown to a person: that is a host decision (how the host surfaces a run's output), not a property of these tools, so the host owns that framing. Two tools are available:
 
 - **`request_approval`** — the agent asks for approval before proceeding with an action. Returns a formatted string describing the human's decision.
 - **`ask_human`** — the agent asks a question when it needs clarification. Supports optional suggested choices.

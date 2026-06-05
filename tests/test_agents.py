@@ -1195,7 +1195,8 @@ class TestPromptComposition:
         )
 
         assert agent._system_prompt.startswith("You are helpful.")
-        assert "not visible to any user" in agent._system_prompt
+        assert "autonomously" in agent._system_prompt
+        assert "not visible" not in agent._system_prompt
 
     def test_composed_prompt_base_section_comes_first(self) -> None:
         client = MockLLMClient([make_response()])
@@ -1310,7 +1311,8 @@ class TestPromptComposition:
         # Expected three sections, in insertion order: base, environment, planning.
         assert len(sections) == 3
         assert sections[0].content == "Base prompt."
-        assert "not visible to any user" in sections[1].content
+        assert "autonomously" in sections[1].content
+        assert "not visible" not in sections[1].content
         assert sections[2].content == "Always plan before acting."
         # ``cacheable`` defaults to True for every section the agent adds.
         for section in sections:

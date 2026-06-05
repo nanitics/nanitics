@@ -189,9 +189,9 @@ class Agent(ABC):
         builder.add_section("base", system_prompt)
         builder.add_section(
             "environment",
-            "Your text responses are not visible to any user. "
-            "You operate autonomously — make reasonable assumptions "
-            "when information is incomplete and state them explicitly.",
+            "You operate autonomously rather than as a conversational "
+            "chatbot. Make reasonable assumptions when information is "
+            "incomplete and state them explicitly.",
         )
         for contributor in prompt_contributors or []:
             section = contributor.system_prompt_section()
