@@ -1,6 +1,26 @@
 name: Release
 
+# Three entry points, one pipeline:
+#   * push to main — when the `version` in pyproject.toml changes (no tag for
+#     it yet), the repo auto-builds, trusted-publishes to PyPI, then creates the
+#     matching `vX.Y.Z` tag and GitHub release with notes from CHANGELOG.md.
+#     Bump the version + write the CHANGELOG in the PR; merging it ships.
+#   * release: published — manual fallback; cut a release by hand and it
+#     publishes.
+#   * workflow_dispatch — manual build/publish to testpypi or pypi.
+#
+# The tag + release are created here (after a successful publish) rather than in
+# a separate workflow on purpose: a ref created by the built-in GITHUB_TOKEN does
+# not trigger other workflows, so splitting them would require a stored PAT and
+# defeat trusted publishing's no-secrets model. Keep the file name `release.yml`
+# and the environment `pypi` unchanged — the PyPI trusted-publisher config is
+# pinned to both.
+
 on:
+  push:
+    branches: [main]
+    paths:
+      - "pyproject.toml"
   release:
     types: [published]
   workflow_dispatch:
@@ -15,8 +35,42 @@ permissions:
   contents: read
 
 jobs:
+  check:
+    name: Check for release
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.decide.outputs.should_release }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Read version from pyproject.toml
+        id: version
+        run: |
+          version=$(grep -E '^version = ' pyproject.toml | head -1 | sed -E 's/^version = "(.+)"$/\1/')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Decide whether to release
+        id: decide
+        run: |
+          if [ "${{ github.event_name }}" != "push" ]; then
+            # release / workflow_dispatch carry explicit release intent.
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          elif git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "Tag v${{ steps.version.outputs.version }} already exists — nothing to release."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New version ${{ steps.version.outputs.version }} detected — releasing."
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: Build distribution
+    needs: check
+    if: needs.check.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -55,9 +109,10 @@ jobs:
 
   publish:
     name: Publish distribution
-    needs: build
+    needs: [check, build]
+    if: needs.check.outputs.should_release == 'true'
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'release' && 'pypi' || inputs.target }}
+    environment: ${{ (github.event_name == 'release' || github.event_name == 'push' || inputs.target == 'pypi') && 'pypi' || inputs.target }}
     permissions:
       id-token: write
       contents: read
@@ -72,4 +127,44 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           attestations: true
-          repository-url: ${{ (github.event_name == 'release' || inputs.target == 'pypi') && 'https://upload.pypi.org/legacy/' || 'https://test.pypi.org/legacy/' }}
+          repository-url: ${{ (github.event_name == 'release' || github.event_name == 'push' || inputs.target == 'pypi') && 'https://upload.pypi.org/legacy/' || 'https://test.pypi.org/legacy/' }}
+
+  tag-and-release:
+    name: Tag and create GitHub release
+    needs: [check, publish]
+    # Only the auto (push) path creates the tag + release; the manual `release`
+    # path already has one, and workflow_dispatch is for test publishes.
+    if: github.event_name == 'push' && needs.check.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Extract changelog section
+        id: notes
+        run: |
+          version="${{ needs.check.outputs.version }}"
+          # Print the body of the `## [<version>]` section, stopping at the next
+          # `## [` header. Falls back to a pointer if the section is missing.
+          awk -v ver="$version" '
+            $0 ~ "^## \\[" ver "\\]" { flag=1; next }
+            flag && /^## \[/ { flag=0 }
+            flag { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "See CHANGELOG.md for details." > release-notes.md
+          fi
+
+      - name: Create tag and GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ needs.check.outputs.version }}"
+          gh release create "v$version" \
+            --target "${{ github.sha }}" \
+            --title "v$version" \
+            --notes-file release-notes.md
