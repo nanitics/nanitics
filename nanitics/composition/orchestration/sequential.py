@@ -4,10 +4,10 @@ import time
 from typing import Any
 
 from nanitics.composition.durability.models import RunCheckpoint
-from nanitics.composition.durability.store import CheckpointStore
+from nanitics.composition.durability.store import CheckpointStore, StepCheckpointSink
 from nanitics.composition.durability.suspension import SuspendExecution
 from nanitics.composition.orchestration.protocol import Step, StepResult, _sum_usage
-from nanitics.composition.orchestration.workflow import Workflow
+from nanitics.composition.orchestration.workflow import Workflow, _AgentStepCheckpointSink
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import (
     Usage,
@@ -156,7 +156,30 @@ class Sequential(Workflow):
                         candidate = resume_from.state.get("agent_checkpoint")
                         if candidate:
                             agent_checkpoint = candidate
-                bound_step = self._bind_step(step, agent_checkpoint=agent_checkpoint)
+                # Step-level durability: hand the bound agent a sink that writes
+                # an orchestration-shaped cursor (pointing at *this* step, with
+                # the agent snapshot under ``agent_checkpoint``) after each
+                # completed tool batch, so a mid-agent crash resumes through the
+                # branch above without re-firing completed tools. The sink is
+                # only consumed by agent steps; other step types ignore it.
+                checkpoint_sink: StepCheckpointSink | None = None
+                if self._step_checkpoints and self._checkpoint_store is not None:
+                    checkpoint_sink = _AgentStepCheckpointSink(
+                        self,
+                        step_path_prefix=f"sequential#{index}:{step.name}",
+                        cursor_state_base={
+                            "orchestrator_type": "sequential",
+                            "suspended_step_index": index,
+                            "completed_results": self._serialize_results(intermediate_results),
+                            "last_output": current_input,
+                            "original_input": input,
+                        },
+                    )
+                bound_step = self._bind_step(
+                    step,
+                    agent_checkpoint=agent_checkpoint,
+                    checkpoint_sink=checkpoint_sink,
+                )
                 with self._emitter.span(step.name):
                     step_start = time.monotonic()
                     if child_resume is not None:

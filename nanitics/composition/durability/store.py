@@ -1,8 +1,45 @@
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from nanitics.composition.durability.models import RunCheckpoint, StepRecord
+
+CheckpointCadence = Literal["tool_call", "agent_turn"]
+"""Granularity at which an agent hands completed-step snapshots to its sink.
+
+``"tool_call"`` (the default) snapshots at the finest boundary the agent can
+replay from; ``"agent_turn"`` snapshots at reasoning-turn boundaries. For
+``ReActAgent`` a turn produces exactly one tool batch, so the two coincide at
+the batch boundary and the cadence selects the journal ``step_kind`` label.
+"""
+
+
+@runtime_checkable
+class StepCheckpointSink(Protocol):
+    """Dependency-inverted persistence seam for agent-internal step durability.
+
+    An agent that completes a durable step hands its resume snapshot to a sink
+    instead of holding a ``CheckpointStore`` itself — keeping the agent base
+    independent of the store type and the checkpoint schema, mirroring the
+    ``bind``/emitter inversion style. The orchestration layer provides the sink
+    (a closure that owns ``run_id``, the orchestration ``step_path`` prefix, and
+    the store write); the agent only knows this protocol.
+    """
+
+    async def save_step(self, *, step_path: str, step_kind: str, state: dict[str, Any]) -> None:
+        """Persist an agent-internal completed-step snapshot.
+
+        Args:
+            step_path: The agent-relative tail of the step path (e.g.
+                ``"turn#3"``). The sink prepends the orchestration prefix to
+                form the full, run-stable step key.
+            step_kind: The journal kind for this snapshot — the agent's
+                cadence (``"tool_call"`` or ``"agent_turn"``).
+            state: The agent's completed-step resume snapshot (the
+                ``_build_checkpoint_state`` shape minus the suspended-batch
+                fields), loadable back through the orchestrator's resume branch.
+        """
+        ...
 
 
 @runtime_checkable
