@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from nanitics.infrastructure.errors import NaniticsError
 
-CHECKPOINT_SCHEMA_VERSION = 3
+CHECKPOINT_SCHEMA_VERSION = 4
 
 
 class CheckpointVersionError(NaniticsError):
@@ -62,11 +62,14 @@ class SuspensionInfo(BaseModel):
 
 
 class RunCheckpoint(BaseModel):
-    """Snapshot of workflow or agent state at the point of suspension.
+    """Snapshot of workflow or agent state at a durable checkpoint.
 
-    Persisted by a ``CheckpointStore`` and used to resume execution after
-    a human responds. Contains the completed step results and the
-    suspension details.
+    Persisted by a ``CheckpointStore`` and used to resume execution. A
+    checkpoint is written either when a run suspends for human input (a HITL
+    suspension) or, when step-level durability is enabled, as a thin cursor
+    snapshot recording loop position after a completed step. The
+    ``checkpoint_reason`` discriminator distinguishes the two without having
+    to infer from ``suspension_info`` being unset.
 
     Attributes:
         checkpoint_id: Unique identifier (auto-generated UUID).
@@ -81,7 +84,16 @@ class RunCheckpoint(BaseModel):
             state, recursive to arbitrary nesting depth. The two keys are
             mutually exclusive: a suspended step is either an agent or a
             nested workflow.
-        suspension_info: Details about the suspension that produced this checkpoint.
+        suspension_info: Details about the suspension that produced this
+            checkpoint. Set only for HITL suspension checkpoints
+            (``checkpoint_reason == "hitl_suspend"``); ``None`` for step /
+            crash-safe cursor checkpoints, which are not suspensions.
+        checkpoint_reason: Why this checkpoint was written. ``"hitl_suspend"``
+            (the default) for a checkpoint produced by a human-in-the-loop
+            suspension; ``"step"`` for a thin cursor snapshot written after a
+            completed step; ``"crash_safe"`` for a defensively written cursor
+            snapshot. A step/crash checkpoint is not a suspension and carries
+            no ``suspension_info``.
         created_at: When the checkpoint was created (UTC).
     """
 
@@ -92,5 +104,45 @@ class RunCheckpoint(BaseModel):
     checkpoint_type: Literal["orchestration", "agent"]
     schema_version: int = CHECKPOINT_SCHEMA_VERSION
     state: dict[str, Any]
-    suspension_info: SuspensionInfo
+    suspension_info: SuspensionInfo | None = None
+    checkpoint_reason: Literal["hitl_suspend", "step", "crash_safe"] = "hitl_suspend"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class StepRecord(BaseModel):
+    """An append-only record of one completed step's result.
+
+    Written to the step-result journal (see ``CheckpointStore.append_step``)
+    when step-level durability is enabled. On resume, the runtime consults the
+    journal by ``step_path`` and injects a recorded ``result`` instead of
+    re-dispatching the step, so a completed side-effecting step runs at most
+    once across the run and all its resumes. The journal carries the
+    correctness-critical "what side effects happened" data; the
+    ``RunCheckpoint`` cursor carries only "where was I".
+
+    Frozen and JSON-serializable, mirroring how ``RunCheckpoint`` is
+    normalized for persistence.
+
+    Attributes:
+        run_id: The run this step belongs to. Together with ``step_path`` it
+            forms the step key that is stable across the run and all resumes.
+        step_path: Deterministic position of the step in the execution tree
+            (e.g. ``"seq#2/agent/turn#3/tool#1:send_email"``). Composed from
+            positional indices the runtime already holds, not content hashes,
+            so it is identical on the original run and every resume.
+        step_kind: The kind of step this records.
+        result: Serialized step output (e.g. a ``tool_result`` message
+            payload) to inject on replay.
+        schema_version: Version for forward-compatibility checking; defaults
+            to ``CHECKPOINT_SCHEMA_VERSION``.
+        created_at: When the step completed and was recorded (UTC).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    run_id: str
+    step_path: str
+    step_kind: Literal["tool_call", "orchestration_step", "agent_turn"]
+    result: dict[str, Any]
+    schema_version: int = CHECKPOINT_SCHEMA_VERSION
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

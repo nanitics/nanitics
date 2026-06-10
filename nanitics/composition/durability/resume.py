@@ -273,6 +273,12 @@ class ResumeService:
         if checkpoint is None:
             raise ValueError(f"No checkpoint for run_id={run_id!r}")
 
+        if checkpoint.suspension_info is None:
+            raise ValueError(
+                f"Checkpoint for run_id={run_id!r} is not a HITL suspension "
+                f"(checkpoint_reason={checkpoint.checkpoint_reason!r}); HITL resume "
+                f"requires a suspension checkpoint."
+            )
         expected = checkpoint.suspension_info.request_id
         if response.request_id != expected:
             raise ValueError(

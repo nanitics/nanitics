@@ -227,6 +227,10 @@ class Workflow(ABC):
             )
 
     def _emit_resumed(self, checkpoint: RunCheckpoint, step_name: str | None = None) -> None:
+        # Resume currently only happens from a HITL suspension, so suspension_info
+        # is always set here. Step-level crash/step resume must revisit this emit:
+        # ExecutionResumedEvent.suspension_id is required and a crash resume has none.
+        assert checkpoint.suspension_info is not None
         self._emitter.emit(
             ExecutionResumedEvent(
                 trace_id=self._emitter.trace_id,

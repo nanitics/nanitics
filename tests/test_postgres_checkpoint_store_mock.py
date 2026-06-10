@@ -5,11 +5,25 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
-from nanitics.composition.durability.models import RunCheckpoint, SuspensionInfo
+from nanitics.composition.durability.models import RunCheckpoint, StepRecord, SuspensionInfo
 from nanitics.composition.durability.postgres_checkpoint_store import (
     PostgresCheckpointStore,
     get_checkpoint_schema_sql,
 )
+
+
+def _make_step(
+    *,
+    run_id: str = "run-1",
+    step_path: str = "seq#0/tool#0:send_email",
+    result: dict | None = None,
+) -> StepRecord:
+    return StepRecord(
+        run_id=run_id,
+        step_path=step_path,
+        step_kind="tool_call",
+        result=result if result is not None else {"content": "ok"},
+    )
 
 
 def _make_pool() -> tuple[MagicMock, AsyncMock]:
@@ -49,6 +63,12 @@ class TestGetCheckpointSchemaSql:
         sql = get_checkpoint_schema_sql()
         assert "CREATE TABLE IF NOT EXISTS checkpoints" in sql
         assert "CREATE INDEX IF NOT EXISTS idx_checkpoints_run_created" in sql
+
+    def test_includes_step_journal_table_keyed_on_run_and_step_path(self) -> None:
+        sql = get_checkpoint_schema_sql()
+        assert "CREATE TABLE IF NOT EXISTS step_journal" in sql
+        assert "PRIMARY KEY (run_id, step_path)" in sql
+        assert "CREATE INDEX IF NOT EXISTS idx_step_journal_run_seq" in sql
 
 
 class TestPostgresCheckpointStoreMock:
@@ -137,10 +157,12 @@ class TestPostgresCheckpointStoreMock:
 
         await store.delete_for_run("run-1")
 
-        conn.execute.assert_called_once()
-        args = conn.execute.call_args[0]
-        assert args[0] == "DELETE FROM checkpoints WHERE run_id = $1"
-        assert args[1] == "run-1"
+        assert conn.execute.call_count == 2
+        first_call, second_call = conn.execute.call_args_list
+        assert first_call[0][0] == "DELETE FROM checkpoints WHERE run_id = $1"
+        assert first_call[0][1] == "run-1"
+        assert second_call[0][0] == "DELETE FROM step_journal WHERE run_id = $1"
+        assert second_call[0][1] == "run-1"
 
     async def test_delete_for_run_is_silent_when_no_rows_match(self) -> None:
         pool, conn = _make_pool()
@@ -172,3 +194,53 @@ class TestPostgresCheckpointStoreMock:
 
         assert result is not None
         assert result.checkpoint_id == "cp-2"
+
+    async def test_append_step_issues_upsert_with_bound_params(self) -> None:
+        pool, conn = _make_pool()
+        store = PostgresCheckpointStore(pool)
+        record = _make_step()
+
+        await store.append_step(record)
+
+        conn.execute.assert_called_once()
+        args = conn.execute.call_args[0]
+        assert "INSERT INTO step_journal (run_id, step_path, created_at, data)" in args[0]
+        assert "ON CONFLICT (run_id, step_path)" in args[0]
+        assert args[1] == record.run_id
+        assert args[2] == record.step_path
+        assert args[3] == record.created_at
+        assert args[4] == record.model_dump_json()
+
+    async def test_load_journal_returns_records_in_order_for_both_data_shapes(self) -> None:
+        pool, conn = _make_pool()
+        first = _make_step(step_path="seq#0/tool#0:a")
+        second = _make_step(step_path="seq#0/tool#1:b")
+        # First row arrives as a JSON string, second as a decoded dict — exercises both
+        # the str (model_validate_json) and dict (model_validate) branches.
+        conn.fetch = AsyncMock(
+            return_value=[
+                {"data": first.model_dump_json()},
+                {"data": second.model_dump(mode="json")},
+            ]
+        )
+        store = PostgresCheckpointStore(pool)
+
+        records = await store.load_journal("run-1")
+
+        sql = conn.fetch.call_args[0][0]
+        assert "SELECT data FROM step_journal" in sql
+        assert "WHERE run_id = $1" in sql
+        assert "ORDER BY seq ASC" in sql
+        assert conn.fetch.call_args[0][1] == "run-1"
+        assert [r.step_path for r in records] == ["seq#0/tool#0:a", "seq#0/tool#1:b"]
+        assert records[0].model_dump() == first.model_dump()
+        assert records[1].model_dump() == second.model_dump()
+
+    async def test_load_journal_returns_empty_when_no_rows(self) -> None:
+        pool, conn = _make_pool()
+        conn.fetch = AsyncMock(return_value=[])
+        store = PostgresCheckpointStore(pool)
+
+        records = await store.load_journal("missing")
+
+        assert records == []

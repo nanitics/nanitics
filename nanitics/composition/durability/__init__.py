@@ -2,6 +2,7 @@ from nanitics.composition.durability.models import (
     CHECKPOINT_SCHEMA_VERSION,
     CheckpointVersionError,
     RunCheckpoint,
+    StepRecord,
     SuspensionInfo,
 )
 from nanitics.composition.durability.resume import (
@@ -38,6 +39,7 @@ __all__ = [
     "ResumeResult",
     "ResumeService",
     "RunCheckpoint",
+    "StepRecord",
     "SuspendExecution",
     "SuspendedRun",
     "SuspensionInfo",
