@@ -21,9 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one-step replay window: a completed-and-journaled step is not re-run; the
   single in-flight step at interruption may repeat, so side-effecting tools
   should be idempotent. Current coverage: the `Sequential` orchestrator at step
-  granularity, plus tool-call granularity inside `ReActAgent` (see below). The
-  other orchestrators and finer granularity for the non-ReAct agent types are
-  not yet covered.
+  granularity (and the `Loop` orchestrator at per-iteration granularity), plus
+  tool-call granularity inside `ReActAgent` (see below). The remaining
+  orchestrators (`Conditional`, `Parallel`, `DAG`) and finer granularity for the
+  non-ReAct agent types are not yet covered.
 - **Agent-internal crash resume for `ReActAgent` (tool-call granularity).** A
   crashed single-agent run resumes from the last completed tool batch without
   re-firing tools it already ran — completed batches replay from message

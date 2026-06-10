@@ -13,6 +13,8 @@ implementation plan. These tests exercise the agent-agnostic orchestration path.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 
 from nanitics.capabilities.errors.handler import ErrorHandler
@@ -28,7 +30,9 @@ from nanitics.composition.durability.resume import (
     SuspendedRun,
 )
 from nanitics.composition.durability.store import InMemoryCheckpointStore
-from nanitics.composition.orchestration.adapters import FunctionStep
+from nanitics.composition.orchestration.adapters import FunctionStep, WorkflowStep
+from nanitics.composition.orchestration.loop import Loop
+from nanitics.composition.orchestration.protocol import StepResult
 from nanitics.composition.orchestration.sequential import Sequential
 from nanitics.hitl import InMemoryHitlRequestStore
 from nanitics.infrastructure import MockLLMClient
@@ -654,3 +658,174 @@ def _approve_tool(calls: dict[str, int]) -> FunctionTool:
         return f"approved {label}"
 
     return approve
+
+
+# ---------------------------------------------------------------------------
+# Phase 2c — orchestration-level per-iteration cursor for the Loop orchestrator.
+#
+# Loop mirrors Sequential's 2a step cursor over iterations: after each
+# *continuing* iteration (one that did not satisfy the stop condition) a cursor
+# pointing at the next iteration plus a journal record are written, so an
+# interrupted loop resumes at iteration+1 without re-running completed
+# iterations. The in-flight iteration at crash time may repeat (the one-step
+# replay window).
+# ---------------------------------------------------------------------------
+
+
+def _loop_body(fire_counts: dict[str, int], *, crash_input: str | None = None) -> FunctionStep:
+    """A loop body that counts invocations per input and chains its output.
+
+    Each iteration receives a distinct input (the prior output), so
+    ``fire_counts`` keyed by input is a per-iteration fire count. With
+    ``crash_input`` set, the body raises the *first* time it sees that input
+    (simulating a crash mid-iteration) and succeeds on the re-run.
+    """
+
+    async def fn(x: object) -> str:
+        key = str(x)
+        fire_counts[key] = fire_counts.get(key, 0) + 1
+        if crash_input is not None and key == crash_input and fire_counts[key] == 1:
+            raise RuntimeError(f"crash on input {key!r}")
+        return f"{key}->o"
+
+    return FunctionStep(name="body", fn=fn)
+
+
+def _stop_at(n: int) -> Callable[[StepResult, int], bool]:
+    return lambda _result, iteration: iteration >= n
+
+
+class TestLoopStepDurability:
+    async def test_cursor_and_journal_written_after_each_continuing_iteration(self) -> None:
+        fire_counts: dict[str, int] = {}
+        store = InMemoryCheckpointStore()
+        loop = Loop(
+            name="w",
+            step=_loop_body(fire_counts),
+            condition=_stop_at(3),
+            max_iterations=5,
+            emitter=make_emitter(),
+            checkpoint_store=store,
+            run_id="r",
+            step_checkpoints=True,
+        )
+
+        result = await loop.execute("in")
+
+        assert result.output == "in->o->o->o"  # 3 iterations chained
+        journal = await store.load_journal("r")
+        # Only the two *continuing* iterations journal; the stopping one does not.
+        assert [rec.step_path for rec in journal] == ["loop#1", "loop#2"]
+        assert all(rec.step_kind == "orchestration_step" for rec in journal)
+        cursor = await store.load("r")
+        assert cursor is not None
+        assert cursor.checkpoint_reason == "step"
+        assert cursor.suspension_info is None
+        assert cursor.state["iteration"] == 3  # points at the next iteration
+
+    async def test_resume_skips_completed_iterations(self) -> None:
+        fire_counts: dict[str, int] = {}
+        store = InMemoryCheckpointStore()
+        loop = Loop(
+            name="w",
+            step=_loop_body(fire_counts, crash_input="in->o->o"),  # crash entering iteration 3
+            condition=_stop_at(3),
+            max_iterations=5,
+            emitter=make_emitter(),
+            checkpoint_store=store,
+            run_id="r",
+            step_checkpoints=True,
+        )
+
+        with pytest.raises(RuntimeError, match="crash on input"):
+            await loop.execute("in")
+        assert fire_counts == {"in": 1, "in->o": 1, "in->o->o": 1}
+
+        cursor = await store.load("r")
+        assert cursor is not None
+        assert cursor.state["iteration"] == 3
+        result = await loop.execute("in", resume_from=cursor)
+
+        assert result.output == "in->o->o->o"
+        # Iterations 1 and 2 completed and journaled — not re-run on resume.
+        # Iteration 3 was in flight at crash — it repeats exactly once (the
+        # one-step replay window of design-rationale §2).
+        assert fire_counts == {"in": 1, "in->o": 1, "in->o->o": 2}
+
+    async def test_no_checkpoints_when_disabled(self) -> None:
+        fire_counts: dict[str, int] = {}
+        store = InMemoryCheckpointStore()
+        loop = Loop(
+            name="w",
+            step=_loop_body(fire_counts),
+            condition=_stop_at(3),
+            max_iterations=5,
+            emitter=make_emitter(),
+            checkpoint_store=store,
+            run_id="r",
+        )  # step_checkpoints defaults False
+
+        await loop.execute("in")
+
+        assert await store.load("r") is None
+        assert await store.load_journal("r") == []
+
+    async def test_durable_run_resumes_interrupted_loop(self) -> None:
+        fire_counts: dict[str, int] = {}
+        store = InMemoryCheckpointStore()
+        loop = Loop(
+            name="w",
+            step=_loop_body(fire_counts, crash_input="in->o->o"),
+            condition=_stop_at(3),
+            max_iterations=5,
+            emitter=make_emitter(),
+            checkpoint_store=store,
+            run_id="r",
+            step_checkpoints=True,
+        )
+        durable = DurableRun(loop, hitl_store=InMemoryHitlRequestStore(), checkpoint_store=store, run_id="r")
+        with pytest.raises(RuntimeError, match="crash on input"):
+            await durable.start("in")
+
+        result = await durable.resume_from_checkpoint()
+
+        assert isinstance(result, ResumeResult)
+        assert result.output == "in->o->o->o"
+        assert fire_counts == {"in": 1, "in->o": 1, "in->o->o": 2}
+
+    async def test_nested_workflow_body_resumes_from_step_cursor(self) -> None:
+        """A Loop whose body is a nested ``WorkflowStep`` resumes from a step
+        cursor (which carries no ``nested_checkpoint``) by running the iteration
+        fresh — exercising the softened resume branch that previously asserted a
+        nested frame was always present.
+        """
+        fire_counts: dict[str, int] = {}
+        store = InMemoryCheckpointStore()
+        inner = Sequential(
+            name="inner",
+            steps=[_loop_body(fire_counts, crash_input="in->o")],  # crash entering iteration 2
+            emitter=make_emitter(),
+        )
+        loop = Loop(
+            name="w",
+            step=WorkflowStep(inner),
+            condition=_stop_at(2),
+            max_iterations=5,
+            emitter=make_emitter(),
+            checkpoint_store=store,
+            run_id="r",
+            step_checkpoints=True,
+        )
+
+        with pytest.raises(RuntimeError, match="crash on input"):
+            await loop.execute("in")
+        assert fire_counts == {"in": 1, "in->o": 1}
+
+        cursor = await store.load("r")
+        assert cursor is not None
+        assert cursor.state["iteration"] == 2
+        assert "nested_checkpoint" not in cursor.state  # a step cursor, not a suspension
+        result = await loop.execute("in", resume_from=cursor)
+
+        assert result.output == "in->o->o"
+        assert fire_counts == {"in": 1, "in->o": 2}  # iteration 2 (in flight) repeats once
