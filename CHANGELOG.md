@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Step-level durability (opt-in, in progress).** Workflows can checkpoint
+  after each completed step so an interrupted run resumes without re-executing
+  completed steps. Enable with `step_checkpoints=True` on a
+  `Workflow`/`Sequential`, or `DurableRun(..., step_checkpoints=True)`. Adds a
+  step-result journal to the `CheckpointStore` protocol (`append_step` /
+  `load_journal`, implemented for `InMemoryCheckpointStore` and
+  `PostgresCheckpointStore`), a new public `StepRecord` model, and non-HITL
+  resume entrypoints `DurableRun.resume_from_checkpoint` /
+  `ResumeService.resume_interrupted`. The guarantee is at-least-once with a
+  one-step replay window: a completed-and-journaled step is not re-run; the
+  single in-flight step at interruption may repeat, so side-effecting tools
+  should be idempotent. Current coverage: the `Sequential` orchestrator at step
+  granularity. Agent-internal (tool-call) granularity and the other
+  orchestrators are not yet covered.
+
+### Changed
+
+- **Checkpoint schema version 3 → 4.** `RunCheckpoint.suspension_info` is now
+  optional (a step/crash cursor checkpoint is not a suspension) and gains a
+  `checkpoint_reason` discriminator (`"hitl_suspend"` / `"step"` /
+  `"crash_safe"`). Additive and backward-compatible for HITL checkpoints. A v3
+  checkpoint loaded by v4 code raises `CheckpointVersionError` — drain in-flight
+  suspended runs before upgrading.
+
 ## [0.10.1] - 2026-06-10
 
 ### Fixed
