@@ -341,6 +341,23 @@ class AnthropicLLMClient:
                 f"Request timed out after {self._request_timeout}s",
                 provider="anthropic",
             ) from None
+        except json.JSONDecodeError as e:
+            # A truncated or corrupted Server-Sent-Event chunk makes the
+            # anthropic SDK's unguarded ``json.loads`` in its SSE decoder
+            # raise a bare ``json.JSONDecodeError`` mid-stream — a transport
+            # hiccup, not a model or API fault. Left unhandled it would
+            # escape ``generate`` and break the "returns ``LLMResponse`` or
+            # raises ``LLM*Error``" contract. Translate it to a transient
+            # ``LLMProviderError`` (no ``status_code`` → classified RETRYABLE),
+            # mirroring the ``APIConnectionError`` arm below: like a dropped
+            # connection, a re-issued request almost always streams cleanly.
+            # Retry policy lives in the wrapping layer (the client sets
+            # ``max_retries=0``), so this arm classifies and raises rather
+            # than retrying in place.
+            raise LLMProviderError(
+                f"Malformed streaming response from Anthropic: {e}",
+                provider="anthropic",
+            ) from e
         except anthropic.RateLimitError as e:
             # Anthropic 429: distinguish a true transient rate-limit from
             # quota exhaustion. ``error.type == "insufficient_quota"`` is

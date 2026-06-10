@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -819,6 +820,64 @@ class TestAnthropicLLMClient:
                     messages=[Message(role="user", content="hi")],
                 )
             assert exc_info.value.provider == "anthropic"
+
+    async def test_jsondecodeerror_in_get_final_message_mapped_transient(self) -> None:
+        # A truncated SSE chunk makes the anthropic SDK's unguarded
+        # ``json.loads`` raise a bare ``json.JSONDecodeError`` while
+        # ``get_final_message`` consumes the stream. It must be translated to
+        # a transient ``LLMProviderError`` (no status_code → RETRYABLE), never
+        # escape raw.
+        client = self._make_client()
+        stream_obj = AsyncMock()
+        stream_obj.get_final_message = AsyncMock(
+            side_effect=json.JSONDecodeError("Expecting property name", doc="{", pos=1)
+        )
+
+        cm = AsyncMock()
+        cm.__aenter__ = AsyncMock(return_value=stream_obj)
+        cm.__aexit__ = AsyncMock(return_value=False)
+
+        with patch.object(client._client.messages, "stream", return_value=cm):
+            with pytest.raises(LLMProviderError, match="Malformed streaming response") as exc_info:
+                await client.generate(
+                    system_prompt="test",
+                    messages=[Message(role="user", content="hi")],
+                )
+            assert exc_info.value.provider == "anthropic"
+            # No status_code means LLMProviderError is classified RETRYABLE,
+            # so the wrapping retry/circuit layer can recover the run.
+            assert exc_info.value.status_code is None
+
+    async def test_jsondecodeerror_in_text_stream_mapped_transient(self) -> None:
+        # The same corruption can surface while streaming tokens through the
+        # ``on_token`` callback rather than at ``get_final_message``. Both
+        # paths run inside the same try and must map identically.
+        client = self._make_client()
+
+        async def _text_stream():
+            yield "Hel"
+            raise json.JSONDecodeError("Expecting value", doc="", pos=0)
+
+        stream_obj = AsyncMock()
+        stream_obj.text_stream = _text_stream()
+        stream_obj.get_final_message = AsyncMock()
+
+        cm = AsyncMock()
+        cm.__aenter__ = AsyncMock(return_value=stream_obj)
+        cm.__aexit__ = AsyncMock(return_value=False)
+
+        tokens: list[str] = []
+        with patch.object(client._client.messages, "stream", return_value=cm):
+            with pytest.raises(LLMProviderError, match="Malformed streaming response") as exc_info:
+                await client.generate(
+                    system_prompt="test",
+                    messages=[Message(role="user", content="hi")],
+                    on_token=tokens.append,
+                )
+            assert exc_info.value.provider == "anthropic"
+            assert exc_info.value.status_code is None
+        # The token emitted before corruption was still delivered.
+        assert tokens == ["Hel"]
 
     async def test_request_deadline(self) -> None:
         client = self._make_client(request_timeout=0.1)

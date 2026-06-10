@@ -20,7 +20,7 @@ total message list.
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict
 
@@ -29,7 +29,17 @@ from nanitics.infrastructure.errors import ToolResultTooLargeError
 from nanitics.infrastructure.llm.protocol import LLMClient, Message, ToolCall
 from nanitics.infrastructure.observability.emitter import EventEmitter
 from nanitics.infrastructure.observability.events import ToolResultPolicyAppliedEvent
-from nanitics.strategies.tools.protocol import ToolResult
+
+if TYPE_CHECKING:
+    # ``ToolResult`` lives in ``strategies`` (a higher layer than this capability
+    # module). Importing it at runtime inverts the layering and forms a circular
+    # import — importing ``strategies.tools.protocol`` pulls in ``strategies``,
+    # whose agent strategies import ``ToolResultPolicy`` back from this module
+    # while it is still initializing. The class is needed only in annotations
+    # (lazy under ``from __future__ import annotations``) and for the two
+    # instantiations below, which import it locally. See the agent strategies'
+    # top-level ``ToolResultPolicy`` import for the correct (downward) direction.
+    from nanitics.strategies.tools.protocol import ToolResult
 
 DEFAULT_TOOL_SUMMARY_PROMPT = (
     "Summarize the following tool result for an agent that needs to act on it.\n"
@@ -236,6 +246,8 @@ class TruncateToolResult:
         self._marker = marker
 
     async def apply(self, result: ToolResult, context: ToolResultContext) -> ToolResult:
+        from nanitics.strategies.tools.protocol import ToolResult
+
         tokens = context.token_counter.count_text(result.content)
         if tokens <= self._max_tokens:
             return result
@@ -293,6 +305,8 @@ class SummarizeToolResult:
         self._summary_prompt = summary_prompt
 
     async def apply(self, result: ToolResult, context: ToolResultContext) -> ToolResult:
+        from nanitics.strategies.tools.protocol import ToolResult
+
         tokens = context.token_counter.count_text(result.content)
         if tokens <= self._max_tokens:
             return result
