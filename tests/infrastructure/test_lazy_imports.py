@@ -1,6 +1,8 @@
 """Tests for optional dependency lazy imports in infrastructure __init__ modules."""
 
 import importlib
+import importlib.util
+import subprocess
 import sys
 from unittest.mock import patch
 
@@ -156,41 +158,103 @@ class TestToolsLazyImports:
             mod.create_web_search_tool(api_key="x")  # type: ignore[union-attr]
 
 
-class TestMCPLazyImports:
-    def test_mcp_unavailable_sets_all_none(self) -> None:
-        mod = _reload_without(
-            "nanitics.infrastructure.mcp",
-            [
-                "nanitics.infrastructure.mcp.client",
-                "nanitics.infrastructure.mcp._tool",
-            ],
-        )
-        assert mod.MCPClient is None  # type: ignore[union-attr]
-        assert mod.MCPStdioParameters is None  # type: ignore[union-attr]
-        assert mod.MCPTool is None  # type: ignore[union-attr]
+class TestMCPExtraDetection:
+    """The mcp subpackage maps the *missing-extra* case to ``None`` via an
+    explicit ``find_spec`` check, and lets every other import failure (a
+    circular import, a genuinely broken module) propagate rather than
+    silently nulling out MCP support.
+    """
 
-    def test_mcp_unavailable_propagates_to_infrastructure(self) -> None:
-        # Drop the cached mcp subpackage so reloading nanitics.infrastructure
-        # re-imports it; block the leaf modules so the subpackage's __init__
-        # exercises its try/except and re-exports the three names as None.
-        sentinel = object()
-        saved_mcp = sys.modules.pop("nanitics.infrastructure.mcp", sentinel)
+    def test_extra_absent_sets_all_none(self) -> None:
+        # Simulate the optional ``mcp`` distribution being absent: find_spec
+        # returns None, so the three symbols re-export as None.
+        import nanitics.infrastructure.mcp as mcp_pkg
+
+        with patch.object(importlib.util, "find_spec", return_value=None):
+            reloaded = importlib.reload(mcp_pkg)
         try:
-            mod = _reload_without(
-                "nanitics.infrastructure",
-                [
-                    "nanitics.infrastructure.mcp.client",
-                    "nanitics.infrastructure.mcp._tool",
-                ],
-            )
-            assert mod.MCPClient is None  # type: ignore[union-attr]
-            assert mod.MCPStdioParameters is None  # type: ignore[union-attr]
-            assert mod.MCPTool is None  # type: ignore[union-attr]
+            assert reloaded.MCPClient is None
+            assert reloaded.MCPStdioParameters is None
+            assert reloaded.MCPTool is None
         finally:
-            if saved_mcp is sentinel:
-                sys.modules.pop("nanitics.infrastructure.mcp", None)
-            else:
-                sys.modules["nanitics.infrastructure.mcp"] = saved_mcp  # type: ignore[assignment]
+            importlib.reload(mcp_pkg)  # restore the real symbols
+
+    def test_real_import_failure_propagates(self) -> None:
+        # The extra is present (find_spec is truthy) but a real module is
+        # broken: the ImportError must surface, not be swallowed into None.
+        import nanitics.infrastructure.mcp as mcp_pkg
+
+        try:
+            with (
+                patch.dict(sys.modules, {"nanitics.infrastructure.mcp._tool": None}),
+                pytest.raises(ImportError),
+            ):
+                importlib.reload(mcp_pkg)
+        finally:
+            importlib.reload(mcp_pkg)  # restore a clean module
+
+
+class TestMCPLazyReExportFromInfrastructure:
+    """``nanitics.infrastructure`` re-exports the MCP symbols lazily (PEP 562
+    ``__getattr__``) to avoid a circular import at load time, while keeping
+    ``from nanitics.infrastructure import MCPClient`` working.
+    """
+
+    def test_lazy_reexport_matches_subpackage(self) -> None:
+        import nanitics.infrastructure as infra
+        import nanitics.infrastructure.mcp as mcp_pkg
+
+        assert infra.MCPClient is mcp_pkg.MCPClient
+        assert infra.MCPStdioParameters is mcp_pkg.MCPStdioParameters
+        assert infra.MCPTool is mcp_pkg.MCPTool
+
+    def test_unknown_attribute_raises(self) -> None:
+        import nanitics.infrastructure as infra
+
+        with pytest.raises(AttributeError, match="no attribute 'does_not_exist'"):
+            _ = infra.does_not_exist
+
+    def test_extra_absent_propagates_none_through_lazy_reexport(self) -> None:
+        import nanitics.infrastructure as infra
+        import nanitics.infrastructure.mcp as mcp_pkg
+
+        try:
+            with patch.object(importlib.util, "find_spec", return_value=None):
+                importlib.reload(mcp_pkg)
+                # Resolved lazily through infrastructure.__getattr__.
+                assert infra.MCPClient is None
+        finally:
+            # Restore the real symbols with find_spec unpatched, so the
+            # reload re-imports the genuine classes rather than re-nulling.
+            importlib.reload(mcp_pkg)
+
+
+class TestImportOrderCycle:
+    """Regression for the circular import that silently disabled MCP.
+
+    Importing ``nanitics.safety`` before ``nanitics.infrastructure`` once
+    tripped a cycle (safety → infrastructure → mcp → strategies → codeact →
+    safety) whose ImportError was swallowed, nulling out the MCP symbols.
+    Run in a fresh interpreter so the import order is the one under test.
+    """
+
+    def test_safety_imported_first_keeps_mcp_available(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import nanitics.safety\n"
+                "from nanitics.infrastructure import MCPClient, MCPStdioParameters, MCPTool\n"
+                "assert MCPClient is not None, 'MCPClient nulled by import-order cycle'\n"
+                "assert MCPStdioParameters is not None\n"
+                "assert MCPTool is not None\n"
+                "print('ok')\n",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "ok" in result.stdout
 
 
 class TestReloadWithoutHelperRestoresParentAttributes:

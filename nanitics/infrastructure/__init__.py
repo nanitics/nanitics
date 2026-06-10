@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from nanitics.infrastructure.embeddings import (
     EmbeddingClient,
     MockEmbeddingClient,
@@ -50,11 +54,6 @@ from nanitics.infrastructure.llm import (
     TextContentBlock,
     ToolCall,
     ToolSchema,
-)
-from nanitics.infrastructure.mcp import (
-    MCPClient,
-    MCPStdioParameters,
-    MCPTool,
 )
 from nanitics.infrastructure.observability import (
     LEVEL_ORDER,
@@ -195,6 +194,34 @@ from nanitics.infrastructure.observability import (
     is_level_included,
     trace_events_from_stored,
 )
+
+if TYPE_CHECKING:
+    # Re-exported lazily at runtime via ``__getattr__`` (see below). Listing
+    # them here keeps ``from nanitics.infrastructure import MCPClient`` resolvable
+    # for type checkers and IDEs without importing the ``mcp`` subpackage eagerly.
+    from nanitics.infrastructure.mcp import (
+        MCPClient,
+        MCPStdioParameters,
+        MCPTool,
+    )
+
+# The ``mcp`` subpackage is re-exported lazily rather than imported at module
+# load. Eagerly importing it here forms a circular import: ``mcp`` pulls in
+# ``nanitics.strategies`` (for the ``Tool`` / ``ToolResult`` protocol), which
+# reaches back into ``nanitics.safety`` — and ``nanitics.safety`` triggers this
+# very module while still initializing. Deferring the import to first attribute
+# access lets ``nanitics.safety`` import before ``nanitics.infrastructure`` has
+# finished, regardless of order. See ``nanitics/infrastructure/mcp/__init__.py``.
+_LAZY_MCP_EXPORTS = frozenset({"MCPClient", "MCPStdioParameters", "MCPTool"})
+
+
+def __getattr__(name: str) -> object:
+    if name in _LAZY_MCP_EXPORTS:
+        from nanitics.infrastructure import mcp
+
+        return getattr(mcp, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "LEVEL_ORDER",

@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-06-10
+
+### Fixed
+
+- **`AnthropicLLMClient.generate` no longer leaks a bare `json.JSONDecodeError`
+  on a malformed stream chunk.** A truncated or corrupted Server-Sent-Event
+  payload makes the `anthropic` SDK's unguarded `json.loads` in its SSE decoder
+  raise a stdlib `json.JSONDecodeError` mid-stream — a transport hiccup, not a
+  model or API fault. It previously escaped the client and broke the "returns
+  `LLMResponse` or raises `LLM*Error`" contract, killing the run. It is now
+  translated to a transient `LLMProviderError` (no `status_code`, so classified
+  RETRYABLE), mirroring the `APIConnectionError` path; the wrapping retry/circuit
+  layer recovers it. No retry is added inside the client, which keeps
+  `max_retries=0` and leaves retry policy to the caller.
+- **A circular import no longer silently disables all MCP support.** Importing
+  `nanitics.safety` (or anything that pulls in `cancellable_dispatch`) before
+  `nanitics.infrastructure` finished initializing tripped a cycle
+  (`infrastructure` → `mcp` → `strategies` → `safety`) whose `ImportError` was
+  swallowed by the optional-extra guard in `infrastructure/mcp/__init__.py`,
+  re-exporting `MCPClient`, `MCPStdioParameters`, and `MCPTool` as `None` with no
+  error. Every MCP connection then failed with `'NoneType' object is not
+  callable`. Two changes fix it at the source: `infrastructure/__init__`
+  re-exports the MCP symbols lazily (PEP 562 `__getattr__`) instead of importing
+  the subpackage eagerly, so the cycle never forms regardless of import order;
+  and the optional-extra guard now detects a missing `mcp` distribution
+  explicitly via `importlib.util.find_spec`, mapping only a genuinely absent
+  extra to `None` and letting every other `ImportError` propagate loudly. Public
+  import paths (`from nanitics.infrastructure import MCPClient`) are unchanged.
+- **Broke a latent import cycle between `capabilities.context.tool_result` and
+  the agent strategies.** `tool_result` imported `ToolResult` from `strategies`
+  at runtime (a layering inversion), while the agent strategies import
+  `ToolResultPolicy` back from `tool_result`; the cycle was previously masked by
+  an incidental eager import and surfaced once that was removed. `tool_result`
+  now imports `ToolResult` only where used, so the capability layer no longer
+  depends on `strategies` at import time. No public symbol, signature, or import
+  path changed.
+
 ## [0.10.0] - 2026-06-05
 
 ### Changed
