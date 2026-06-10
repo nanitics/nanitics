@@ -12,6 +12,7 @@ from nanitics.composition.durability.models import (
     CHECKPOINT_SCHEMA_VERSION,
     CheckpointVersionError,
     RunCheckpoint,
+    StepRecord,
 )
 from nanitics.composition.durability.store import CheckpointStore
 from nanitics.composition.durability.suspension import SuspendExecution
@@ -50,6 +51,11 @@ class Workflow(ABC):
         run_id: Identifier for the run, used in checkpoint records.
             Auto-generated if not provided.
         trace_store: Optional persistent trace store for run registration.
+        step_checkpoints: When ``True`` (and a ``checkpoint_store`` is set),
+            a thin cursor checkpoint plus a journal record are written after
+            each completed step, so an interrupted run can resume via
+            ``resume_interrupted`` without re-executing completed steps.
+            Opt-in; defaults to ``False`` (suspend-only checkpointing).
     """
 
     def __init__(
@@ -61,6 +67,7 @@ class Workflow(ABC):
         checkpoint_store: CheckpointStore | None = None,
         run_id: str | None = None,
         trace_store: PersistentTraceStore | None = None,
+        step_checkpoints: bool = False,
     ) -> None:
         self._name = name
         self._default_emitter = emitter
@@ -69,6 +76,7 @@ class Workflow(ABC):
         self._checkpoint_store = checkpoint_store
         self._run_id = run_id or str(uuid4())
         self._trace_store = trace_store
+        self._step_checkpoints = step_checkpoints
 
     @property
     def name(self) -> str:
@@ -187,6 +195,52 @@ class Workflow(ABC):
             )
         return checkpoint
 
+    async def _save_step_checkpoint(
+        self,
+        state: dict[str, Any],
+        *,
+        step_path: str,
+        result_payload: dict[str, Any],
+    ) -> None:
+        """Persist a cursor checkpoint + journal record after a completed step.
+
+        No-op unless step-level durability is enabled and a store is present.
+        Writes a :class:`RunCheckpoint` with ``checkpoint_reason="step"`` and no
+        ``suspension_info`` (a completed step is not a suspension) recording loop
+        position so ``resume_interrupted`` can skip completed steps, plus a
+        :class:`StepRecord` journalling the step's result so it is not
+        re-executed on resume. This is the step-level-durability write site,
+        distinct from the suspend-only :meth:`_save_checkpoint`.
+        """
+        if not (self._step_checkpoints and self._checkpoint_store):
+            return
+        checkpoint = RunCheckpoint(
+            run_id=self._run_id,
+            checkpoint_type="orchestration",
+            state=self._normalize_for_serialization(state),
+            suspension_info=None,
+            checkpoint_reason="step",
+        )
+        await self._checkpoint_store.save(checkpoint)
+        await self._checkpoint_store.append_step(
+            StepRecord(
+                run_id=self._run_id,
+                step_path=step_path,
+                step_kind="orchestration_step",
+                result=self._normalize_for_serialization(result_payload),
+            )
+        )
+        self._emitter.emit(
+            CheckpointSavedEvent(
+                trace_id=self._emitter.trace_id,
+                span_id=self._emitter.span_id,
+                parent_span_id=self._emitter.parent_span_id,
+                checkpoint_id=checkpoint.checkpoint_id,
+                checkpoint_type="orchestration",
+                run_id=self._run_id,
+            )
+        )
+
     async def _surface_suspension(
         self,
         exc: SuspendExecution,
@@ -227,17 +281,18 @@ class Workflow(ABC):
             )
 
     def _emit_resumed(self, checkpoint: RunCheckpoint, step_name: str | None = None) -> None:
-        # Resume currently only happens from a HITL suspension, so suspension_info
-        # is always set here. Step-level crash/step resume must revisit this emit:
-        # ExecutionResumedEvent.suspension_id is required and a crash resume has none.
-        assert checkpoint.suspension_info is not None
+        # A HITL-suspension resume carries a suspension_id; a step/crash resume
+        # does not. Mirror the agent resume path's convention of an empty
+        # suspension_id when there is no suspension (ExecutionResumedEvent
+        # requires the field to be a str).
+        suspension_id = checkpoint.suspension_info.suspension_id if checkpoint.suspension_info else ""
         self._emitter.emit(
             ExecutionResumedEvent(
                 trace_id=self._emitter.trace_id,
                 span_id=self._emitter.span_id,
                 parent_span_id=self._emitter.parent_span_id,
                 checkpoint_id=checkpoint.checkpoint_id,
-                suspension_id=checkpoint.suspension_info.suspension_id,
+                suspension_id=suspension_id,
                 resumed_from_step=step_name,
             )
         )

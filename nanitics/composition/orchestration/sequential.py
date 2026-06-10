@@ -52,6 +52,7 @@ class Sequential(Workflow):
         checkpoint_store: CheckpointStore | None = None,
         run_id: str | None = None,
         trace_store: PersistentTraceStore | None = None,
+        step_checkpoints: bool = False,
     ) -> None:
         if not steps:
             raise ValueError("Sequential requires at least one step")
@@ -62,8 +63,26 @@ class Sequential(Workflow):
             checkpoint_store=checkpoint_store,
             run_id=run_id,
             trace_store=trace_store,
+            step_checkpoints=step_checkpoints,
         )
         self._steps = steps
+
+    @staticmethod
+    def _serialize_results(intermediate_results: dict[str, StepResult]) -> dict[str, Any]:
+        """Serialize completed step results for a checkpoint state dict.
+
+        Shared by the suspend path and the step-level cursor checkpoint so the
+        two produce an identical ``completed_results`` shape — the resume branch
+        reconstructs ``StepResult``s from it the same way for both.
+        """
+        return {
+            k: {
+                "output": v.output,
+                "metadata": v.metadata,
+                "usage": v.usage.model_dump() if v.usage is not None else None,
+            }
+            for k, v in intermediate_results.items()
+        }
 
     def _workflow_type(self) -> str:
         return "sequential"
@@ -95,7 +114,11 @@ class Sequential(Workflow):
                 intermediate_results[step_name] = StepResult(
                     output=d["output"], metadata=d["metadata"], usage=restored_usage
                 )
-            self._emit_resumed(resume_from, self._steps[start_index].name)
+            # A step/crash cursor checkpoint can point one past the last step
+            # (interrupted after the final step completed). There is no step to
+            # name in that case; the loop below simply finalizes.
+            resumed_step_name = self._steps[start_index].name if start_index < len(self._steps) else None
+            self._emit_resumed(resume_from, resumed_step_name)
 
         for index in range(start_index, len(self._steps)):
             step = self._steps[index]
@@ -122,9 +145,13 @@ class Sequential(Workflow):
                 agent_checkpoint: dict[str, Any] | None = None
                 if resume_from is not None and index == start_index:
                     if isinstance(step, WorkflowStep):
+                        # Present only for a HITL suspension whose suspended step
+                        # is this nested workflow. A step/crash cursor checkpoint
+                        # points at a not-yet-started step, so there is no nested
+                        # frame and the workflow runs fresh.
                         nested = resume_from.state.get("nested_checkpoint")
-                        assert nested is not None
-                        child_resume = self._child_checkpoint(resume_from, nested)
+                        if nested is not None:
+                            child_resume = self._child_checkpoint(resume_from, nested)
                     else:
                         candidate = resume_from.state.get("agent_checkpoint")
                         if candidate:
@@ -141,14 +168,7 @@ class Sequential(Workflow):
                 checkpoint_state: dict[str, Any] = {
                     "orchestrator_type": "sequential",
                     "suspended_step_index": index,
-                    "completed_results": {
-                        k: {
-                            "output": v.output,
-                            "metadata": v.metadata,
-                            "usage": v.usage.model_dump() if v.usage is not None else None,
-                        }
-                        for k, v in intermediate_results.items()
-                    },
+                    "completed_results": self._serialize_results(intermediate_results),
                     "last_output": current_input,
                     "original_input": input,
                 }
@@ -170,6 +190,25 @@ class Sequential(Workflow):
                     step_output=str(result.output) if result.output is not None else None,
                     step_metadata=result.metadata,
                 )
+            )
+
+            # Step-level durability: record a cursor pointing at the *next* step
+            # plus a journal entry for the result just produced, so an
+            # interrupted run resumes here without re-executing this step.
+            await self._save_step_checkpoint(
+                {
+                    "orchestrator_type": "sequential",
+                    "suspended_step_index": index + 1,
+                    "completed_results": self._serialize_results(intermediate_results),
+                    "last_output": current_input,
+                    "original_input": input,
+                },
+                step_path=f"sequential#{index}:{step.name}",
+                result_payload={
+                    "output": result.output,
+                    "metadata": result.metadata,
+                    "usage": result.usage.model_dump() if result.usage is not None else None,
+                },
             )
 
         return StepResult(
