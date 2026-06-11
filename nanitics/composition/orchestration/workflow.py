@@ -26,6 +26,7 @@ from nanitics.infrastructure.observability.events import (
     RunFailedEvent,
     RunStartEvent,
     RunSuspendedEvent,
+    Usage,
     WorkflowCompleteEvent,
     WorkflowErrorEvent,
     WorkflowStartEvent,
@@ -167,6 +168,35 @@ class Workflow(ABC):
         if isinstance(value, list):
             return [Workflow._normalize_for_serialization(item) for item in value]
         return value
+
+    @staticmethod
+    def _serialize_step_result(result: StepResult) -> dict[str, Any]:
+        """Serialize a completed ``StepResult`` for a journal ``result`` payload.
+
+        Captures ``output`` / ``metadata`` / ``usage`` so a concurrent
+        orchestrator's resume branch can reconstruct the step result from the
+        journal (the order-independent, race-immune record of completed
+        branches/nodes) rather than from the cursor checkpoint. Round-trips with
+        :meth:`_restore_step_result`.
+        """
+        return {
+            "output": result.output,
+            "metadata": result.metadata,
+            "usage": result.usage.model_dump() if result.usage is not None else None,
+        }
+
+    @staticmethod
+    def _restore_step_result(payload: dict[str, Any]) -> StepResult:
+        """Reconstruct a ``StepResult`` from a journal ``result`` payload.
+
+        Inverse of :meth:`_serialize_step_result`. Used by the step-cursor resume
+        branch of the concurrent orchestrators (``Parallel`` / ``DAG``) to
+        restore a completed branch/node from its journal record without
+        re-executing it.
+        """
+        usage_dict = payload["usage"]
+        restored_usage = Usage.model_validate(usage_dict) if usage_dict is not None else None
+        return StepResult(output=payload["output"], metadata=payload["metadata"], usage=restored_usage)
 
     async def _save_checkpoint(
         self,

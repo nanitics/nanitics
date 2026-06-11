@@ -51,8 +51,9 @@ class PostgresCheckpointStore:
 
     Stores each :class:`RunCheckpoint` as a single JSONB blob keyed by
     ``checkpoint_id``. ``load(run_id)`` returns the most recent
-    checkpoint for a run, ordered by ``created_at DESC`` with
-    ``checkpoint_id DESC`` as a deterministic tie-break.
+    checkpoint for a run, ordered by ``created_at DESC``, then preferring a HITL
+    suspension over a step cursor, then ``checkpoint_id DESC`` as a final
+    deterministic tie-break.
 
     Args:
         pool: An initialised ``asyncpg.Pool``.
@@ -84,15 +85,19 @@ class PostgresCheckpointStore:
     async def load(self, run_id: str) -> RunCheckpoint | None:
         """Load the most recent checkpoint for a run, or ``None`` if none exists.
 
-        Ordering is ``created_at DESC, checkpoint_id DESC`` so that
-        same-microsecond writes resolve deterministically by id.
+        Ordering is ``created_at DESC``, then a HITL suspension
+        (``data->>'suspension_info'`` non-null) before a step/crash cursor, then
+        ``checkpoint_id DESC``. The suspension tie-break ensures a run that
+        suspended for human input in the same microsecond a sibling step
+        completed loads as the suspension and stays resumable via the HITL path;
+        the ``checkpoint_id`` term keeps any remaining tie deterministic.
         """
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
                 SELECT data FROM checkpoints
                 WHERE run_id = $1
-                ORDER BY created_at DESC, checkpoint_id DESC
+                ORDER BY created_at DESC, ((data ->> 'suspension_info') IS NOT NULL) DESC, checkpoint_id DESC
                 LIMIT 1
                 """,
                 run_id,

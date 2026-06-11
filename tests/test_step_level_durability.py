@@ -13,6 +13,7 @@ implementation plan. These tests exercise the agent-agnostic orchestration path.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 
 import pytest
@@ -30,13 +31,17 @@ from nanitics.composition.durability.resume import (
     SuspendedRun,
 )
 from nanitics.composition.durability.store import InMemoryCheckpointStore
+from nanitics.composition.durability.suspension import SuspendExecution
 from nanitics.composition.orchestration.adapters import FunctionStep, WorkflowStep
+from nanitics.composition.orchestration.dag import DAG, DAGNode
 from nanitics.composition.orchestration.loop import Loop
+from nanitics.composition.orchestration.parallel import Parallel
 from nanitics.composition.orchestration.protocol import StepResult
 from nanitics.composition.orchestration.sequential import Sequential
 from nanitics.hitl import InMemoryHitlRequestStore
 from nanitics.infrastructure import MockLLMClient
 from nanitics.infrastructure.errors import ToolExecutionError
+from nanitics.infrastructure.observability.events import Usage
 from nanitics.strategies import ReActAgent, tool
 from nanitics.strategies.tools import FunctionTool
 from nanitics.tracing import ToolCall
@@ -829,3 +834,380 @@ class TestLoopStepDurability:
 
         assert result.output == "in->o->o"
         assert fire_counts == {"in": 1, "in->o": 2}  # iteration 2 (in flight) repeats once
+
+
+# ---------------------------------------------------------------------------
+# Phase 2c — orchestration-level step cursor for the concurrent orchestrators
+# (Parallel + DAG).
+#
+# Unlike Sequential/Loop there is no single integer cursor: branches/nodes run
+# concurrently and complete in arbitrary order. The completed set on resume is
+# therefore reconstructed from the append-only *journal* (an order-independent
+# union keyed by step path), NOT from the cursor checkpoint — so concurrent
+# completions cannot clobber each other and the latest-by-created_at cursor need
+# only carry ``original_input``. Completed+journaled branches/nodes run at most
+# once; the branches/nodes in flight at crash (up to the degree of concurrency)
+# may each repeat — the concurrent generalization of the one-step replay window.
+# Agent-internal per-branch tool-call durability is OUT of this slice (whole
+# branch/node = one durable step), mirroring the Loop slice.
+# ---------------------------------------------------------------------------
+
+
+def _usage_step(name: str, calls: dict[str, int]) -> FunctionStep:
+    """A branch that returns a usage-bearing ``StepResult``.
+
+    Exercises the ``usage is not None`` arms of the serialize/restore round-trip
+    that the concurrent orchestrators use for journal records.
+    """
+
+    async def fn(x: object) -> StepResult:
+        calls[name] = calls.get(name, 0) + 1
+        return StepResult(output=f"{x}->{name}", usage=Usage(input_tokens=1, output_tokens=2))
+
+    return FunctionStep(name=name, fn=fn)
+
+
+def _branch_crashing_after(
+    name: str,
+    calls: dict[str, int],
+    *,
+    store: InMemoryCheckpointStore,
+    run_id: str,
+    after: int,
+) -> FunctionStep:
+    """A branch that crashes its first call, but only once ``after`` peer journal
+    records exist.
+
+    Polling the shared journal makes "peers completed + journaled, this branch
+    in flight" deterministic under concurrency: the branch yields until its peers
+    have been journaled by the orchestrator's drain loop, then raises — so a crash
+    cannot pre-empt the peers' journal writes regardless of task scheduling order.
+    """
+
+    async def fn(x: object) -> str:
+        while len(await store.load_journal(run_id)) < after:
+            await asyncio.sleep(0)
+        calls[name] = calls.get(name, 0) + 1
+        if calls[name] == 1:
+            raise RuntimeError(f"simulated crash in {name}")
+        return f"{x}->{name}"
+
+    return FunctionStep(name=name, fn=fn)
+
+
+def _suspending_then_ok(name: str, calls: dict[str, int]) -> FunctionStep:
+    """A branch/node that suspends for HITL on its first call, succeeds on resume."""
+
+    async def fn(x: object) -> str:
+        calls[name] = calls.get(name, 0) + 1
+        if calls[name] == 1:
+            raise SuspendExecution(suspension_info=_suspension())
+        return f"{x}->{name}"
+
+    return FunctionStep(name=name, fn=fn)
+
+
+class TestParallelStepDurability:
+    async def test_cursor_and_journal_written_after_each_branch(self) -> None:
+        calls: dict[str, int] = {}
+        store = InMemoryCheckpointStore()
+        par = Parallel(
+            name="w",
+            steps=[counting_step("a", calls), _usage_step("b", calls), counting_step("c", calls)],
+            emitter=make_emitter(),
+            checkpoint_store=store,
+            run_id="r",
+            step_checkpoints=True,
+        )
+
+        result = await par.execute("in")
+
+        assert result.output == ["in->a", "in->b", "in->c"]
+        journal = await store.load_journal("r")
+        assert {rec.step_path for rec in journal} == {"parallel#0:a", "parallel#1:b", "parallel#2:c"}
+        assert all(rec.step_kind == "orchestration_step" for rec in journal)
+        # The usage-bearing branch round-trips its usage into the journal.
+        b_rec = next(r for r in journal if r.step_path == "parallel#1:b")
+        assert b_rec.result["usage"]["input_tokens"] == 1
+        a_rec = next(r for r in journal if r.step_path == "parallel#0:a")
+        assert a_rec.result["usage"] is None
+        cursor = await store.load("r")
+        assert cursor is not None
+        assert cursor.checkpoint_reason == "step"
+        assert cursor.suspension_info is None
+        # The cursor is thin — it carries only original_input, not the completed
+        # set (that comes from the journal union on resume).
+        assert cursor.state == {"orchestrator_type": "parallel", "original_input": "in"}
+
+    async def test_resume_skips_completed_branches_inflight_repeats(self) -> None:
+        calls: dict[str, int] = {}
+        store = InMemoryCheckpointStore()
+        # "a" (usage None) and "u" (usage-bearing) complete and journal; "b"
+        # crashes once the two peers are journaled — deterministically in flight.
+        par = Parallel(
+            name="w",
+            steps=[
+                counting_step("a", calls),
+                _usage_step("u", calls),
+                _branch_crashing_after("b", calls, store=store, run_id="r", after=2),
+            ],
+            emitter=make_emitter(),
+            checkpoint_store=store,
+            run_id="r",
+            step_checkpoints=True,
+        )
+
+        with pytest.raises(RuntimeError, match="simulated crash in b"):
+            await par.execute("in")
+        assert calls == {"a": 1, "u": 1, "b": 1}
+
+        cursor = await store.load("r")
+        assert cursor is not None
+        assert cursor.suspension_info is None  # a step cursor, routes to step-resume
+        result = await par.execute("in", resume_from=cursor)
+
+        assert result.output == ["in->a", "in->u", "in->b"]
+        # "a"/"u" completed + journaled → restored, not re-run. "b" was in flight
+        # at crash → repeats exactly once (the one-step replay window).
+        assert calls == {"a": 1, "u": 1, "b": 2}
+
+    async def test_resume_after_full_completion_reruns_nothing(self) -> None:
+        calls: dict[str, int] = {}
+        store = InMemoryCheckpointStore()
+        par = Parallel(
+            name="w",
+            steps=[counting_step("a", calls), counting_step("b", calls)],
+            emitter=make_emitter(),
+            checkpoint_store=store,
+            run_id="r",
+            step_checkpoints=True,
+        )
+
+        await par.execute("in")
+        assert calls == {"a": 1, "b": 1}
+        cursor = await store.load("r")
+        assert cursor is not None
+
+        # All branches are in the journal — resume finalizes without re-launching.
+        result = await par.execute("in", resume_from=cursor)
+        assert result.output == ["in->a", "in->b"]
+        assert calls == {"a": 1, "b": 1}
+
+    async def test_no_checkpoints_when_disabled(self) -> None:
+        calls: dict[str, int] = {}
+        store = InMemoryCheckpointStore()
+        par = Parallel(
+            name="w",
+            steps=[counting_step("a", calls), counting_step("b", calls)],
+            emitter=make_emitter(),
+            checkpoint_store=store,
+            run_id="r",
+        )  # step_checkpoints defaults False
+
+        await par.execute("in")
+
+        assert await store.load("r") is None
+        assert await store.load_journal("r") == []
+
+    async def test_hitl_suspension_resumes_via_existing_path(self) -> None:
+        """A mid-orchestration HITL suspension still resumes through the
+        unchanged suspend branch even with ``step_checkpoints=True``.
+
+        "a" completes (writing a step cursor); "b" suspends. The latest checkpoint
+        is the HITL suspension (carries ``suspension_info``), so resume routes to
+        the suspend branch — which re-runs only the suspended branch.
+        """
+        calls: dict[str, int] = {}
+        store = InMemoryCheckpointStore()
+        par = Parallel(
+            name="w",
+            steps=[counting_step("a", calls), _suspending_then_ok("b", calls)],
+            emitter=make_emitter(),
+            checkpoint_store=store,
+            run_id="r",
+            step_checkpoints=True,
+        )
+
+        with pytest.raises(SuspendExecution):
+            await par.execute("in")
+
+        cursor = await store.load("r")
+        assert cursor is not None
+        assert cursor.suspension_info is not None  # HITL suspension, not a step cursor
+        assert cursor.state["suspended_branch"] == "b"
+        assert "a" in cursor.state["completed_branches"]
+
+        result = await par.execute("in", resume_from=cursor)
+        assert result.output == ["in->a", "in->b"]
+        assert calls == {"a": 1, "b": 2}  # only the suspended branch re-ran
+
+
+class TestDAGStepDurability:
+    async def test_cursor_and_journal_written_after_each_node(self) -> None:
+        calls: dict[str, int] = {}
+        store = InMemoryCheckpointStore()
+        dag = DAG(
+            name="w",
+            nodes={
+                "a": DAGNode(step=counting_step("a", calls)),
+                "b": DAGNode(step=counting_step("b", calls), depends_on=["a"]),
+            },
+            emitter=make_emitter(),
+            checkpoint_store=store,
+            run_id="r",
+            step_checkpoints=True,
+        )
+
+        result = await dag.execute("in")
+
+        assert result.output == "in->a->b"
+        journal = await store.load_journal("r")
+        assert {rec.step_path for rec in journal} == {"dag#a", "dag#b"}
+        assert all(rec.step_kind == "orchestration_step" for rec in journal)
+        cursor = await store.load("r")
+        assert cursor is not None
+        assert cursor.checkpoint_reason == "step"
+        assert cursor.suspension_info is None
+        assert cursor.state == {"orchestrator_type": "dag", "original_input": "in"}
+
+    async def test_resume_skips_completed_nodes_inflight_repeats(self) -> None:
+        calls: dict[str, int] = {}
+        store = InMemoryCheckpointStore()
+        # Two concurrent sources complete + journal; the terminal node (which
+        # depends on both) crashes once — deterministically in flight, since its
+        # dependencies must be journaled before it becomes ready.
+        dag = DAG(
+            name="w",
+            nodes={
+                "a1": DAGNode(step=counting_step("a1", calls)),
+                "a2": DAGNode(step=_usage_step("a2", calls)),
+                "d": DAGNode(step=_crashing_node("d", calls), depends_on=["a1", "a2"]),
+            },
+            emitter=make_emitter(),
+            checkpoint_store=store,
+            run_id="r",
+            step_checkpoints=True,
+        )
+
+        with pytest.raises(RuntimeError, match="simulated crash in d"):
+            await dag.execute("in")
+        assert calls == {"a1": 1, "a2": 1, "d": 1}
+        journal = await store.load_journal("r")
+        assert {rec.step_path for rec in journal} == {"dag#a1", "dag#a2"}  # d never journaled
+
+        cursor = await store.load("r")
+        assert cursor is not None
+        assert cursor.suspension_info is None
+        result = await dag.execute("in", resume_from=cursor)
+
+        assert result.output == "d-done"
+        # The two sources are restored from the journal (not re-run); the terminal
+        # node was in flight at crash → repeats exactly once.
+        assert calls == {"a1": 1, "a2": 1, "d": 2}
+
+    async def test_no_checkpoints_when_disabled(self) -> None:
+        calls: dict[str, int] = {}
+        store = InMemoryCheckpointStore()
+        dag = DAG(
+            name="w",
+            nodes={
+                "a": DAGNode(step=counting_step("a", calls)),
+                "b": DAGNode(step=counting_step("b", calls), depends_on=["a"]),
+            },
+            emitter=make_emitter(),
+            checkpoint_store=store,
+            run_id="r",
+        )  # step_checkpoints defaults False
+
+        await dag.execute("in")
+
+        assert await store.load("r") is None
+        assert await store.load_journal("r") == []
+
+    async def test_hitl_suspension_resumes_via_existing_path(self) -> None:
+        """A mid-DAG HITL suspension still resumes through the unchanged suspend
+        branch even with ``step_checkpoints=True``."""
+        calls: dict[str, int] = {}
+        store = InMemoryCheckpointStore()
+        dag = DAG(
+            name="w",
+            nodes={
+                "a": DAGNode(step=counting_step("a", calls)),
+                "b": DAGNode(step=_suspending_then_ok("b", calls), depends_on=["a"]),
+            },
+            emitter=make_emitter(),
+            checkpoint_store=store,
+            run_id="r",
+            step_checkpoints=True,
+        )
+
+        with pytest.raises(SuspendExecution):
+            await dag.execute("in")
+
+        cursor = await store.load("r")
+        assert cursor is not None
+        assert cursor.suspension_info is not None
+        assert cursor.state["suspended_node"] == "b"
+        assert "a" in cursor.state["completed_nodes"]
+
+        result = await dag.execute("in", resume_from=cursor)
+        assert result.output == "in->a->b"
+        assert calls == {"a": 1, "b": 2}  # only the suspended node re-ran
+
+
+def _crashing_node(name: str, calls: dict[str, int]) -> FunctionStep:
+    """A DAG node that crashes its first call and succeeds on resume.
+
+    Its dependencies are journaled before it becomes ready (the drain loop
+    journals a node before unblocking its dependents), so a crash here leaves the
+    dependencies completed + journaled deterministically.
+    """
+
+    async def fn(x: object) -> str:
+        calls[name] = calls.get(name, 0) + 1
+        if calls[name] == 1:
+            raise RuntimeError(f"simulated crash in {name}")
+        return f"{name}-done"
+
+    return FunctionStep(name=name, fn=fn)
+
+
+class TestCheckpointLoadTieBreak:
+    async def test_suspension_wins_created_at_tie_over_step_cursor(self) -> None:
+        """On an equal ``created_at``, ``load()`` returns the HITL suspension, not
+        the step cursor.
+
+        With ``step_checkpoints`` enabled, a branch/node completing in the same
+        instant a sibling suspends writes a step cursor and a suspension
+        checkpoint that can share a microsecond ``created_at``. The suspension
+        must win so the pending run routes to HITL ``resume`` rather than being
+        rejected by ``resume_interrupted`` and left un-resumable. The step cursor
+        is saved FIRST here — the insertion order a naive ``max()`` would return.
+        """
+        from datetime import UTC, datetime
+
+        store = InMemoryCheckpointStore()
+        ts = datetime(2026, 6, 11, 12, 0, 0, tzinfo=UTC)
+        step_cursor = RunCheckpoint(
+            run_id="r",
+            checkpoint_type="orchestration",
+            state={"orchestrator_type": "parallel", "original_input": "in"},
+            suspension_info=None,
+            checkpoint_reason="step",
+            created_at=ts,
+        )
+        hitl = RunCheckpoint(
+            run_id="r",
+            checkpoint_type="orchestration",
+            state={"suspended_branch": "b", "completed_branches": {}, "original_input": "in"},
+            suspension_info=_suspension(),
+            created_at=ts,
+        )
+
+        await store.save(step_cursor)  # inserted first → loses a naive created_at max()
+        await store.save(hitl)
+
+        loaded = await store.load("r")
+        assert loaded is not None
+        assert loaded.suspension_info is not None
+        assert loaded.checkpoint_id == hitl.checkpoint_id

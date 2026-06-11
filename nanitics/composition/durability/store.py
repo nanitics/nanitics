@@ -59,7 +59,14 @@ class CheckpointStore(Protocol):
         ...
 
     async def load(self, run_id: str) -> RunCheckpoint | None:
-        """Load the most recent checkpoint for a run, or None if none exists."""
+        """Load the most recent checkpoint for a run, or None if none exists.
+
+        "Most recent" is by ``created_at``; on a tie a HITL suspension
+        (``suspension_info`` set) is preferred over a step/crash cursor, so a run
+        that suspended for human input in the same instant a sibling step
+        completed always loads as the suspension and stays resumable via the HITL
+        path. Implementations must honor this tie-break.
+        """
         ...
 
     async def delete(self, checkpoint_id: str) -> None:
@@ -92,7 +99,8 @@ class InMemoryCheckpointStore:
     """In-memory implementation of CheckpointStore for testing.
 
     Stores checkpoints in a dictionary keyed by checkpoint ID.
-    ``load()`` returns the most recent checkpoint for a run by ``created_at``.
+    ``load()`` returns the most recent checkpoint for a run by ``created_at``,
+    preferring a HITL suspension over a step cursor on a tie.
 
     The step-result journal is stored keyed by ``(run_id, step_path)``; the
     insertion-ordered dict gives both idempotency on the step key
@@ -110,7 +118,14 @@ class InMemoryCheckpointStore:
         matches = [cp for cp in self._checkpoints.values() if cp.run_id == run_id]
         if not matches:
             return None
-        return max(matches, key=lambda cp: cp.created_at)
+        # Most recent by created_at; on a tie a HITL suspension wins over a step
+        # cursor. With step_checkpoints enabled, a branch/node completing in the
+        # same instant a sibling suspends writes a step cursor and a suspension
+        # checkpoint with potentially equal created_at — the suspension must win
+        # so the pending run routes to HITL resume rather than becoming
+        # un-resumable. Step-cursor-vs-step-cursor ties are immaterial (all carry
+        # the same original_input; the completed set comes from the journal).
+        return max(matches, key=lambda cp: (cp.created_at, cp.suspension_info is not None))
 
     async def delete(self, checkpoint_id: str) -> None:
         self._checkpoints.pop(checkpoint_id, None)

@@ -97,7 +97,8 @@ class TestPostgresCheckpointStoreMock:
         sql = conn.fetchrow.call_args[0][0]
         assert "SELECT data FROM checkpoints" in sql
         assert "WHERE run_id = $1" in sql
-        assert "ORDER BY created_at DESC, checkpoint_id DESC" in sql
+        # created_at first, then a HITL suspension before a step cursor, then id.
+        assert "ORDER BY created_at DESC, ((data ->> 'suspension_info') IS NOT NULL) DESC, checkpoint_id DESC" in sql
         assert "LIMIT 1" in sql
         assert conn.fetchrow.call_args[0][1] == "run-1"
 

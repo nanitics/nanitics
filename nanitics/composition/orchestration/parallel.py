@@ -35,6 +35,13 @@ class Parallel(Workflow):
         cancellation_token: Optional cooperative cancellation signal.
         checkpoint_store: Optional store for suspension checkpoints.
         run_id: Run identifier for checkpoint records.
+        step_checkpoints: When ``True`` (and a ``checkpoint_store`` is set), a
+            thin cursor checkpoint plus a journal record are written after each
+            completed branch, so an interrupted run resumes via
+            ``resume_interrupted`` without re-running branches that already
+            finished. The completed-branch set is reconstructed from the journal
+            (an order-independent union keyed by step path), so concurrent
+            completions cannot clobber each other. Opt-in; defaults to ``False``.
 
     Raises:
         ValueError: If steps list is empty.
@@ -52,6 +59,7 @@ class Parallel(Workflow):
         checkpoint_store: CheckpointStore | None = None,
         run_id: str | None = None,
         trace_store: PersistentTraceStore | None = None,
+        step_checkpoints: bool = False,
     ) -> None:
         if not steps:
             raise ValueError("Parallel requires at least one step")
@@ -62,6 +70,7 @@ class Parallel(Workflow):
             checkpoint_store=checkpoint_store,
             run_id=run_id,
             trace_store=trace_store,
+            step_checkpoints=step_checkpoints,
         )
         self._steps = steps
         self._aggregator = aggregator
@@ -91,8 +100,10 @@ class Parallel(Workflow):
     async def _run(self, input: Any, *, resume_from: RunCheckpoint | None = None) -> StepResult:
         from nanitics.composition.orchestration.adapters import WorkflowStep
 
-        # Resume path: only re-execute the suspended branch
-        if resume_from is not None:
+        # HITL-suspend resume path: only re-execute the suspended branch. Gated
+        # on ``suspension_info`` so a step/crash cursor (which has none) routes to
+        # the journal-backed step-cursor resume below instead.
+        if resume_from is not None and resume_from.suspension_info is not None:
             state = resume_from.state
             suspended_branch = state["suspended_branch"]
             completed_branches: dict[str, Any] = state["completed_branches"]
@@ -147,7 +158,27 @@ class Parallel(Workflow):
                 metadata={"total_steps_executed": len(all_results)},
             )
 
-        # Normal execution path
+        # Normal execution path (a fresh run, or a step/crash cursor resume).
+        #
+        # Step-cursor resume: reconstruct the set of already-completed branches
+        # from the append-only journal, NOT from the cursor's state. The journal
+        # is keyed by ``(run_id, step_path)`` — an order-independent union — so a
+        # branch that finished is replayed from its recorded result regardless of
+        # the order or ``created_at`` of the concurrent cursor writes (the cursor
+        # only carries ``original_input``). Pre-seeded completed branches are not
+        # re-launched. On a fresh run the journal is empty and nothing is seeded.
+        index_by_name = {step.name: i for i, step in enumerate(self._steps)}
+        completed_results: dict[str, StepResult] = {}
+        if resume_from is not None:
+            assert self._checkpoint_store is not None
+            self._emit_resumed(resume_from, None)
+            journal = await self._checkpoint_store.load_journal(self._run_id)
+            by_path = {rec.step_path: rec.result for rec in journal}
+            for step in self._steps:
+                payload = by_path.get(f"parallel#{index_by_name[step.name]}:{step.name}")
+                if payload is not None:
+                    completed_results[step.name] = self._restore_step_result(payload)
+
         tasks: dict[str, asyncio.Task[StepResult]] = {}
 
         async def _run_step(step: Step, index: int) -> StepResult:
@@ -172,13 +203,14 @@ class Parallel(Workflow):
             return result
 
         for index, step in enumerate(self._steps):
+            if step.name in completed_results:
+                continue  # restored from the journal on resume; do not re-launch
             task = asyncio.create_task(_run_step(step, index))
             tasks[step.name] = task
 
         # Wait for all tasks, watching for suspension
         suspended_name: str | None = None
         suspended_exc: SuspendExecution | None = None
-        completed_results: dict[str, StepResult] = {}
 
         pending = set(tasks.values())
         while pending:
@@ -192,7 +224,7 @@ class Parallel(Workflow):
                 assert name is not None
 
                 try:
-                    completed_results[name] = task.result()
+                    result = task.result()
                 except SuspendExecution as exc:
                     if suspended_name is None:
                         suspended_name = name
@@ -206,6 +238,16 @@ class Parallel(Workflow):
                         if pending:
                             await asyncio.gather(*pending, return_exceptions=True)
                         raise
+                else:
+                    completed_results[name] = result
+                    # Step-level durability: journal this completed branch + a
+                    # thin cursor (carrying only ``original_input``), so a resume
+                    # reconstructs the completed set from the journal union.
+                    await self._save_step_checkpoint(
+                        {"orchestrator_type": "parallel", "original_input": input},
+                        step_path=f"parallel#{index_by_name[name]}:{name}",
+                        result_payload=self._serialize_step_result(result),
+                    )
 
         if suspended_name is not None and suspended_exc is not None:
             checkpoint_state: dict[str, Any] = {
