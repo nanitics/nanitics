@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-06-11
+
+Re-release of 0.11.0 with no functional change. The 0.11.0 upload landed on PyPI
+(files, JSON detail, and the project page all live) but its entry never appeared
+in PyPI's `/simple/` resolve index, so installers (`pip`/`uv`) could not resolve
+`nanitics==0.11.0`. PyPI versions are immutable, so the stuck entry can't be
+repaired in place; 0.11.1 publishes the identical code under a fresh version that
+indexes cleanly. If you can already install 0.11.0, it is byte-for-byte equivalent.
+
 ## [0.11.0] - 2026-06-11
 
 ### Added
