@@ -173,6 +173,8 @@ All workflow patterns support suspension and resumption via checkpoints, enablin
 
 Each pattern stores the minimal state needed for resumption — completed results, the suspended step/node/iteration, and any intermediate state specific to the pattern.
 
+**Crash resume (opt-in).** The flow above writes a checkpoint only when a step suspends for a human. To also resume a run that *crashed* without suspending, set `step_checkpoints=True`: a thin cursor plus a journal record are written after each completed step (and, for a `ReActAgent`, each completed tool batch), and the run resumes with no human response via `resume_interrupted` / `resume_from_checkpoint`. Covered today by `Sequential` and `Loop`; the guarantee is at-least-once with a one-step replay window, so side-effecting tools must be idempotent. See [Step-level durability (crash resume)](human-in-the-loop.md#step-level-durability-crash-resume).
+
 **Limitation:** In `Parallel`, `DAG`, and `MapReduce`, only the first concurrent suspension is captured. If multiple branches might need human approval, sequence them instead.
 
 > **See also:** [examples/durability/checkpoint_suspension.py](../../examples/durability/checkpoint_suspension.py) — checkpoint primitives, workflow suspension/resumption, version validation, HITL-integrated suspend/resume.
