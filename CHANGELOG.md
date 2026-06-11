@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-06-11
+
+### Added
+
+- **Step-level durability (opt-in).** Workflows can checkpoint
+  after each completed step so an interrupted run resumes without re-executing
+  completed steps. Enable with `step_checkpoints=True` on a
+  `Workflow`/`Sequential`/`Loop`/`Parallel`/`DAG`, or
+  `DurableRun(..., step_checkpoints=True)`. Adds a
+  step-result journal to the `CheckpointStore` protocol (`append_step` /
+  `load_journal`, implemented for `InMemoryCheckpointStore` and
+  `PostgresCheckpointStore`), a new public `StepRecord` model, and non-HITL
+  resume entrypoints `DurableRun.resume_from_checkpoint` /
+  `ResumeService.resume_interrupted`. The guarantee is at-least-once with a
+  one-step replay window: a completed-and-journaled step is not re-run; the
+  single in-flight step at interruption may repeat, so side-effecting tools
+  should be idempotent. Current coverage: the `Sequential` orchestrator at step
+  granularity, the `Loop` orchestrator at per-iteration granularity, the
+  concurrent `Parallel` and `DAG` orchestrators at per-branch / per-node
+  granularity, plus tool-call granularity inside `ReActAgent` (see below). For
+  the concurrent orchestrators the completed set is reconstructed on resume from
+  the journal — an order-independent union keyed by step path — so concurrent
+  completions cannot clobber each other, and the replay window generalizes to
+  every branch/node in flight at crash time. Not yet covered: the single-branch
+  `Conditional` orchestrator, finer tool-call granularity for the non-ReAct
+  agent types (ReWOO, Reflexion, ToT, LATS, CodeAct), and agent-internal
+  tool-call durability for an agent running inside a concurrent branch.
+- **Agent-internal crash resume for `ReActAgent` (tool-call granularity).** A
+  crashed single-agent run resumes from the last completed tool batch without
+  re-firing tools it already ran — completed batches replay from message
+  history; only the in-flight batch at crash time may repeat. Agents become
+  checkpoint-aware through a new public `StepCheckpointSink` protocol (and
+  `CheckpointCadence` type) injected by the orchestration layer, not by holding
+  the store — additive and dependency-inverted. Default (`step_checkpoints`
+  off) leaves agent behaviour byte-for-byte unchanged.
+
+### Changed
+
+- **Checkpoint schema version 3 → 4.** `RunCheckpoint.suspension_info` is now
+  optional (a step/crash cursor checkpoint is not a suspension) and gains a
+  `checkpoint_reason` discriminator (`"hitl_suspend"` / `"step"` /
+  `"crash_safe"`). Additive and backward-compatible for HITL checkpoints. A v3
+  checkpoint loaded by v4 code raises `CheckpointVersionError` — drain in-flight
+  suspended runs before upgrading.
+- **`CheckpointStore.load` tie-break.** On an equal `created_at`, `load` now
+  prefers a HITL suspension over a step/crash cursor (then `checkpoint_id` for
+  any remaining tie), in both `InMemoryCheckpointStore` and
+  `PostgresCheckpointStore`. With `step_checkpoints` enabled, a branch/node that
+  completes in the same instant a sibling suspends for human input writes a step
+  cursor and a suspension checkpoint that can share a microsecond timestamp; the
+  suspension must win so the run stays resumable via `ResumeService.resume`
+  rather than being rejected by `resume_interrupted`. No effect when
+  `step_checkpoints` is off (a suspended run has only the one checkpoint).
+
 ## [0.10.1] - 2026-06-10
 
 ### Fixed

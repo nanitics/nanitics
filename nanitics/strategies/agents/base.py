@@ -16,6 +16,7 @@ from nanitics.strategies.agents.context import ContextContent, ContextManagement
 from nanitics.strategies.agents.errors import ErrorHandling
 
 if TYPE_CHECKING:
+    from nanitics.composition.durability.store import CheckpointCadence, StepCheckpointSink
     from nanitics.composition.threads.store import ThreadLocks, ThreadStore
     from nanitics.strategies.tools import Tool
 from nanitics.infrastructure.errors import LLMSchemaViolationError, NaniticsError
@@ -223,6 +224,14 @@ class Agent(ABC):
         else:
             self._thread_locks = thread_locks
         self._resume_state: dict[str, Any] | None = None
+        # Optional checkpoint sink for agent-internal step-level durability.
+        # ``None`` (the default) means the agent never checkpoints between
+        # tool batches — byte-for-byte today's behaviour. The orchestration
+        # layer injects a sink via ``_set_checkpoint_sink`` only when
+        # step-level durability is enabled. See
+        # :class:`~nanitics.composition.durability.store.StepCheckpointSink`.
+        self._checkpoint_sink: StepCheckpointSink | None = None
+        self._checkpoint_cadence: CheckpointCadence = "tool_call"
         # Auto-wire agent-owned emitter-caching capabilities to the agent's
         # per-task emitter. Any attached context provider or output
         # evaluator that exposes an unset ``_emitter_provider`` attribute
@@ -303,6 +312,23 @@ class Agent(ABC):
 
     def _set_resume_state(self, state: dict[str, Any]) -> None:
         self._resume_state = state
+
+    def _set_checkpoint_sink(
+        self,
+        sink: StepCheckpointSink,
+        *,
+        cadence: CheckpointCadence = "tool_call",
+    ) -> None:
+        """Attach a step-checkpoint sink for agent-internal durability.
+
+        Symmetric to :meth:`_set_resume_state`. Injected by the orchestration
+        layer (via ``_BoundAgentStep``) only when step-level durability is
+        enabled, so a tool-bearing subclass can hand a completed-step snapshot
+        to the sink after each completed step. Default (sink never set) leaves
+        behaviour unchanged.
+        """
+        self._checkpoint_sink = sink
+        self._checkpoint_cadence = cadence
 
     async def _load_thread_prefix(self, thread_key: str | None) -> list[Message]:
         """Load the :class:`Message` prefix for a thread.

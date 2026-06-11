@@ -208,8 +208,15 @@ class ReActAgent(Agent):
         available_tools = [s.name for s in tool_schemas]
 
         # --- Resume path ---
+        # Discriminate on the state shape, not a reason field: a HITL
+        # suspension snapshot carries ``suspended_tool_index`` (it suspended
+        # mid-batch) and resumes mid-batch via ``_execute_resume``; a step
+        # snapshot has no ``suspended_tool_index`` (the batch completed) and
+        # continues from message history via ``_execute_crash_resume``.
         if self._resume_state is not None:
-            return await self._execute_resume(input, tool_schemas, available_tools)
+            if "suspended_tool_index" in self._resume_state:
+                return await self._execute_resume(input, tool_schemas, available_tools)
+            return await self._execute_crash_resume(input, tool_schemas, available_tools)
 
         # --- Normal path ---
         self._limiter.reset()
@@ -428,6 +435,20 @@ class ReActAgent(Agent):
                         thought=response.reasoning_text,
                         action=action,
                         observation=observation,
+                    )
+
+                    # Step-level durability: hand the sink a completed-batch
+                    # snapshot so an interrupted run resumes from this point
+                    # without re-firing the tools just completed (they replay
+                    # from ``messages``). No-op when no sink is attached
+                    # (step_checkpoints disabled). The in-flight batch at a
+                    # crash is the one-step replay window — co-called side
+                    # effects in *that* batch may repeat on resume.
+                    await self._checkpoint_completed_batch(
+                        messages=messages,
+                        step_number=step_number,
+                        revision_count=revision_count,
+                        usages=usages,
                     )
 
                     # A return_direct tool fired in this batch: end the run on
@@ -665,19 +686,27 @@ class ReActAgent(Agent):
 
         return return_direct_hit
 
-    def _build_checkpoint_state(
+    def _completed_step_state(
         self,
         *,
         messages: list[Message],
         step_number: int,
         revision_count: int,
         usages: list[Usage],
-        tool_calls: list[ToolCall],
-        completed_tool_results: dict[int, dict[str, Any]],
-        suspended_tool_index: int,
-        return_direct_hit: tuple[int, str] | None = None,
     ) -> dict[str, Any]:
-        state: dict[str, Any] = {
+        """Snapshot the agent's position after a *completed* tool batch.
+
+        The shared subset of :meth:`_build_checkpoint_state` that describes a
+        clean, replayable position — message history (which already holds the
+        completed batch's ``tool_result`` messages), counters, working memory,
+        and limiter state. It omits the suspended-batch fields
+        (``suspended_tool_index`` / ``completed_tool_results`` / ``tool_calls`` /
+        ``return_direct_hit``): the batch is done, so resume re-enters the loop
+        fresh from ``messages`` rather than re-dispatching a partial batch. The
+        absence of ``suspended_tool_index`` is also the discriminator the resume
+        path uses to choose the crash-resume route over :meth:`_execute_resume`.
+        """
+        return {
             "agent_type": "react",
             "messages": [m.model_dump() for m in messages],
             "step_number": step_number,
@@ -691,14 +720,70 @@ class ReActAgent(Agent):
             "error_handler_state": {
                 "total_corrections": self._error_handler.total_corrections,
             },
-            "tool_calls": [tc.model_dump() for tc in tool_calls],
-            "completed_tool_results": {str(k): v for k, v in completed_tool_results.items()},
-            "suspended_tool_index": suspended_tool_index,
-            # A return_direct call that ran before the suspension point. Stored
-            # as a ``[index, content]`` list (JSON has no tuples) so it survives
-            # the checkpoint and still wins on the lowest index after resume.
-            "return_direct_hit": list(return_direct_hit) if return_direct_hit is not None else None,
         }
+
+    async def _checkpoint_completed_batch(
+        self,
+        *,
+        messages: list[Message],
+        step_number: int,
+        revision_count: int,
+        usages: list[Usage],
+    ) -> None:
+        """Hand the sink a completed-batch snapshot, if a sink is attached.
+
+        No-op unless step-level durability injected a sink. In ReAct a
+        reasoning turn produces exactly one tool batch, so the ``tool_call``
+        and ``agent_turn`` cadences coincide at this batch boundary; the
+        cadence selects the journal ``step_kind`` label. The agent passes the
+        agent-relative step-path tail (``turn#n``, derived from the deterministic
+        ``step_number`` so the key is stable across resumes); the sink prepends
+        the orchestration prefix and owns the store write.
+        """
+        if self._checkpoint_sink is None:
+            return
+        snapshot = self._completed_step_state(
+            messages=messages,
+            step_number=step_number,
+            revision_count=revision_count,
+            usages=usages,
+        )
+        await self._checkpoint_sink.save_step(
+            step_path=f"turn#{step_number}",
+            step_kind=self._checkpoint_cadence,
+            state=snapshot,
+        )
+
+    def _build_checkpoint_state(
+        self,
+        *,
+        messages: list[Message],
+        step_number: int,
+        revision_count: int,
+        usages: list[Usage],
+        tool_calls: list[ToolCall],
+        completed_tool_results: dict[int, dict[str, Any]],
+        suspended_tool_index: int,
+        return_direct_hit: tuple[int, str] | None = None,
+    ) -> dict[str, Any]:
+        state = self._completed_step_state(
+            messages=messages,
+            step_number=step_number,
+            revision_count=revision_count,
+            usages=usages,
+        )
+        state.update(
+            {
+                "tool_calls": [tc.model_dump() for tc in tool_calls],
+                "completed_tool_results": {str(k): v for k, v in completed_tool_results.items()},
+                "suspended_tool_index": suspended_tool_index,
+                # A return_direct call that ran before the suspension point.
+                # Stored as a ``[index, content]`` list (JSON has no tuples) so
+                # it survives the checkpoint and still wins on the lowest index
+                # after resume.
+                "return_direct_hit": list(return_direct_hit) if return_direct_hit is not None else None,
+            }
+        )
         return state
 
     async def _execute_resume(
@@ -799,6 +884,59 @@ class ReActAgent(Agent):
             tool_schemas=tool_schemas,
             available_tools=available_tools,
             pending_return_direct=return_direct_hit,
+            step_number=step_number,
+            revision_count=revision_count,
+            usages=usages,
+        )
+
+    async def _execute_crash_resume(
+        self,
+        input: AgentInput,
+        tool_schemas: list[Any],
+        available_tools: list[str],
+    ) -> AgentResult:
+        """Resume from a completed-batch (step-durability) snapshot.
+
+        Distinct from :meth:`_execute_resume`, which resumes a *suspended*
+        batch mid-dispatch. Here the last checkpointed batch completed, so its
+        ``tool_result`` messages are already in ``state["messages"]``: restoring
+        the message history and counters and re-entering ``_run_loop`` fresh
+        replays those completed tools from history (never re-firing them). Only
+        the in-flight batch at crash time — never reached by a sink write — can
+        repeat, which is the one-step replay window of the durability contract.
+        """
+        state = self._resume_state
+        assert state is not None
+        self._resume_state = None
+
+        messages = [Message(**m) for m in state["messages"]]
+        step_number: int = state["step_number"]
+        revision_count: int = state["revision_count"]
+        usages = [Usage(**u) for u in state["usages"]]
+
+        self._limiter.restore(state["limiter_count"])
+        if self._tool_call_limiter is not None and "tool_call_limiter_count" in state:
+            self._tool_call_limiter.restore(state["tool_call_limiter_count"])
+        self._error_handler.restore(state["error_handler_state"]["total_corrections"])
+        if self._working_memory is not None and state["working_memory"] is not None:
+            self._working_memory.write(state["working_memory"])
+
+        self._emitter.emit(
+            ExecutionResumedEvent(
+                trace_id=self._emitter.trace_id,
+                span_id=self._emitter.span_id,
+                parent_span_id=self._emitter.parent_span_id,
+                checkpoint_id="",
+                suspension_id="",
+                resumed_from_step=f"step-{step_number}",
+            )
+        )
+
+        return await self._run_loop(
+            task_input=input,
+            messages=messages,
+            tool_schemas=tool_schemas,
+            available_tools=available_tools,
             step_number=step_number,
             revision_count=revision_count,
             usages=usages,

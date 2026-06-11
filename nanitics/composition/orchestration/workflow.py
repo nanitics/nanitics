@@ -12,8 +12,9 @@ from nanitics.composition.durability.models import (
     CHECKPOINT_SCHEMA_VERSION,
     CheckpointVersionError,
     RunCheckpoint,
+    StepRecord,
 )
-from nanitics.composition.durability.store import CheckpointStore
+from nanitics.composition.durability.store import CheckpointStore, StepCheckpointSink
 from nanitics.composition.durability.suspension import SuspendExecution
 from nanitics.composition.orchestration.protocol import Step, StepResult
 from nanitics.infrastructure.observability.emitter import EventEmitter
@@ -25,6 +26,7 @@ from nanitics.infrastructure.observability.events import (
     RunFailedEvent,
     RunStartEvent,
     RunSuspendedEvent,
+    Usage,
     WorkflowCompleteEvent,
     WorkflowErrorEvent,
     WorkflowStartEvent,
@@ -50,6 +52,11 @@ class Workflow(ABC):
         run_id: Identifier for the run, used in checkpoint records.
             Auto-generated if not provided.
         trace_store: Optional persistent trace store for run registration.
+        step_checkpoints: When ``True`` (and a ``checkpoint_store`` is set),
+            a thin cursor checkpoint plus a journal record are written after
+            each completed step, so an interrupted run can resume via
+            ``resume_interrupted`` without re-executing completed steps.
+            Opt-in; defaults to ``False`` (suspend-only checkpointing).
     """
 
     def __init__(
@@ -61,6 +68,7 @@ class Workflow(ABC):
         checkpoint_store: CheckpointStore | None = None,
         run_id: str | None = None,
         trace_store: PersistentTraceStore | None = None,
+        step_checkpoints: bool = False,
     ) -> None:
         self._name = name
         self._default_emitter = emitter
@@ -69,6 +77,7 @@ class Workflow(ABC):
         self._checkpoint_store = checkpoint_store
         self._run_id = run_id or str(uuid4())
         self._trace_store = trace_store
+        self._step_checkpoints = step_checkpoints
 
     @property
     def name(self) -> str:
@@ -160,6 +169,35 @@ class Workflow(ABC):
             return [Workflow._normalize_for_serialization(item) for item in value]
         return value
 
+    @staticmethod
+    def _serialize_step_result(result: StepResult) -> dict[str, Any]:
+        """Serialize a completed ``StepResult`` for a journal ``result`` payload.
+
+        Captures ``output`` / ``metadata`` / ``usage`` so a concurrent
+        orchestrator's resume branch can reconstruct the step result from the
+        journal (the order-independent, race-immune record of completed
+        branches/nodes) rather than from the cursor checkpoint. Round-trips with
+        :meth:`_restore_step_result`.
+        """
+        return {
+            "output": result.output,
+            "metadata": result.metadata,
+            "usage": result.usage.model_dump() if result.usage is not None else None,
+        }
+
+    @staticmethod
+    def _restore_step_result(payload: dict[str, Any]) -> StepResult:
+        """Reconstruct a ``StepResult`` from a journal ``result`` payload.
+
+        Inverse of :meth:`_serialize_step_result`. Used by the step-cursor resume
+        branch of the concurrent orchestrators (``Parallel`` / ``DAG``) to
+        restore a completed branch/node from its journal record without
+        re-executing it.
+        """
+        usage_dict = payload["usage"]
+        restored_usage = Usage.model_validate(usage_dict) if usage_dict is not None else None
+        return StepResult(output=payload["output"], metadata=payload["metadata"], usage=restored_usage)
+
     async def _save_checkpoint(
         self,
         suspension: SuspendExecution,
@@ -186,6 +224,52 @@ class Workflow(ABC):
                 )
             )
         return checkpoint
+
+    async def _save_step_checkpoint(
+        self,
+        state: dict[str, Any],
+        *,
+        step_path: str,
+        result_payload: dict[str, Any],
+    ) -> None:
+        """Persist a cursor checkpoint + journal record after a completed step.
+
+        No-op unless step-level durability is enabled and a store is present.
+        Writes a :class:`RunCheckpoint` with ``checkpoint_reason="step"`` and no
+        ``suspension_info`` (a completed step is not a suspension) recording loop
+        position so ``resume_interrupted`` can skip completed steps, plus a
+        :class:`StepRecord` journalling the step's result so it is not
+        re-executed on resume. This is the step-level-durability write site,
+        distinct from the suspend-only :meth:`_save_checkpoint`.
+        """
+        if not (self._step_checkpoints and self._checkpoint_store):
+            return
+        checkpoint = RunCheckpoint(
+            run_id=self._run_id,
+            checkpoint_type="orchestration",
+            state=self._normalize_for_serialization(state),
+            suspension_info=None,
+            checkpoint_reason="step",
+        )
+        await self._checkpoint_store.save(checkpoint)
+        await self._checkpoint_store.append_step(
+            StepRecord(
+                run_id=self._run_id,
+                step_path=step_path,
+                step_kind="orchestration_step",
+                result=self._normalize_for_serialization(result_payload),
+            )
+        )
+        self._emitter.emit(
+            CheckpointSavedEvent(
+                trace_id=self._emitter.trace_id,
+                span_id=self._emitter.span_id,
+                parent_span_id=self._emitter.parent_span_id,
+                checkpoint_id=checkpoint.checkpoint_id,
+                checkpoint_type="orchestration",
+                run_id=self._run_id,
+            )
+        )
 
     async def _surface_suspension(
         self,
@@ -227,13 +311,18 @@ class Workflow(ABC):
             )
 
     def _emit_resumed(self, checkpoint: RunCheckpoint, step_name: str | None = None) -> None:
+        # A HITL-suspension resume carries a suspension_id; a step/crash resume
+        # does not. Mirror the agent resume path's convention of an empty
+        # suspension_id when there is no suspension (ExecutionResumedEvent
+        # requires the field to be a str).
+        suspension_id = checkpoint.suspension_info.suspension_id if checkpoint.suspension_info else ""
         self._emitter.emit(
             ExecutionResumedEvent(
                 trace_id=self._emitter.trace_id,
                 span_id=self._emitter.span_id,
                 parent_span_id=self._emitter.parent_span_id,
                 checkpoint_id=checkpoint.checkpoint_id,
-                suspension_id=checkpoint.suspension_info.suspension_id,
+                suspension_id=suspension_id,
                 resumed_from_step=step_name,
             )
         )
@@ -286,6 +375,7 @@ class Workflow(ABC):
         step: Step,
         *,
         agent_checkpoint: dict[str, Any] | None = None,
+        checkpoint_sink: StepCheckpointSink | None = None,
     ) -> Step:
         """Return a per-call Step bound to this workflow's emitter.
 
@@ -307,6 +397,13 @@ class Workflow(ABC):
                 first ``execute`` call (see :class:`_BoundAgentStep`).
                 Ignored for other step types — resume state for
                 non-agent steps is orchestrator-level, not step-local.
+            checkpoint_sink: Optional step-checkpoint sink for
+                agent-internal step-level durability. When non-None and
+                ``step`` is an :class:`AgentStep`, the returned bound
+                wrapper injects it into the agent (via
+                ``Agent._set_checkpoint_sink``) before running, so the
+                agent checkpoints after each completed tool batch.
+                Ignored for other step types.
         """
         from nanitics.composition.multi_agent.handoff import HandoffStep
         from nanitics.composition.orchestration.adapters import AgentStep, WorkflowStep
@@ -316,6 +413,7 @@ class Workflow(ABC):
                 step,
                 step.agent.bind(self._emitter),
                 agent_checkpoint=agent_checkpoint,
+                checkpoint_sink=checkpoint_sink,
             )
         if isinstance(step, WorkflowStep):
             return _BoundWorkflowStep(step, step.workflow.bind(self._emitter))
@@ -535,10 +633,12 @@ class _BoundAgentStep:
         bound: Any,
         *,
         agent_checkpoint: dict[str, Any] | None = None,
+        checkpoint_sink: StepCheckpointSink | None = None,
     ) -> None:
         self._step = step
         self._bound = bound
         self._agent_checkpoint = agent_checkpoint
+        self._checkpoint_sink = checkpoint_sink
 
     @property
     def name(self) -> str:
@@ -550,6 +650,8 @@ class _BoundAgentStep:
         if self._agent_checkpoint is not None:
             self._bound.agent._set_resume_state(self._agent_checkpoint)
             self._agent_checkpoint = None
+        if self._checkpoint_sink is not None:
+            self._bound.agent._set_checkpoint_sink(self._checkpoint_sink)
         step = cast(AgentStep, self._step)
         result = await self._bound.run(str(input), thread_key=step._thread_key)
         metadata: dict[str, Any] = {
@@ -561,6 +663,79 @@ class _BoundAgentStep:
             metadata["text_output"] = result.output
             return StepResult(output=result.parsed, metadata=metadata, usage=result.usage)
         return StepResult(output=result.output, metadata=metadata, usage=result.usage)
+
+
+class _AgentStepCheckpointSink:
+    """Orchestration-provided sink for an agent's completed-step snapshots.
+
+    Built per agent step by an orchestrator that has the surrounding context
+    (``Sequential._run`` today — the only frame holding the step index, the
+    prior steps' results, and the original input). When the running agent hands
+    a completed-step snapshot to :meth:`save_step`, this writes an
+    *orchestration-shaped* cursor checkpoint plus a journal record, not a
+    standalone agent checkpoint.
+
+    The cursor's ``state`` is the same shape the orchestrator's resume branch
+    already expects for a mid-agent suspension: ``suspended_step_index`` points
+    at *this* step, the snapshot rides under ``agent_checkpoint``, and the prior
+    steps' ``completed_results`` / ``last_output`` / ``original_input`` carry
+    through. So a mid-agent crash resumes through the existing resume path and
+    the ``_bind_step(agent_checkpoint=...)`` seam — the same path a HITL
+    mid-agent suspension uses — with no new checkpoint type. The agent stays
+    oblivious; it only knows the :class:`StepCheckpointSink` protocol.
+
+    Args:
+        workflow: The orchestrator owning ``run_id``, the checkpoint store, the
+            serialization helper, and the per-task emitter.
+        step_path_prefix: The orchestration step-path prefix (e.g.
+            ``"sequential#2:agent"``) prepended to the agent-relative tail.
+        cursor_state_base: The cursor ``state`` minus ``agent_checkpoint`` —
+            ``orchestrator_type``, ``suspended_step_index`` (this step),
+            ``completed_results`` (prior steps), ``last_output``,
+            ``original_input``. Captured once when the sink is built.
+    """
+
+    def __init__(
+        self,
+        workflow: Workflow,
+        *,
+        step_path_prefix: str,
+        cursor_state_base: dict[str, Any],
+    ) -> None:
+        self._workflow = workflow
+        self._step_path_prefix = step_path_prefix
+        self._cursor_state_base = cursor_state_base
+
+    async def save_step(self, *, step_path: str, step_kind: str, state: dict[str, Any]) -> None:
+        wf = self._workflow
+        assert wf._checkpoint_store is not None  # built only when a store is present
+        cursor_state = {**self._cursor_state_base, "agent_checkpoint": state}
+        checkpoint = RunCheckpoint(
+            run_id=wf._run_id,
+            checkpoint_type="orchestration",
+            state=wf._normalize_for_serialization(cursor_state),
+            suspension_info=None,
+            checkpoint_reason="step",
+        )
+        await wf._checkpoint_store.save(checkpoint)
+        await wf._checkpoint_store.append_step(
+            StepRecord(
+                run_id=wf._run_id,
+                step_path=f"{self._step_path_prefix}/{step_path}",
+                step_kind=cast("Any", step_kind),
+                result=wf._normalize_for_serialization(state),
+            )
+        )
+        wf._emitter.emit(
+            CheckpointSavedEvent(
+                trace_id=wf._emitter.trace_id,
+                span_id=wf._emitter.span_id,
+                parent_span_id=wf._emitter.parent_span_id,
+                checkpoint_id=checkpoint.checkpoint_id,
+                checkpoint_type="orchestration",
+                run_id=wf._run_id,
+            )
+        )
 
 
 class _BoundHandoffStep:

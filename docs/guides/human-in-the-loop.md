@@ -175,6 +175,40 @@ Both `DurableRun.start` and `ResumeService.resume` return `ResumeResult | Suspen
 
 > **See also:** [examples/durability/durable_resume_service.py](../../examples/durability/durable_resume_service.py), `DurableRun` and `ResumeService` docstrings.
 
+### Step-level durability (crash resume)
+
+Everything above resumes a run that **suspended for a human**. A run that **crashes** — the worker dies, the process is redeployed, a `SIGTERM` lands mid-flight — never suspended, so by default it has no checkpoint to load: a checkpoint is written only on HITL suspension. Step-level durability closes that gap. It is **opt-in**:
+
+<!-- verify: skip — illustrative sketch; `agent`, `hitl_store`, `checkpoint_store` are caller-supplied and the `await` runs inside an async context -->
+```python
+from nanitics.composition import DurableRun, ResumeResult
+
+durable = DurableRun(
+    agent,
+    hitl_store=hitl_store,
+    checkpoint_store=checkpoint_store,
+    run_id="order-4417",
+    step_checkpoints=True,   # ← write a cursor + journal record after each completed step
+)
+outcome = await durable.start(task)        # crashes partway through → exception propagates
+
+# Later, in a fresh process — no human response to apply:
+recovered = DurableRun(agent, hitl_store=hitl_store, checkpoint_store=checkpoint_store,
+                       run_id="order-4417", step_checkpoints=True)
+result = await recovered.resume_from_checkpoint()   # or ResumeService.resume_interrupted(run_id)
+assert isinstance(result, ResumeResult)
+```
+
+With `step_checkpoints=True`, after each completed step a thin **cursor** checkpoint (loop position) and an append-only **journal** record (the step's result) are written. For a `ReActAgent`, the same happens after each completed **tool batch** — so a crash mid-agent resumes from the last completed batch, not the top of the agent. Resume re-drives the run, skips steps already in the journal, and replays the agent's completed batches from message history. `resume_from_checkpoint` / `resume_interrupted` carry **no human response**; they error if the latest checkpoint is a HITL suspension still awaiting input — that case stays on `resume`.
+
+**The guarantee is at-least-once with a one-step replay window — not at-most-once.** A completed, journaled step (or tool batch) runs **at most once** across the run and all its resumes. The **single in-flight step at crash time** — the tool call executing when the worker died, plus any tools co-called in the same batch — **may run again** on resume: its side effect committed, but the crash landed before the journal record was written, so resume cannot know it finished. True at-most-once is impossible for an external side effect (you cannot atomically "send the email" and "record that it was sent"). Step-level durability shrinks the replay window from "the whole run" to "one tool call"; it does not eliminate it.
+
+**Idempotency for that one in-flight step is the consumer's responsibility.** Make side-effecting tools idempotent — key the external operation on the step identity (`run_id` + step path, which the journal already uses) so a repeat is a no-op rather than a duplicate. The SDK does not deduplicate side effects for you.
+
+> **Coverage:** tool-call granularity ships for `ReActAgent`; orchestration-step granularity (a whole agent as one step) holds for **every** agent type through `Sequential`, `Loop` (per-iteration cursor), and the concurrent orchestrators `Parallel` and `DAG` (per-branch / per-node cursor). For the concurrent orchestrators the completed set is reconstructed from the journal — an order-independent union keyed by step path — so concurrent completions never clobber each other; the in-flight window generalizes to *all* branches/nodes running when the crash landed (up to the degree of concurrency), each of which may repeat, while every completed+journaled branch/node runs at most once. Finer tool-call granularity for the other agent types (ReWOO, Reflexion, ToT, LATS, CodeAct) and the per-step cursor for `Conditional` (a single-branch orchestrator) are in progress — until then those resume at the coarser boundary with a wider in-flight window, never incorrectly. Agent-internal tool-call durability for an agent running *inside* a concurrent branch is also still coarse (the whole branch is one step).
+
+> **Migration (schema 3 → 4):** step-level durability bumps the checkpoint schema from `3` to `4` (`RunCheckpoint.suspension_info` is now optional and a `checkpoint_reason` discriminator was added). The change is additive — existing HITL `resume` is byte-for-byte unchanged and `step_checkpoints` defaults to `False` — but there is no in-place migration: a checkpoint persisted under schema `3` raises `CheckpointVersionError` when resumed under `4`. Drain any in-flight suspended runs before upgrading.
+
 ### Nested workflows
 
 A workflow nested inside another workflow (via `WorkflowStep` — e.g. a `Sequential` inside a `Conditional` branch, or a `Parallel` branch) that suspends on a human gate resumes at its own suspension point, not from the top of the nested workflow. The parent orchestrator threads the resume checkpoint into the suspended child, so a nested `Conditional`'s router is not re-invoked on resume and no step before the suspension point in the nested workflow re-runs. This works to arbitrary nesting depth and across every orchestrator (`Sequential`, `Conditional`, `Parallel`, `DAG`, `Loop`, `Pipeline`, `MapReduce`) — only the top-level workflow needs a `checkpoint_store`; nested workflows surface their state up into the single persisted checkpoint automatically.

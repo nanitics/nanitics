@@ -294,6 +294,31 @@ class TestResumeService:
         with pytest.raises(ValueError, match="No checkpoint for run_id='missing'"):
             await service.resume("missing", response)
 
+    async def test_non_suspension_checkpoint_raises(self) -> None:
+        hitl_store = InMemoryHitlRequestStore()
+        checkpoint_store = InMemoryCheckpointStore()
+        await checkpoint_store.save(
+            RunCheckpoint(
+                run_id="stepped",
+                checkpoint_type="orchestration",
+                state={},
+                suspension_info=None,
+                checkpoint_reason="step",
+            )
+        )
+
+        def factory(ctx: ResumeContext) -> DurableRun:  # pragma: no cover
+            raise AssertionError("factory must not be invoked for a non-suspension checkpoint")
+
+        service = ResumeService(
+            hitl_store=hitl_store,
+            checkpoint_store=checkpoint_store,
+            factory=factory,
+        )
+        response = HumanInputResponse(request_id="anything", decision=HumanDecision.APPROVE)
+        with pytest.raises(ValueError, match="not a HITL suspension"):
+            await service.resume("stepped", response)
+
     async def test_response_request_id_mismatch_raises(self) -> None:
         hitl_store, checkpoint_store, _, durable = await self._build()
         suspended = await durable.start("payload")

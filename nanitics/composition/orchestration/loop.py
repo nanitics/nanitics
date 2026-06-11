@@ -38,6 +38,11 @@ class Loop(Workflow):
         cancellation_token: Optional cooperative cancellation signal.
         checkpoint_store: Optional store for suspension checkpoints.
         run_id: Run identifier for checkpoint records.
+        step_checkpoints: When ``True`` (and a ``checkpoint_store`` is set),
+            a thin cursor checkpoint plus a journal record are written after
+            each completed iteration, so an interrupted loop resumes at the
+            next iteration via ``resume_interrupted`` without re-running the
+            iterations already completed. Opt-in; defaults to ``False``.
     """
 
     def __init__(
@@ -52,6 +57,7 @@ class Loop(Workflow):
         checkpoint_store: CheckpointStore | None = None,
         run_id: str | None = None,
         trace_store: PersistentTraceStore | None = None,
+        step_checkpoints: bool = False,
     ) -> None:
         super().__init__(
             name=name,
@@ -60,6 +66,7 @@ class Loop(Workflow):
             checkpoint_store=checkpoint_store,
             run_id=run_id,
             trace_store=trace_store,
+            step_checkpoints=step_checkpoints,
         )
         self._step = step
         self._condition = condition
@@ -96,9 +103,13 @@ class Loop(Workflow):
             start_iteration = state["iteration"]
             current_input = state.get("last_result", {}).get("output", input) if state.get("last_result") else input
             if isinstance(self._step, WorkflowStep):
+                # ``nested_checkpoint`` is present only for a HITL suspension
+                # whose suspended iteration is this nested workflow. A step/crash
+                # cursor points at a not-yet-started iteration, so there is no
+                # nested frame and the iteration runs fresh (mirrors Sequential).
                 nested = state.get("nested_checkpoint")
-                assert nested is not None
-                child_resume = self._child_checkpoint(resume_from, nested)
+                if nested is not None:
+                    child_resume = self._child_checkpoint(resume_from, nested)
             self._emit_resumed(resume_from, self._step.name)
 
         for iteration in range(start_iteration, self._max_iterations + 1):
@@ -161,6 +172,27 @@ class Loop(Workflow):
                 )
 
             current_input = result.output
+
+            # Step-level durability: record a cursor pointing at the *next*
+            # iteration plus a journal entry for the result just produced, so an
+            # interrupted loop resumes at iteration+1 without re-running the
+            # iterations already completed. Written only when the loop continues
+            # (a stop already returned above), so the cursor never points past a
+            # decided termination.
+            await self._save_step_checkpoint(
+                {
+                    "orchestrator_type": "loop",
+                    "iteration": iteration + 1,
+                    "last_result": {"output": result.output, "metadata": result.metadata},
+                    "original_input": input,
+                },
+                step_path=f"loop#{iteration}",
+                result_payload={
+                    "output": result.output,
+                    "metadata": result.metadata,
+                    "usage": result.usage.model_dump() if result.usage is not None else None,
+                },
+            )
 
         # max_iterations reached — return last result, don't raise
         return StepResult(

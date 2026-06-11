@@ -107,6 +107,12 @@ class DurableRun:
         run_id: Identifier for this run. Required for durable HITL; if
             omitted and the supplied workflow already carries one, it is
             adopted.
+        step_checkpoints: When ``True``, the agent-wrapping workflow writes a
+            cursor checkpoint after each completed step so the run can be
+            resumed via :meth:`resume_from_checkpoint` /
+            :meth:`ResumeService.resume_interrupted` after a crash. Applies to
+            the ``Agent`` case; when wrapping a ``Workflow`` directly, configure
+            ``step_checkpoints`` on that workflow. Defaults to ``False``.
 
     Raises:
         ValueError: If ``run_id`` cannot be resolved, if a workflow's
@@ -122,6 +128,7 @@ class DurableRun:
         hitl_store: HitlRequestStore,
         checkpoint_store: CheckpointStore,
         run_id: str | None = None,
+        step_checkpoints: bool = False,
     ) -> None:
         from nanitics.composition.orchestration.adapters import AgentStep
         from nanitics.composition.orchestration.sequential import Sequential
@@ -144,6 +151,7 @@ class DurableRun:
                 emitter=runnable._default_emitter,
                 checkpoint_store=checkpoint_store,
                 run_id=resolved_run_id,
+                step_checkpoints=step_checkpoints,
             )
             self._run_id = resolved_run_id
         elif isinstance(runnable, Workflow):
@@ -197,6 +205,30 @@ class DurableRun:
             output=result.output,
             metadata=dict(result.metadata),
         )
+
+    async def resume_from_checkpoint(self) -> ResumeResult | SuspendedRun:
+        """Resume an interrupted run from its latest cursor checkpoint.
+
+        For crash / redeploy recovery under step-level durability: loads the
+        most recent checkpoint for this run and re-drives the runnable, which
+        skips steps already completed (and journaled) before the interruption.
+        Unlike the HITL resume path there is no human response to apply.
+
+        Raises:
+            ValueError: If no checkpoint exists for this run, or the latest
+                checkpoint is a HITL suspension still awaiting input — route
+                that through :meth:`ResumeService.resume` instead.
+        """
+        checkpoint = await self._checkpoint_store.load(self._run_id)
+        if checkpoint is None:
+            raise ValueError(f"No checkpoint to resume for run_id={self._run_id!r}")
+        if checkpoint.suspension_info is not None:
+            raise ValueError(
+                f"run_id={self._run_id!r} is suspended awaiting human input "
+                f"(checkpoint_reason={checkpoint.checkpoint_reason!r}); resume it via "
+                f"ResumeService.resume, not resume_from_checkpoint."
+            )
+        return await self._resume(checkpoint)
 
     async def _build_suspended_run(self, exc: SuspendExecution) -> SuspendedRun:
         checkpoint = await self._checkpoint_store.load(self._run_id)
@@ -273,6 +305,12 @@ class ResumeService:
         if checkpoint is None:
             raise ValueError(f"No checkpoint for run_id={run_id!r}")
 
+        if checkpoint.suspension_info is None:
+            raise ValueError(
+                f"Checkpoint for run_id={run_id!r} is not a HITL suspension "
+                f"(checkpoint_reason={checkpoint.checkpoint_reason!r}); HITL resume "
+                f"requires a suspension checkpoint."
+            )
         expected = checkpoint.suspension_info.request_id
         if response.request_id != expected:
             raise ValueError(
@@ -281,6 +319,44 @@ class ResumeService:
             )
 
         await self._hitl_store.save_response(response.request_id, response)
+
+        ctx = ResumeContext(
+            run_id=run_id,
+            checkpoint=checkpoint,
+            hitl_store=self._hitl_store,
+            checkpoint_store=self._checkpoint_store,
+        )
+        durable_run = self._factory(ctx)
+        if not isinstance(durable_run, DurableRun):
+            raise TypeError(f"ResumeService factory must return a DurableRun; got {type(durable_run).__name__}")
+        return await durable_run._resume(checkpoint)
+
+    async def resume_interrupted(
+        self,
+        run_id: str,
+    ) -> ResumeResult | SuspendedRun:
+        """Resume a crashed / redeployed run from its latest cursor checkpoint.
+
+        The step-level-durability counterpart to :meth:`resume`: loads the
+        most recent checkpoint for ``run_id`` and re-drives a factory-built
+        :class:`DurableRun`, skipping steps completed before the interruption.
+        There is no human response to validate or persist.
+
+        Raises:
+            ValueError: If no checkpoint exists for ``run_id``, or the latest
+                checkpoint is a HITL suspension still awaiting input — route
+                that through :meth:`resume` instead.
+            TypeError: If the factory does not return a :class:`DurableRun`.
+        """
+        checkpoint = await self._checkpoint_store.load(run_id)
+        if checkpoint is None:
+            raise ValueError(f"No checkpoint for run_id={run_id!r}")
+        if checkpoint.suspension_info is not None:
+            raise ValueError(
+                f"Checkpoint for run_id={run_id!r} is a HITL suspension awaiting "
+                f"input (checkpoint_reason={checkpoint.checkpoint_reason!r}); resume it "
+                f"via resume(), not resume_interrupted()."
+            )
 
         ctx = ResumeContext(
             run_id=run_id,

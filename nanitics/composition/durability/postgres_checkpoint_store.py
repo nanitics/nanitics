@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncpg
 
-from nanitics.composition.durability.models import RunCheckpoint
+from nanitics.composition.durability.models import RunCheckpoint, StepRecord
 
 CHECKPOINT_SCHEMA_SQL = """\
 CREATE TABLE IF NOT EXISTS checkpoints (
@@ -20,11 +20,29 @@ CREATE TABLE IF NOT EXISTS checkpoints (
 
 CREATE INDEX IF NOT EXISTS idx_checkpoints_run_created
     ON checkpoints (run_id, created_at DESC, checkpoint_id DESC);
+
+CREATE TABLE IF NOT EXISTS step_journal (
+    run_id     TEXT NOT NULL,
+    step_path  TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    seq        BIGSERIAL,
+    data       JSONB NOT NULL,
+    PRIMARY KEY (run_id, step_path)
+);
+
+CREATE INDEX IF NOT EXISTS idx_step_journal_run_seq
+    ON step_journal (run_id, seq);
 """
 
 
 def get_checkpoint_schema_sql() -> str:
-    """Return the CREATE TABLE + INDEX statements for the checkpoints table."""
+    """Return the CREATE TABLE + INDEX statements for the checkpoint and journal tables.
+
+    Covers the ``checkpoints`` cursor table and the append-only
+    ``step_journal`` table, the latter keyed ``(run_id, step_path)`` so
+    ``append_step`` is idempotent on the step key and ``load_journal`` can
+    return records in append order via the monotonic ``seq`` column.
+    """
     return CHECKPOINT_SCHEMA_SQL
 
 
@@ -33,8 +51,9 @@ class PostgresCheckpointStore:
 
     Stores each :class:`RunCheckpoint` as a single JSONB blob keyed by
     ``checkpoint_id``. ``load(run_id)`` returns the most recent
-    checkpoint for a run, ordered by ``created_at DESC`` with
-    ``checkpoint_id DESC`` as a deterministic tie-break.
+    checkpoint for a run, ordered by ``created_at DESC``, then preferring a HITL
+    suspension over a step cursor, then ``checkpoint_id DESC`` as a final
+    deterministic tie-break.
 
     Args:
         pool: An initialised ``asyncpg.Pool``.
@@ -66,15 +85,19 @@ class PostgresCheckpointStore:
     async def load(self, run_id: str) -> RunCheckpoint | None:
         """Load the most recent checkpoint for a run, or ``None`` if none exists.
 
-        Ordering is ``created_at DESC, checkpoint_id DESC`` so that
-        same-microsecond writes resolve deterministically by id.
+        Ordering is ``created_at DESC``, then a HITL suspension
+        (``data->>'suspension_info'`` non-null) before a step/crash cursor, then
+        ``checkpoint_id DESC``. The suspension tie-break ensures a run that
+        suspended for human input in the same microsecond a sibling step
+        completed loads as the suspension and stays resumable via the HITL path;
+        the ``checkpoint_id`` term keeps any remaining tie deterministic.
         """
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
                 SELECT data FROM checkpoints
                 WHERE run_id = $1
-                ORDER BY created_at DESC, checkpoint_id DESC
+                ORDER BY created_at DESC, ((data ->> 'suspension_info') IS NOT NULL) DESC, checkpoint_id DESC
                 LIMIT 1
                 """,
                 run_id,
@@ -95,9 +118,61 @@ class PostgresCheckpointStore:
             )
 
     async def delete_for_run(self, run_id: str) -> None:
-        """Delete all checkpoints for a run. Silent if no checkpoints exist."""
+        """Delete all checkpoints and journal entries for a run.
+
+        Silent if nothing exists for the run.
+        """
         async with self._pool.acquire() as conn:
             await conn.execute(
                 "DELETE FROM checkpoints WHERE run_id = $1",
                 run_id,
             )
+            await conn.execute(
+                "DELETE FROM step_journal WHERE run_id = $1",
+                run_id,
+            )
+
+    async def append_step(self, record: StepRecord) -> None:
+        """Append a completed-step result to the journal.
+
+        Idempotent on ``(run_id, step_path)`` via ``ON CONFLICT DO UPDATE``:
+        re-appending the same step key overwrites ``data`` (last-write-wins)
+        while retaining the row's original ``seq``, so append order is
+        preserved. ``data`` carries the full :class:`StepRecord` JSON.
+        """
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO step_journal (run_id, step_path, created_at, data)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (run_id, step_path)
+                DO UPDATE SET data = EXCLUDED.data, created_at = EXCLUDED.created_at
+                """,
+                record.run_id,
+                record.step_path,
+                record.created_at,
+                record.model_dump_json(),
+            )
+
+    async def load_journal(self, run_id: str) -> list[StepRecord]:
+        """Return all step records for a run, in append order (by ``seq``).
+
+        Returns an empty list when the run has no journal entries.
+        """
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT data FROM step_journal
+                WHERE run_id = $1
+                ORDER BY seq ASC
+                """,
+                run_id,
+            )
+        records: list[StepRecord] = []
+        for row in rows:
+            raw = row["data"]
+            if isinstance(raw, str):
+                records.append(StepRecord.model_validate_json(raw))
+            else:
+                records.append(StepRecord.model_validate(raw))
+        return records

@@ -1,8 +1,45 @@
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
-from nanitics.composition.durability.models import RunCheckpoint
+from nanitics.composition.durability.models import RunCheckpoint, StepRecord
+
+CheckpointCadence = Literal["tool_call", "agent_turn"]
+"""Granularity at which an agent hands completed-step snapshots to its sink.
+
+``"tool_call"`` (the default) snapshots at the finest boundary the agent can
+replay from; ``"agent_turn"`` snapshots at reasoning-turn boundaries. For
+``ReActAgent`` a turn produces exactly one tool batch, so the two coincide at
+the batch boundary and the cadence selects the journal ``step_kind`` label.
+"""
+
+
+@runtime_checkable
+class StepCheckpointSink(Protocol):
+    """Dependency-inverted persistence seam for agent-internal step durability.
+
+    An agent that completes a durable step hands its resume snapshot to a sink
+    instead of holding a ``CheckpointStore`` itself — keeping the agent base
+    independent of the store type and the checkpoint schema, mirroring the
+    ``bind``/emitter inversion style. The orchestration layer provides the sink
+    (a closure that owns ``run_id``, the orchestration ``step_path`` prefix, and
+    the store write); the agent only knows this protocol.
+    """
+
+    async def save_step(self, *, step_path: str, step_kind: str, state: dict[str, Any]) -> None:
+        """Persist an agent-internal completed-step snapshot.
+
+        Args:
+            step_path: The agent-relative tail of the step path (e.g.
+                ``"turn#3"``). The sink prepends the orchestration prefix to
+                form the full, run-stable step key.
+            step_kind: The journal kind for this snapshot — the agent's
+                cadence (``"tool_call"`` or ``"agent_turn"``).
+            state: The agent's completed-step resume snapshot (the
+                ``_build_checkpoint_state`` shape minus the suspended-batch
+                fields), loadable back through the orchestrator's resume branch.
+        """
+        ...
 
 
 @runtime_checkable
@@ -10,7 +47,11 @@ class CheckpointStore(Protocol):
     """Protocol for persisting and retrieving execution checkpoints.
 
     Implementations store checkpoints so workflows can resume after
-    suspension, potentially in a different process.
+    suspension, potentially in a different process. Two distinct pieces of
+    durable state are kept: a cursor snapshot (``save`` / ``load``, the
+    ``RunCheckpoint`` recording loop position) and an append-only step-result
+    journal (``append_step`` / ``load_journal``, the ``StepRecord`` entries
+    recording completed-step results that protect side effects on replay).
     """
 
     async def save(self, checkpoint: RunCheckpoint) -> None:
@@ -18,7 +59,14 @@ class CheckpointStore(Protocol):
         ...
 
     async def load(self, run_id: str) -> RunCheckpoint | None:
-        """Load the most recent checkpoint for a run, or None if none exists."""
+        """Load the most recent checkpoint for a run, or None if none exists.
+
+        "Most recent" is by ``created_at``; on a tie a HITL suspension
+        (``suspension_info`` set) is preferred over a step/crash cursor, so a run
+        that suspended for human input in the same instant a sibling step
+        completed always loads as the suspension and stays resumable via the HITL
+        path. Implementations must honor this tie-break.
+        """
         ...
 
     async def delete(self, checkpoint_id: str) -> None:
@@ -29,16 +77,39 @@ class CheckpointStore(Protocol):
         """Delete all checkpoints for a run."""
         ...
 
+    async def append_step(self, record: StepRecord) -> None:
+        """Append a completed-step result to the run's journal.
+
+        Idempotent on ``(run_id, step_path)``: re-appending the same step key
+        is a no-op / last-write-wins, since a given step key has one canonical
+        result. This is the write site that makes a completed step replayable
+        rather than re-dispatched on resume.
+        """
+        ...
+
+    async def load_journal(self, run_id: str) -> list[StepRecord]:
+        """Return all step records for a run, in append order.
+
+        Returns an empty list when the run has no journal entries.
+        """
+        ...
+
 
 class InMemoryCheckpointStore:
     """In-memory implementation of CheckpointStore for testing.
 
     Stores checkpoints in a dictionary keyed by checkpoint ID.
-    ``load()`` returns the most recent checkpoint for a run by ``created_at``.
+    ``load()`` returns the most recent checkpoint for a run by ``created_at``,
+    preferring a HITL suspension over a step cursor on a tie.
+
+    The step-result journal is stored keyed by ``(run_id, step_path)``; the
+    insertion-ordered dict gives both idempotency on the step key
+    (last-write-wins, original position retained) and append-order iteration.
     """
 
     def __init__(self) -> None:
         self._checkpoints: dict[str, RunCheckpoint] = {}
+        self._journal: dict[tuple[str, str], StepRecord] = {}
 
     async def save(self, checkpoint: RunCheckpoint) -> None:
         self._checkpoints[checkpoint.checkpoint_id] = checkpoint
@@ -47,7 +118,14 @@ class InMemoryCheckpointStore:
         matches = [cp for cp in self._checkpoints.values() if cp.run_id == run_id]
         if not matches:
             return None
-        return max(matches, key=lambda cp: cp.created_at)
+        # Most recent by created_at; on a tie a HITL suspension wins over a step
+        # cursor. With step_checkpoints enabled, a branch/node completing in the
+        # same instant a sibling suspends writes a step cursor and a suspension
+        # checkpoint with potentially equal created_at — the suspension must win
+        # so the pending run routes to HITL resume rather than becoming
+        # un-resumable. Step-cursor-vs-step-cursor ties are immaterial (all carry
+        # the same original_input; the completed set comes from the journal).
+        return max(matches, key=lambda cp: (cp.created_at, cp.suspension_info is not None))
 
     async def delete(self, checkpoint_id: str) -> None:
         self._checkpoints.pop(checkpoint_id, None)
@@ -56,3 +134,14 @@ class InMemoryCheckpointStore:
         to_delete = [cp_id for cp_id, cp in self._checkpoints.items() if cp.run_id == run_id]
         for cp_id in to_delete:
             del self._checkpoints[cp_id]
+        journal_keys = [key for key in self._journal if key[0] == run_id]
+        for key in journal_keys:
+            del self._journal[key]
+
+    async def append_step(self, record: StepRecord) -> None:
+        # Keying by (run_id, step_path) makes re-appending the same step key
+        # last-write-wins while retaining the entry's original append position.
+        self._journal[(record.run_id, record.step_path)] = record
+
+    async def load_journal(self, run_id: str) -> list[StepRecord]:
+        return [record for key, record in self._journal.items() if key[0] == run_id]

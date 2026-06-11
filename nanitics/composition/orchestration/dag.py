@@ -63,6 +63,13 @@ class DAG(Workflow):
         cancellation_token: Optional cooperative cancellation signal.
         checkpoint_store: Optional store for suspension checkpoints.
         run_id: Run identifier for checkpoint records.
+        step_checkpoints: When ``True`` (and a ``checkpoint_store`` is set), a
+            thin cursor checkpoint plus a journal record are written after each
+            completed node, so an interrupted run resumes via
+            ``resume_interrupted`` without re-running nodes that already
+            finished. The completed-node set is reconstructed from the journal
+            (an order-independent union keyed by step path), so concurrent
+            completions cannot clobber each other. Opt-in; defaults to ``False``.
 
     Raises:
         ValueError: If nodes dict is empty, a dependency references a non-existent
@@ -81,6 +88,7 @@ class DAG(Workflow):
         checkpoint_store: CheckpointStore | None = None,
         run_id: str | None = None,
         trace_store: PersistentTraceStore | None = None,
+        step_checkpoints: bool = False,
     ) -> None:
         if not nodes:
             raise ValueError("DAG requires at least one node")
@@ -95,6 +103,7 @@ class DAG(Workflow):
             checkpoint_store=checkpoint_store,
             run_id=run_id,
             trace_store=trace_store,
+            step_checkpoints=step_checkpoints,
         )
         self._nodes = nodes
         self._failure_policy = failure_policy
@@ -196,7 +205,9 @@ class DAG(Workflow):
         # Resume path: restore completed nodes
         suspended_node_name: str | None = None
         child_resume: RunCheckpoint | None = None
-        if resume_from is not None:
+        if resume_from is not None and resume_from.suspension_info is not None:
+            # HITL-suspend resume — restore from the cursor state and re-run the
+            # one suspended node (recursing into a nested workflow if needed).
             state = resume_from.state
             suspended_node_name = state["suspended_node"]
             for name, output in state["completed_nodes"].items():
@@ -209,6 +220,22 @@ class DAG(Workflow):
                 assert nested is not None
                 child_resume = self._child_checkpoint(resume_from, nested)
             self._emit_resumed(resume_from, suspended_node_name)
+        elif resume_from is not None:
+            # Step/crash cursor resume — reconstruct the completed-node set from
+            # the append-only journal (an order-independent union keyed by step
+            # path, immune to the ``created_at`` ordering of concurrent cursor
+            # writes), not from the cursor's state. Unfinished nodes run fresh —
+            # a step cursor carries no per-node nested frame.
+            assert self._checkpoint_store is not None
+            journal = await self._checkpoint_store.load_journal(self._run_id)
+            by_path = {rec.step_path: rec.result for rec in journal}
+            for name in self._nodes:
+                payload = by_path.get(f"dag#{name}")
+                if payload is not None:
+                    completed[name] = self._restore_step_result(payload)
+                    for dep_name in dependents[name]:
+                        in_degree[dep_name] -= 1
+            self._emit_resumed(resume_from, None)
 
         # Ready nodes: those with in_degree == 0 and not already completed
         ready: set[str] = {name for name, deg in in_degree.items() if deg == 0 and name not in completed}
@@ -305,6 +332,17 @@ class DAG(Workflow):
                     break
 
                 completed[finished_name] = result
+
+                # Step-level durability: journal this completed node + a thin
+                # cursor (carrying only ``original_input``; downstream node
+                # inputs are reconstructed from journal-restored dependency
+                # outputs on resume), so a resume reconstructs the completed set
+                # from the journal union.
+                await self._save_step_checkpoint(
+                    {"orchestrator_type": "dag", "original_input": input},
+                    step_path=f"dag#{finished_name}",
+                    result_payload=self._serialize_step_result(result),
+                )
 
                 # Unblock dependents
                 for dep_name in dependents[finished_name]:
