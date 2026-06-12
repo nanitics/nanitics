@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-06-12
+
+Three changes driven by consumer (Studio) feedback on the HITL / durability
+surface.
+
+### Added
+
+- **`AgentStep` lifecycle observer.** A new public `StepObserver` protocol
+  (awaited `on_start(input)` / `on_complete(result)`) and an additive
+  `observer` keyword on `AgentStep` let you attach per-step boundary behaviour
+  (e.g. persisting progress transactionally) without wrapping the agent in a
+  custom `Step`. This matters for durability: wrapping an agent in a custom step
+  forfeits its step-level crash-resume, because the orchestrator threads the
+  checkpoint sink only into an `AgentStep`. An observer keeps the step a
+  first-class `AgentStep`, so tool-batch crash-resume still applies to the agent
+  inside it. `on_complete` is skipped when the step suspends (it did not
+  complete). Exported from `nanitics.composition`.
+- **`DuplicateHitlResponseError`.** New typed error raised by
+  `HitlRequestStore.save_response` on a duplicate `request_id`, mirroring
+  `DuplicateHitlRequestError` on the request side. Exported from
+  `nanitics.errors` and `nanitics.collaboration`.
+
+### Changed
+
+- **`save_response` is now idempotent across store backends.** Both
+  `InMemoryHitlRequestStore` and `PostgresHitlRequestStore` raise
+  `DuplicateHitlResponseError` on a re-save for an existing `request_id`,
+  replacing the previous divergence (in-memory silently overwrote; Postgres
+  raised a raw asyncpg `UniqueViolationError`). `ResumeService.resume` swallows
+  it, so a re-driven resume that re-saves the same response is a no-op. If you
+  implement a custom `HitlRequestStore`, raise `DuplicateHitlResponseError` from
+  `save_response` on a duplicate to match the protocol.
+
+### Fixed
+
+- **A cancelled resumed run concludes "cancelled" instead of raising.** A
+  cooperative cancellation during a resumed `ReActAgent` tool batch now returns
+  a result with `termination_reason="cancelled"`, matching the normal run loop,
+  rather than letting `RunCancelled` escape `ResumeService.resume` as an
+  exception.
+
 ## [0.11.1] - 2026-06-11
 
 Re-release of 0.11.0 with no functional change. The 0.11.0 upload landed on PyPI
