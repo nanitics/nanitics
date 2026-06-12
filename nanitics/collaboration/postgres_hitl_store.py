@@ -10,7 +10,10 @@ import json
 
 import asyncpg
 
-from nanitics.collaboration.hitl_store import DuplicateHitlRequestError
+from nanitics.collaboration.hitl_store import (
+    DuplicateHitlRequestError,
+    DuplicateHitlResponseError,
+)
 from nanitics.collaboration.protocol import (
     HumanDecision,
     HumanInputRequest,
@@ -89,20 +92,29 @@ class PostgresHitlRequestStore:
                 raise DuplicateHitlRequestError(request.request_id) from exc
 
     async def save_response(self, request_id: str, response: HumanInputResponse) -> None:
-        """Store a human's response to a request."""
+        """Store a human's response to a request.
+
+        Raises:
+            DuplicateHitlResponseError: If a response for ``request_id`` already
+                exists. The underlying :class:`asyncpg.exceptions.UniqueViolationError`
+                is preserved as ``__cause__``, mirroring :meth:`save_request`.
+        """
         async with self._pool.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO hitl_responses
-                    (request_id, decision, content, metadata, responded_at)
-                VALUES ($1, $2, $3, $4, $5)
-                """,
-                request_id,
-                response.decision.value,
-                response.content,
-                json.dumps(response.metadata),
-                response.responded_at,
-            )
+            try:
+                await conn.execute(
+                    """
+                    INSERT INTO hitl_responses
+                        (request_id, decision, content, metadata, responded_at)
+                    VALUES ($1, $2, $3, $4, $5)
+                    """,
+                    request_id,
+                    response.decision.value,
+                    response.content,
+                    json.dumps(response.metadata),
+                    response.responded_at,
+                )
+            except asyncpg.exceptions.UniqueViolationError as exc:
+                raise DuplicateHitlResponseError(request_id) from exc
 
     async def get_response(self, request_id: str) -> HumanInputResponse | None:
         """Retrieve a response by request ID, or None if not yet responded."""

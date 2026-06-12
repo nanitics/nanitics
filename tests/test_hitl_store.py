@@ -2,6 +2,7 @@ import pytest
 
 from nanitics.collaboration.hitl_store import (
     DuplicateHitlRequestError,
+    DuplicateHitlResponseError,
     InMemoryHitlRequestStore,
 )
 from nanitics.collaboration.protocol import (
@@ -161,3 +162,31 @@ class TestInMemoryHitlRequestStoreDuplicateSave:
         # The original request instance is still stored, not the replacement.
         assert store._requests["req-dup"] is original
         assert store._requests["req-dup"].prompt == "Approve?"
+
+
+class TestInMemoryHitlRequestStoreDuplicateResponse:
+    async def test_duplicate_save_response_raises_duplicate_hitl_response_error(self) -> None:
+        store = InMemoryHitlRequestStore()
+        await store.save_response("req-dup", _make_response("req-dup"))
+
+        with pytest.raises(DuplicateHitlResponseError) as exc_info:
+            await store.save_response("req-dup", _make_response("req-dup"))
+
+        assert exc_info.value.request_id == "req-dup"
+
+    async def test_duplicate_save_response_does_not_mutate_store(self) -> None:
+        store = InMemoryHitlRequestStore()
+        original = _make_response("req-dup")
+        await store.save_response("req-dup", original)
+
+        replacement = HumanInputResponse(
+            request_id="req-dup",
+            decision=HumanDecision.REJECT,
+            content="Changed my mind",
+        )
+        with pytest.raises(DuplicateHitlResponseError):
+            await store.save_response("req-dup", replacement)
+
+        # The first response is retained, not the replacement.
+        assert store._responses["req-dup"] is original
+        assert store._responses["req-dup"].decision == HumanDecision.APPROVE

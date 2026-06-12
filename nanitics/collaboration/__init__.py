@@ -4,6 +4,7 @@ from nanitics.collaboration.async_provider import AsyncHumanInputProvider
 from nanitics.collaboration.durable_provider import DurableHumanInputProvider
 from nanitics.collaboration.hitl_store import (
     DuplicateHitlRequestError,
+    DuplicateHitlResponseError,
     HitlRequestStore,
     InMemoryHitlRequestStore,
 )
@@ -40,6 +41,7 @@ __all__ = [
     "AsyncHumanInputProvider",
     "CallbackHumanInputProvider",
     "DuplicateHitlRequestError",
+    "DuplicateHitlResponseError",
     # Durable HITL
     "DurableHumanInputProvider",
     "HitlRequestStore",

@@ -10,11 +10,12 @@ re-execute with ``resume_from``" glue. See
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from nanitics.collaboration.hitl_store import HitlRequestStore
+from nanitics.collaboration.hitl_store import DuplicateHitlResponseError, HitlRequestStore
 from nanitics.collaboration.protocol import HumanInputRequest, HumanInputResponse
 from nanitics.composition.durability.models import RunCheckpoint, SuspensionInfo
 from nanitics.composition.durability.store import CheckpointStore
@@ -318,7 +319,11 @@ class ResumeService:
                 f"expected {expected!r}, got {response.request_id!r}"
             )
 
-        await self._hitl_store.save_response(response.request_id, response)
+        # Re-saving the response on a re-driven resume (a worker re-claiming
+        # the job after a mid-resume crash) is expected and idempotent — the
+        # store is the gate, mirroring the request side's duplicate handling.
+        with contextlib.suppress(DuplicateHitlResponseError):
+            await self._hitl_store.save_response(response.request_id, response)
 
         ctx = ResumeContext(
             run_id=run_id,

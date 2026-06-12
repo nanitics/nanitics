@@ -653,6 +653,9 @@ class _BoundAgentStep:
         if self._checkpoint_sink is not None:
             self._bound.agent._set_checkpoint_sink(self._checkpoint_sink)
         step = cast(AgentStep, self._step)
+        observer = step._observer
+        if observer is not None:
+            await observer.on_start(input)
         result = await self._bound.run(str(input), thread_key=step._thread_key)
         metadata: dict[str, Any] = {
             "total_steps": result.total_steps,
@@ -661,8 +664,12 @@ class _BoundAgentStep:
         }
         if result.parsed is not None:
             metadata["text_output"] = result.output
-            return StepResult(output=result.parsed, metadata=metadata, usage=result.usage)
-        return StepResult(output=result.output, metadata=metadata, usage=result.usage)
+            step_result = StepResult(output=result.parsed, metadata=metadata, usage=result.usage)
+        else:
+            step_result = StepResult(output=result.output, metadata=metadata, usage=result.usage)
+        if observer is not None:
+            await observer.on_complete(step_result)
+        return step_result
 
 
 class _AgentStepCheckpointSink:

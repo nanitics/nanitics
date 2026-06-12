@@ -405,8 +405,11 @@ class ReActAgent(Agent):
                         )
                     except RunCancelled as exc:
                         self._emit_safety_cancellation(exc.step_number or step_number)
-                        termination_reason = "cancelled"
-                        break
+                        return self._cancelled_result(
+                            messages=messages,
+                            step_number=step_number,
+                            usages=usages,
+                        )
 
                     if self._tool_call_limiter is not None:
                         try:
@@ -536,6 +539,31 @@ class ReActAgent(Agent):
             parsed=parsed,
             total_steps=step_number,
             termination_reason=termination_reason,
+            messages=messages,
+            usage=self._aggregate_usage(usages),
+        )
+
+    def _cancelled_result(
+        self,
+        *,
+        messages: list[Message],
+        step_number: int,
+        usages: list[Usage],
+    ) -> AgentResult:
+        """Build the terminal result for a cooperatively cancelled run.
+
+        Shared by the normal loop's tool-dispatch ``except RunCancelled``
+        and :meth:`_execute_resume` so a cancellation concludes with
+        ``termination_reason="cancelled"`` on either path — instead of the
+        signal escaping ``ResumeService.resume`` on the resume path alone.
+        ``output``/``parsed`` are ``None``: a cancelled run produced no
+        final answer.
+        """
+        return AgentResult(
+            output=None,
+            parsed=None,
+            total_steps=step_number,
+            termination_reason="cancelled",
             messages=messages,
             usage=self._aggregate_usage(usages),
         )
@@ -853,17 +881,27 @@ class ReActAgent(Agent):
 
         # Re-execute from the suspended tool call onward. A pre-suspension
         # return_direct hit is seeded so it still wins on the lowest index over
-        # any return_direct call in the re-dispatched tail.
-        return_direct_hit = await self._dispatch_tool_batch(
-            tool_calls,
-            messages,
-            available_tools,
-            step_number,
-            revision_count,
-            usages,
-            start_index=suspended_tool_index,
-            return_direct_hit=pre_suspend_hit,
-        )
+        # any return_direct call in the re-dispatched tail. A cooperative
+        # cancellation here concludes "cancelled" through the same contract as
+        # the normal loop, rather than escaping ``ResumeService.resume``.
+        try:
+            return_direct_hit = await self._dispatch_tool_batch(
+                tool_calls,
+                messages,
+                available_tools,
+                step_number,
+                revision_count,
+                usages,
+                start_index=suspended_tool_index,
+                return_direct_hit=pre_suspend_hit,
+            )
+        except RunCancelled as exc:
+            self._emit_safety_cancellation(exc.step_number or step_number)
+            return self._cancelled_result(
+                messages=messages,
+                step_number=step_number,
+                usages=usages,
+            )
 
         # Emit step event for the completed batch
         action = ", ".join(tc.name for tc in tool_calls)

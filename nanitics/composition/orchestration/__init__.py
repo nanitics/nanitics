@@ -9,7 +9,7 @@ from nanitics.composition.orchestration.pipeline import (
     PipelineContractError,
     Stage,
 )
-from nanitics.composition.orchestration.protocol import FailurePolicy, Step, StepResult
+from nanitics.composition.orchestration.protocol import FailurePolicy, Step, StepObserver, StepResult
 from nanitics.composition.orchestration.sequential import Sequential
 from nanitics.composition.orchestration.workflow import Workflow, WorkflowCancelledError
 
@@ -28,6 +28,7 @@ __all__ = [
     "Sequential",
     "Stage",
     "Step",
+    "StepObserver",
     "StepResult",
     "Workflow",
     "WorkflowCancelledError",
