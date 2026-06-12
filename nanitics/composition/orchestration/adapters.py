@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from nanitics.composition.durability.models import RunCheckpoint
-from nanitics.composition.orchestration.protocol import StepResult
+from nanitics.composition.orchestration.protocol import StepObserver, StepResult
 from nanitics.composition.orchestration.workflow import Workflow
 from nanitics.strategies.agents.base import Agent
 
@@ -37,11 +37,26 @@ class AgentStep:
             :class:`~nanitics.composition.threads.ThreadStore` for the
             prefix to be persisted; the key is otherwise accepted and
             ignored. ``None`` (the default) runs the step stateless.
+        observer: Optional :class:`~nanitics.composition.orchestration.protocol.StepObserver`
+            whose ``on_start`` / ``on_complete`` hooks are awaited around the
+            agent run — ``on_start`` before it runs, ``on_complete`` after the
+            :class:`StepResult` is composed (skipped if the step suspends). Use
+            this to attach per-step lifecycle behaviour (e.g. persisting
+            progress) without wrapping the agent in a custom ``Step``, which
+            would forfeit the agent's step-level durability. ``None`` (the
+            default) attaches no hooks.
     """
 
-    def __init__(self, agent: Agent, *, thread_key: str | None = None) -> None:
+    def __init__(
+        self,
+        agent: Agent,
+        *,
+        thread_key: str | None = None,
+        observer: StepObserver | None = None,
+    ) -> None:
         self._agent = agent
         self._thread_key = thread_key
+        self._observer = observer
 
     @property
     def name(self) -> str:
@@ -53,6 +68,8 @@ class AgentStep:
         return self._agent
 
     async def execute(self, input: Any) -> StepResult:
+        if self._observer is not None:
+            await self._observer.on_start(input)
         result = await self._agent.run(str(input), thread_key=self._thread_key)
         metadata: dict[str, Any] = {
             "total_steps": result.total_steps,
@@ -61,8 +78,12 @@ class AgentStep:
         }
         if result.parsed is not None:
             metadata["text_output"] = result.output
-            return StepResult(output=result.parsed, metadata=metadata, usage=result.usage)
-        return StepResult(output=result.output, metadata=metadata, usage=result.usage)
+            step_result = StepResult(output=result.parsed, metadata=metadata, usage=result.usage)
+        else:
+            step_result = StepResult(output=result.output, metadata=metadata, usage=result.usage)
+        if self._observer is not None:
+            await self._observer.on_complete(step_result)
+        return step_result
 
 
 class WorkflowStep:

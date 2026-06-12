@@ -100,3 +100,31 @@ class Step(Protocol):
             A StepResult containing the output and optional metadata.
         """
         ...
+
+
+@runtime_checkable
+class StepObserver(Protocol):
+    """Awaited lifecycle hooks fired around an :class:`AgentStep`'s execution.
+
+    Attach via ``AgentStep(agent, observer=...)`` to observe a step's boundary
+    without wrapping the agent in a custom :class:`Step`. Both hooks are
+    awaited inline with the step, so an observer can persist per-step progress
+    transactionally: ``on_start`` before the agent runs, ``on_complete`` after
+    its :class:`StepResult` is composed. A step that suspends (raises
+    ``SuspendExecution``) fires ``on_start`` but not ``on_complete`` — it did
+    not complete.
+
+    Prefer an observer over a custom ``Step`` for this purpose: a custom step
+    that wraps an agent loses the agent's step-level durability, because the
+    orchestrator only threads its checkpoint sink into an :class:`AgentStep`.
+    An observer keeps the step a first-class ``AgentStep``, so tool-batch
+    crash-resume still applies to the agent inside it.
+    """
+
+    async def on_start(self, input: Any) -> None:
+        """Called with the step's input before the agent runs."""
+        ...
+
+    async def on_complete(self, result: StepResult) -> None:
+        """Called with the composed :class:`StepResult` after the agent returns."""
+        ...
