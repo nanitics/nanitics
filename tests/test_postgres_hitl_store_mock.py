@@ -9,7 +9,10 @@ from unittest.mock import AsyncMock, MagicMock
 import asyncpg
 import pytest
 
-from nanitics.collaboration.hitl_store import DuplicateHitlRequestError
+from nanitics.collaboration.hitl_store import (
+    DuplicateHitlRequestError,
+    DuplicateHitlResponseError,
+)
 from nanitics.collaboration.postgres_hitl_store import (
     PostgresHitlRequestStore,
     _row_to_request,
@@ -125,6 +128,23 @@ class TestPostgresHitlRequestStoreMock:
         assert "INSERT INTO hitl_responses" in args[0]
         assert args[1] == "req-1"
         assert args[2] == "approve"
+
+    async def test_save_response_duplicate_raises_shared_error(self) -> None:
+        pool, conn = _make_pool()
+        conn.execute = AsyncMock(
+            side_effect=asyncpg.exceptions.UniqueViolationError("duplicate key value violates unique constraint")
+        )
+        store = PostgresHitlRequestStore(pool)
+        response = HumanInputResponse(
+            request_id="req-dup",
+            decision=HumanDecision.APPROVE,
+            content="Looks good",
+            responded_at=datetime.now(tz=UTC),
+        )
+        with pytest.raises(DuplicateHitlResponseError) as exc_info:
+            await store.save_response("req-dup", response)
+        assert exc_info.value.request_id == "req-dup"
+        assert isinstance(exc_info.value.__cause__, asyncpg.exceptions.UniqueViolationError)
 
     async def test_get_response_found(self) -> None:
         pool, conn = _make_pool()

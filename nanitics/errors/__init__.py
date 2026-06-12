@@ -8,7 +8,10 @@ from nanitics.capabilities.errors import (
     classify_error,
     format_correction_prompt,
 )
-from nanitics.collaboration.hitl_store import DuplicateHitlRequestError
+from nanitics.collaboration.hitl_store import (
+    DuplicateHitlRequestError,
+    DuplicateHitlResponseError,
+)
 from nanitics.composition.durability.models import CheckpointVersionError
 from nanitics.composition.multi_agent.peer_network import PeerBudgetExceededError
 from nanitics.composition.orchestration.pipeline import PipelineContractError
@@ -56,6 +59,7 @@ __all__ = [
     "ApprovalUnavailableError",
     "CheckpointVersionError",
     "DuplicateHitlRequestError",
+    "DuplicateHitlResponseError",
     "EmbeddingError",
     "EmbeddingProviderError",
     "EmbeddingRateLimitError",

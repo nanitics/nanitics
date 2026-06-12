@@ -12,6 +12,7 @@ private contract with :class:`~nanitics.strategies.agents.base.Agent`.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
@@ -40,7 +41,9 @@ from nanitics.infrastructure import MockLLMClient
 from nanitics.infrastructure.observability.events import (
     ExecutionResumedEvent,
     ExecutionSuspendedEvent,
+    SafetyCancellationEvent,
 )
+from nanitics.safety.cancellation import CancellationToken
 from nanitics.strategies import (
     ReActAgent,
     tool,
@@ -707,6 +710,210 @@ class TestAgentResume:
         # cleared by ``Agent._run`` — after the full resume it is back
         # to ``None``.
         assert resumed_agents[0]._resume_state is None
+
+
+class TestResumeResponseIdempotency:
+    """A re-driven resume re-saves the already-persisted response; the store's
+    ``DuplicateHitlResponseError`` is swallowed so the resume is idempotent."""
+
+    async def test_resume_swallows_duplicate_response_on_redrive(self) -> None:
+        hitl_store = InMemoryHitlRequestStore()
+        checkpoint_store = InMemoryCheckpointStore()
+        provider = DurableHumanInputProvider(request_store=hitl_store)
+        wrapped_tool = make_suspending_tool(provider)
+
+        client1 = MockLLMClient(
+            [
+                make_response(
+                    content="Adding",
+                    tool_calls=[ToolCall(id="tc1", name="add", arguments={"a": 1, "b": 2})],
+                ),
+            ]
+        )
+        agent1 = ReActAgent(
+            name="test-agent",
+            llm_client=client1,
+            emitter=make_emitter(),
+            system_prompt="You are a test agent",
+            tools=[wrapped_tool],
+            run_id=_TEST_RUN_ID,
+        )
+        workflow1 = Sequential(
+            name="workflow",
+            steps=[AgentStep(agent1)],
+            emitter=make_emitter(),
+            checkpoint_store=checkpoint_store,
+            run_id=_TEST_RUN_ID,
+        )
+        durable = DurableRun(
+            workflow1,
+            hitl_store=hitl_store,
+            checkpoint_store=checkpoint_store,
+        )
+        suspended = await durable.start("add 1 and 2")
+        assert isinstance(suspended, SuspendedRun)
+
+        response = HumanInputResponse(
+            request_id=suspended.pending_request.request_id,
+            decision=HumanDecision.APPROVE,
+        )
+        # Simulate a prior resume that persisted the response before crashing
+        # mid-resume: the response is already in the store when resume re-drives.
+        await hitl_store.save_response(response.request_id, response)
+
+        def factory(ctx: ResumeContext) -> DurableRun:
+            provider2 = DurableHumanInputProvider(request_store=ctx.hitl_store)
+            wrapped_tool2 = ApprovalWrappedTool(tool=add_tool, provider=provider2)
+            client2 = MockLLMClient([make_response(content="The sum is 3")])
+            agent2 = ReActAgent(
+                name="test-agent",
+                llm_client=client2,
+                emitter=make_emitter(),
+                system_prompt="You are a test agent",
+                tools=[wrapped_tool2],
+                run_id=ctx.run_id,
+            )
+            workflow2 = Sequential(
+                name="workflow",
+                steps=[AgentStep(agent2)],
+                emitter=make_emitter(),
+                checkpoint_store=ctx.checkpoint_store,
+                run_id=ctx.run_id,
+            )
+            return DurableRun(
+                workflow2,
+                hitl_store=ctx.hitl_store,
+                checkpoint_store=ctx.checkpoint_store,
+            )
+
+        service = ResumeService(
+            hitl_store=hitl_store,
+            checkpoint_store=checkpoint_store,
+            factory=factory,
+        )
+        # The duplicate save raised inside ``resume`` is swallowed — no error.
+        result = await service.resume(suspended.run_id, response)
+        assert isinstance(result, ResumeResult)
+        assert result.output == "The sum is 3"
+
+
+# ── Resume Cancellation ────────────────────────────────────
+
+
+class TestAgentResumeCancellation:
+    """A run cancelled while re-dispatching a resumed tool batch concludes
+    ``cancelled`` through ``ResumeService.resume`` — the cooperative-cancel
+    signal does not escape as an exception, matching the normal run loop."""
+
+    async def test_resume_cancelled_during_tool_dispatch_concludes_cancelled(self) -> None:
+        started = asyncio.Event()
+
+        @tool(name="slow", description="Never resolves until cancelled.")
+        async def slow_tool(query: str) -> str:
+            started.set()
+            await asyncio.Event().wait()  # blocks forever
+            return "unreachable"  # pragma: no cover
+
+        hitl_store = InMemoryHitlRequestStore()
+        checkpoint_store = InMemoryCheckpointStore()
+        provider = DurableHumanInputProvider(request_store=hitl_store)
+        wrapped_tool = make_suspending_tool(provider)
+
+        # First run: a batch of [add(wrapped), slow]; the approval-wrapped add
+        # suspends at index 0, so ``slow`` never runs on this pass.
+        client1 = MockLLMClient(
+            [
+                make_response(
+                    content="do both",
+                    tool_calls=[
+                        ToolCall(id="tc1", name="add", arguments={"a": 1, "b": 2}),
+                        ToolCall(id="tc2", name="slow", arguments={"query": "x"}),
+                    ],
+                ),
+            ]
+        )
+        agent1 = ReActAgent(
+            name="test-agent",
+            llm_client=client1,
+            emitter=make_emitter(),
+            system_prompt="You are a test agent",
+            tools=[wrapped_tool, slow_tool],
+            run_id=_TEST_RUN_ID,
+        )
+        workflow1 = Sequential(
+            name="workflow",
+            steps=[AgentStep(agent1)],
+            emitter=make_emitter(),
+            checkpoint_store=checkpoint_store,
+            run_id=_TEST_RUN_ID,
+        )
+        durable = DurableRun(
+            workflow1,
+            hitl_store=hitl_store,
+            checkpoint_store=checkpoint_store,
+        )
+        suspended = await durable.start("do both")
+        assert isinstance(suspended, SuspendedRun)
+
+        token = CancellationToken()
+        emitter2 = make_emitter()
+
+        def factory(ctx: ResumeContext) -> DurableRun:
+            provider2 = DurableHumanInputProvider(request_store=ctx.hitl_store)
+            wrapped_tool2 = ApprovalWrappedTool(tool=add_tool, provider=provider2)
+            # The resumed batch re-runs add (returns the approved result) then
+            # reaches ``slow`` and blocks; the LLM is never called.
+            client2 = MockLLMClient([make_response(content="unreached")])
+            agent2 = ReActAgent(
+                name="test-agent",
+                llm_client=client2,
+                emitter=emitter2,
+                system_prompt="You are a test agent",
+                tools=[wrapped_tool2, slow_tool],
+                cancellation_token=token,
+                run_id=ctx.run_id,
+            )
+            workflow2 = Sequential(
+                name="workflow",
+                steps=[AgentStep(agent2)],
+                emitter=emitter2,
+                checkpoint_store=ctx.checkpoint_store,
+                run_id=ctx.run_id,
+            )
+            return DurableRun(
+                workflow2,
+                hitl_store=ctx.hitl_store,
+                checkpoint_store=ctx.checkpoint_store,
+            )
+
+        service = ResumeService(
+            hitl_store=hitl_store,
+            checkpoint_store=checkpoint_store,
+            factory=factory,
+        )
+        response = HumanInputResponse(
+            request_id=suspended.pending_request.request_id,
+            decision=HumanDecision.APPROVE,
+        )
+
+        result_holder: dict[str, Any] = {}
+
+        async def _resume() -> None:
+            result_holder["result"] = await service.resume(suspended.run_id, response)
+
+        task = asyncio.create_task(_resume())
+        await started.wait()
+        token.cancel()
+        # Before the fix this raised ``RunCancelled`` out of ``resume``; now it
+        # returns a value.
+        await asyncio.wait_for(task, timeout=2.0)
+
+        result = result_holder["result"]
+        assert isinstance(result, ResumeResult)
+        cancellation_events = [e for e in emitter2.events if isinstance(e, SafetyCancellationEvent)]
+        assert len(cancellation_events) == 1
+        inner = result.metadata["intermediate_results"]["test-agent"]
+        assert inner.metadata["termination_reason"] == "cancelled"
 
 
 # ── Agent + Orchestrator Integration ───────────────────────
