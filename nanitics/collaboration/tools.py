@@ -159,6 +159,7 @@ def create_ask_human_tool(provider: HumanInputProvider) -> FunctionTool:
             "can provide. The run pauses until they respond, then continues with "
             "their answer."
         ),
+        human_channel=True,
     )
     async def ask_human(
         question: str,

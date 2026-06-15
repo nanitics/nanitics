@@ -40,6 +40,9 @@ class FunctionTool:
             first call to this tool and uses its ``ToolResult`` content as
             the output. Defaults to ``False``. See
             :class:`~nanitics.infrastructure.llm.protocol.ToolSchema`.
+        human_channel: When ``True``, marks this tool as a two-way
+            human-input channel. Defaults to ``False``. See
+            :class:`~nanitics.infrastructure.llm.protocol.ToolSchema`.
 
     Raises:
         ValueError: If both or neither of *parameters_model* and
@@ -55,6 +58,7 @@ class FunctionTool:
         parameters_model: type[BaseModel] | None = None,
         parameters_schema: dict[str, Any] | None = None,
         return_direct: bool = False,
+        human_channel: bool = False,
     ) -> None:
         if parameters_model is not None and parameters_schema is not None:
             raise ValueError("Provide either parameters_model or parameters_schema, not both")
@@ -88,6 +92,7 @@ class FunctionTool:
             description=description,
             parameters=schema_dict,
             return_direct=return_direct,
+            human_channel=human_channel,
         )
 
     @property
@@ -103,12 +108,14 @@ class FunctionTool:
         return_direct: bool | _Unset = _UNSET,
         requires_approval: bool | _Unset = _UNSET,
         timeout_seconds: float | None | _Unset = _UNSET,
+        human_channel: bool | _Unset = _UNSET,
     ) -> FunctionTool:
         """Return a copy of this tool with the given schema metadata replaced.
 
         Only schema metadata may be overridden: ``name``, ``description``,
-        and the SDK-side flags ``return_direct``, ``requires_approval``, and
-        ``timeout_seconds``. The wrapped function, its parameter schema, and
+        and the SDK-side flags ``return_direct``, ``requires_approval``,
+        ``timeout_seconds``, and ``human_channel``. The wrapped function, its
+        parameter schema, and
         ``ToolContext`` injection are preserved unchanged; to change those,
         build a new tool. Arguments left unset keep their current values.
         Returns a new instance; the original is untouched.
@@ -125,6 +132,7 @@ class FunctionTool:
             return_direct: New ``return_direct`` flag, if overriding.
             requires_approval: New ``requires_approval`` flag, if overriding.
             timeout_seconds: New ``timeout_seconds``, if overriding.
+            human_channel: New ``human_channel`` flag, if overriding.
 
         Returns:
             A new ``FunctionTool`` wrapping the same callable, differing only
@@ -141,6 +149,8 @@ class FunctionTool:
             updates["requires_approval"] = requires_approval
         if not isinstance(timeout_seconds, _Unset):
             updates["timeout_seconds"] = timeout_seconds
+        if not isinstance(human_channel, _Unset):
+            updates["human_channel"] = human_channel
 
         new_schema = self._schema.model_copy(update=updates)
         if self.parameters_model is not None:
@@ -223,6 +233,7 @@ def tool(
     *,
     parameters_model: type[BaseModel] | None = None,
     return_direct: bool = False,
+    human_channel: bool = False,
 ) -> Callable[
     [Callable[..., Awaitable[str | ToolResult]]],
     FunctionTool,
@@ -243,6 +254,9 @@ def tool(
             first call to this tool and uses its ``ToolResult`` content as
             the output, skipping the closing LLM turn. Defaults to
             ``False``. See
+            :class:`~nanitics.infrastructure.llm.protocol.ToolSchema`.
+        human_channel: When ``True``, marks this tool as a two-way
+            human-input channel. Defaults to ``False``. See
             :class:`~nanitics.infrastructure.llm.protocol.ToolSchema`.
 
     Returns:
@@ -268,6 +282,7 @@ def tool(
             description=description,
             parameters_model=model,
             return_direct=return_direct,
+            human_channel=human_channel,
         )
 
     return decorator

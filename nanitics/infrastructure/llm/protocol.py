@@ -56,6 +56,14 @@ class ToolSchema(BaseModel):
             SDK-side only, like ``requires_approval`` and ``timeout_seconds``:
             never serialized to any LLM provider. Defaults to ``False`` so
             existing tools are unaffected.
+        human_channel: If ``True``, marks this tool as a two-way human-input
+            channel (a question the agent can ask a person, e.g.
+            :func:`~nanitics.collaboration.tools.create_ask_human_tool`). A
+            :class:`~nanitics.strategies.agents.react.ReActAgent` reads this
+            flag to make its environment guidance capability-aware (prefer
+            asking over assuming) and to phrase the explicit-finish nudge.
+            SDK-side only, never serialized to any LLM provider. Defaults to
+            ``False`` so existing tools are unaffected.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -66,6 +74,7 @@ class ToolSchema(BaseModel):
     requires_approval: bool = False
     timeout_seconds: float | None = None
     return_direct: bool = False
+    human_channel: bool = False
 
 
 class TextContentBlock(BaseModel):

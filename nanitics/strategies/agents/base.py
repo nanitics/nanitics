@@ -96,12 +96,17 @@ class AgentResult(PydanticBaseModel):
         total_steps: Number of reasoning steps the agent executed.
         termination_reason: Why the agent stopped — ``"complete"``,
             ``"iteration_limit"``, ``"cancelled"``, ``"evaluation_failed"``,
-            or ``"return_direct"`` (a tool marked ``return_direct`` ended the
-            run on its result). Consumers may switch on this value. On
+            ``"return_direct"`` (a tool marked ``return_direct`` ended the
+            run on its result), or ``"finished"`` (a ``ReActAgent`` configured
+            with ``require_explicit_finish=True`` ended the run via an explicit
+            ``finish`` call). Consumers may switch on this value. On
             ``"return_direct"``, ``parsed`` is ``None`` even when
             ``output_schema`` was configured, and structured terminal data is
             read from the last ``tool_result`` message's ``metadata`` in
-            ``messages``.
+            ``messages``. On ``"finished"``, ``output`` is the ``finish``
+            result and ``parsed`` is the validated ``output_schema`` instance
+            when a schema is set (otherwise ``None``); ``"finished"`` appears
+            only when ``require_explicit_finish`` is enabled.
         messages: Full conversation history including user input, assistant
             responses, and tool results.
         usage: Aggregated token usage across all LLM calls in the run.
@@ -131,6 +136,12 @@ class Agent(ABC):
         emitter: Receives all events emitted during execution.
         system_prompt: Base system prompt text. Combined with any
             ``prompt_contributors`` sections via ``SystemPromptBuilder``.
+        environment_guidance: Overrides the fixed "environment" prompt
+            section. When ``None`` (default), the section uses the standard
+            autonomous-operation text. Subclasses that know their tool
+            surface (e.g. :class:`~nanitics.strategies.agents.react.ReActAgent`)
+            pass capability-aware text so the guidance matches whether a
+            human-input channel is available.
         cancellation_token: External signal to cancel the agent mid-run.
         error_handler: Strategy for recovering from LLM and tool errors.
         context_manager: Manages the context window (truncation,
@@ -165,6 +176,7 @@ class Agent(ABC):
         llm_client: LLMClient,
         emitter: EventEmitter,
         system_prompt: str,
+        environment_guidance: str | None = None,
         cancellation_token: CancellationToken | None = None,
         error_handler: ErrorHandling | None = None,
         context_manager: ContextManagement | None = None,
@@ -190,9 +202,13 @@ class Agent(ABC):
         builder.add_section("base", system_prompt)
         builder.add_section(
             "environment",
-            "You operate autonomously rather than as a conversational "
-            "chatbot. Make reasonable assumptions when information is "
-            "incomplete and state them explicitly.",
+            environment_guidance
+            if environment_guidance is not None
+            else (
+                "You operate autonomously rather than as a conversational "
+                "chatbot. Make reasonable assumptions when information is "
+                "incomplete and state them explicitly."
+            ),
         )
         for contributor in prompt_contributors or []:
             section = contributor.system_prompt_section()
