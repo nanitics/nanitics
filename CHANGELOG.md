@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-06-15
+
+Explicit run completion for `ReActAgent`, driven by Studio's most-reported
+reliability failure: a clarifying question emitted as bare text is structurally
+identical to a final answer, so it silently ends the run and is delivered
+one-way to a recipient who cannot reply. Both parts are opt-in and
+non-breaking; agents that do not opt in are unchanged.
+
+### Added
+
+- **`require_explicit_finish` mode on `ReActAgent`** (default `False`). When
+  `True`, the run terminates only via a typed terminal action: a `finish` tool
+  is auto-registered, and a no-tool-call turn no longer ends the run — the loop
+  appends the assistant text plus a capability-aware nudge and continues,
+  bounded by `max_iterations`. `finish(result: str)` (or the `output_schema`
+  shape when set) delivers the output with `termination_reason="finished"`;
+  its result passes through the `output_evaluator` gate just as a bare-text
+  answer does in default mode. With `output_schema`, `finish`'s arguments carry
+  the structured output directly, removing the separate post-loop synthesis
+  call. Reserves the tool name `finish` (raises `ValueError` on collision) only
+  when the mode is on. Use for autonomous, one-way-output agents; leave `False`
+  for conversational agents whose bare-text turns a host loop catches.
+- **`ToolSchema.human_channel`** flag (default `False`), set by
+  `create_ask_human_tool` / `create_hitl_tools`. Marks a two-way human-input
+  channel so `ReActAgent` can make its guidance capability-aware. SDK-side
+  only, never serialized to any LLM provider. Plumbed through `FunctionTool`,
+  the `tool` decorator, and `FunctionTool.replace`.
+- **`AgentResult.termination_reason="finished"`**, a new value distinguishing an
+  explicit `finish` completion from implicit completion in traces. Appears only
+  when `require_explicit_finish` is enabled.
+
+### Changed
+
+- **Capability-aware environment prompt.** A `ReActAgent` that has a human-input
+  channel (an `ask_human`-style tool) now receives environment guidance that
+  tells it to call `ask_human` rather than assume, instead of the fixed
+  "make reasonable assumptions" text that contradicted the tool surface. The
+  guidance is topology-neutral (it does not assert the output is one-way, which
+  is false for sub-agents). Agents with no human channel see byte-identical
+  text to before.
+
 ## [0.12.0] - 2026-06-12
 
 Three changes driven by consumer (Studio) feedback on the HITL / durability

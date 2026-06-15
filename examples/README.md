@@ -197,6 +197,7 @@ HITL, and async HTTP-style HITL. Durable HITL lives under `durability/`.
 | [hitl/approval_wrapped_tool.py](hitl/approval_wrapped_tool.py) | `ApprovalWrappedTool`, schema preservation, approve/reject/modify, parameter modification | [Human-in-the-Loop](../docs/guides/human-in-the-loop.md) |
 | [hitl/hitl_tools.py](hitl/hitl_tools.py) | `create_request_approval_tool`, `create_ask_human_tool`, `create_hitl_tools`, agent-initiated | [Human-in-the-Loop](../docs/guides/human-in-the-loop.md) |
 | [hitl/async_hitl.py](hitl/async_hitl.py) | `AsyncHumanInputProvider`, async `Future` resolution, HTTP-integration producer/consumer | [Human-in-the-Loop](../docs/guides/human-in-the-loop.md) |
+| [hitl/explicit_finish.py](hitl/explicit_finish.py) | `require_explicit_finish`, auto `finish` tool, bare-text-non-terminal nudge, question-vs-finish fork with `ask_human` | [Human-in-the-Loop](../docs/guides/human-in-the-loop.md) |
 
 ## Providers
 

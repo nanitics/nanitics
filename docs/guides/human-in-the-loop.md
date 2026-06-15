@@ -69,6 +69,18 @@ The agent-initiated nature is both the strength and the risk: a well-prompted ag
 
 > **See also:** [examples/hitl/hitl_tools.py](../../examples/hitl/hitl_tools.py)
 
+## Explicit Run Completion
+
+By default a `ReActAgent` run ends the moment the model emits a turn with no tool calls — that text becomes the output. This makes a clarifying question dangerous: a question is just text with no tool call, so it is structurally identical to a final answer and silently ends the run. In an autonomous setting there is no conversational loop to catch the reply, so the question is delivered to a recipient who cannot respond, and the run is over. `ask_human` exists precisely so the agent can ask a person — but nothing forces the model to reach for it instead of just typing the question.
+
+`ReActAgent(require_explicit_finish=True)` closes that gap. In this mode the run ends only via a typed terminal action: an auto-registered `finish` tool delivers the result, `ask_human` asks a person, and a bare-text turn is no longer terminal — the loop nudges the model to pick one of the two and continues (bounded by `max_iterations`). Finishing and asking become a clean fork — `ask_human` (question → pauses) versus `finish` (answer → ends) — so a question can never fall out as terminal text. The `finish` result still passes through any configured `output_evaluator`, and when an `output_schema` is set the model fills it via `finish`'s arguments (no extra synthesis call). An explicit completion sets `termination_reason="finished"`, distinguishing it from implicit completion in traces.
+
+**When to enable it.** Turn it on for autonomous, one-way-output agents — anything whose result is delivered to a recipient who cannot reply in-band (a notification, a queued task, a sub-task whose caller is not a live chat). Leave it off (the default) for conversational agents whose bare-text turns are caught by a host loop that feeds the next user message back in; there, a bare-text reply *is* the product and forcing `finish` on every turn is wrong. This is why the default does not flip: the SDK serves both topologies.
+
+**Topology note.** The SDK does not bake "your output is one-way" into the agent, because it is not universally true — a `ReActAgent` used as a sub-agent feeds a parent that *can* react. When a human channel is present the agent's environment guidance is made capability-aware (prefer `ask_human` over assuming) but stays topology-neutral; the host owns any "this output is one-way" framing, since only the host knows whether it is.
+
+> **See also:** [examples/hitl/explicit_finish.py](../../examples/hitl/explicit_finish.py)
+
 ## ApprovalWrappedTool
 
 `ApprovalWrappedTool` wraps an existing tool so that every invocation requires human approval before execution. Unlike HITL tools where the agent chooses when to ask, this is mandatory — the developer decides which tools are gated.

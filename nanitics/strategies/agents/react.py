@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 if TYPE_CHECKING:
     from nanitics.composition.threads.store import ThreadLocks, ThreadStore
@@ -36,9 +37,44 @@ from nanitics.strategies.agents.parsing import (
 )
 from nanitics.strategies.agents.working_memory import WorkingMemory, WorkingMemoryContributor
 from nanitics.strategies.prompts.builder import SystemPromptContributor
-from nanitics.strategies.tools import Tool, ToolRegistry
+from nanitics.strategies.tools import FunctionTool, Tool, ToolRegistry, tool
 
 from .base import Agent, AgentInput, AgentResult
+
+# Capability-aware environment guidance used when a human-input channel
+# (a tool with ``schema.human_channel``) is present. It tells the model to
+# reach for that channel rather than assuming, and not to end on a bare
+# question. Topology-neutral: it does not assert the result is one-way, since
+# a ReActAgent used as a sub-agent feeds a parent that can react. When no
+# human channel is present, ``environment_guidance`` stays ``None`` and the
+# base class uses its standard autonomous-operation text unchanged.
+_HUMAN_CHANNEL_ENVIRONMENT_GUIDANCE = (
+    "You operate autonomously rather than as a conversational chatbot. When a "
+    "decision or information requires a person, call `ask_human` rather than "
+    "assuming; otherwise proceed on reasonable assumptions and state them. End "
+    "your turn with a complete result, not a question."
+)
+
+# Reserved tool name for the explicit-completion terminal. Auto-registered
+# when ``require_explicit_finish=True``; reserved against consumer collision
+# only in that mode.
+_FINISH_TOOL_NAME = "finish"
+
+
+@dataclass(frozen=True)
+class _EvalDecision:
+    """Outcome of running a candidate output through the evaluation gate.
+
+    ``revise`` true means the caller should append ``feedback`` and continue the
+    loop. Otherwise the candidate is terminal: ``reason_override`` is a
+    non-``None`` ``termination_reason`` (``"evaluation_failed"`` /
+    ``"evaluation_skipped"``) when the evaluator forced one, or ``None`` for a
+    clean accept (the caller keeps its own default reason).
+    """
+
+    revise: bool
+    feedback: str | None = None
+    reason_override: str | None = None
 
 
 class ReActAgent(Agent):
@@ -93,6 +129,20 @@ class ReActAgent(Agent):
         initial_messages: Optional prior conversation messages to prepend
             before the current user input. Enables multi-turn conversations
             where history is loaded from an external store.
+        require_explicit_finish: Opt-in completion mode (default ``False``).
+            When ``True``, the run terminates only via a typed terminal
+            action: a ``finish`` tool is auto-registered, and a no-tool-call
+            turn no longer ends the run — instead the loop appends the
+            assistant text plus a nudge and continues, bounded by
+            ``max_iterations``. ``finish(result: str)`` (or the
+            ``output_schema`` shape when set) delivers the run's output with
+            ``termination_reason="finished"``; its result is subject to the
+            ``output_evaluator`` gate just as a bare-text answer is in default
+            mode. Use for autonomous, one-way-output agents where a clarifying
+            question must route through ``ask_human`` rather than silently
+            ending the run; leave ``False`` for conversational agents whose
+            bare-text turns are caught by a host loop. Raises ``ValueError`` if
+            a tool named ``finish`` is already registered.
     """
 
     def __init__(
@@ -117,6 +167,7 @@ class ReActAgent(Agent):
         streaming: bool = False,
         output_schema: type[BaseModel] | None = None,
         initial_messages: list[Message] | None = None,
+        require_explicit_finish: bool = False,
         run_id: str | None = None,
         thread_store: ThreadStore | None = None,
         thread_locks: ThreadLocks | None = None,
@@ -129,11 +180,20 @@ class ReActAgent(Agent):
             contributors.append(WorkingMemoryContributor())
         if prompt_contributors is not None:
             contributors.extend(prompt_contributors)
+        # Capability-aware environment guidance: only when a human-input
+        # channel is present does the standard "make reasonable assumptions"
+        # text contradict the tool surface, so only then is it replaced.
+        # Agents with no human channel keep the base class's default text
+        # byte-for-byte.
+        environment_guidance = (
+            _HUMAN_CHANNEL_ENVIRONMENT_GUIDANCE if any(t.schema.human_channel for t in tools) else None
+        )
         super().__init__(
             name=name,
             llm_client=llm_client,
             emitter=emitter,
             system_prompt=system_prompt,
+            environment_guidance=environment_guidance,
             cancellation_token=cancellation_token,
             error_handler=error_handler,
             context_manager=context_manager,
@@ -157,6 +217,15 @@ class ReActAgent(Agent):
         self._working_memory = working_memory
         self._output_schema = output_schema
         self._initial_messages = list(initial_messages) if initial_messages else None
+        self._require_explicit_finish = require_explicit_finish
+        if require_explicit_finish:
+            if self._tool_registry.has(_FINISH_TOOL_NAME):
+                raise ValueError(
+                    f"Tool name {_FINISH_TOOL_NAME!r} is reserved when "
+                    "require_explicit_finish=True. Rename the conflicting tool, "
+                    "or disable require_explicit_finish."
+                )
+            self._tool_registry.register(self._build_finish_tool())
 
     @property
     def supports_dynamic_tools(self) -> bool:
@@ -188,10 +257,10 @@ class ReActAgent(Agent):
     def add_tools(self, tools: Sequence[Tool]) -> list[str]:
         """Register additional tools, skipping any already registered."""
         added: list[str] = []
-        for tool in tools:
-            name = tool.schema.name
+        for new_tool in tools:
+            name = new_tool.schema.name
             if not self._tool_registry.has(name):
-                self._tool_registry.register(tool)
+                self._tool_registry.register(new_tool)
                 added.append(name)
         return added
 
@@ -202,6 +271,154 @@ class ReActAgent(Agent):
 
     def update_tool_state(self, key: str, value: Any) -> None:
         self._tool_registry.update_state(key, value)
+
+    def _build_finish_tool(self) -> FunctionTool:
+        """Build the auto-registered ``finish`` terminal tool.
+
+        With an ``output_schema``, ``finish`` takes the schema's fields
+        directly, so structured output is committed as the terminal action
+        and no separate synthesis call is made. Otherwise it takes a single
+        ``result`` string. The loop recognises the call by name, runs the
+        result through the output-evaluation gate, and ends the run with
+        ``termination_reason="finished"``.
+        """
+        if self._output_schema is not None:
+            schema = self._output_schema
+
+            async def finish_structured(**fields: Any) -> str:
+                return schema(**fields).model_dump_json()
+
+            return FunctionTool(
+                fn=finish_structured,
+                name=_FINISH_TOOL_NAME,
+                description=(
+                    "Deliver your final result and end the run. Fill in the "
+                    "result fields with your complete answer. Calling this is "
+                    "the only way to deliver a result; a plain message reaches "
+                    "no one."
+                ),
+                parameters_model=schema,
+            )
+
+        @tool(
+            name=_FINISH_TOOL_NAME,
+            description=(
+                "Deliver your final result and end the run. Pass your complete "
+                "answer as `result`. Calling this is the only way to deliver a "
+                "result; a plain message reaches no one."
+            ),
+        )
+        async def finish(result: str) -> str:
+            return result
+
+        return finish
+
+    def _human_channel_present(self) -> bool:
+        """Whether a human-input channel tool is currently registered.
+
+        Read dynamically from the registry so tools added via
+        :meth:`add_tools` after construction are reflected in the
+        explicit-finish nudge.
+        """
+        return any(s.human_channel for s in self._tool_registry.list_schemas())
+
+    def _explicit_finish_nudge(self) -> str:
+        """The user message appended after a bare-text turn in explicit mode.
+
+        Capability-aware: offers ``ask_human`` only when a human channel is
+        registered.
+        """
+        if self._human_channel_present():
+            return (
+                "You ended your turn without delivering a result. Call "
+                "`finish(result=…)` to deliver your result, or `ask_human(…)` "
+                "to ask the recipient a question. A plain message is not "
+                "delivered to anyone — finishing and asking are the only two "
+                "ways to end your turn."
+            )
+        return (
+            "You ended your turn without delivering a result. Call "
+            "`finish(result=…)` to deliver your result. A plain message is not "
+            "delivered to anyone — finishing is the only way to end your turn. "
+            "You cannot reach a person; if information is missing, make a "
+            "reasonable assumption, state it, and finish."
+        )
+
+    def _finish_outcome(self, tool_calls: list[ToolCall]) -> tuple[str, BaseModel | None] | None:
+        """Detect a successful ``finish`` call in a completed batch.
+
+        Returns ``(output, parsed)`` when the batch contains a ``finish`` call
+        whose arguments are valid (which is exactly when its dispatch
+        succeeded — the ``finish`` function cannot fail otherwise). Returns
+        ``None`` when explicit-finish is off, no ``finish`` was called, or the
+        ``finish`` call's arguments were invalid (its dispatch produced an
+        error correction, so the run must continue rather than terminate).
+        """
+        if not self._require_explicit_finish:
+            return None
+        finish_call = next((tc for tc in tool_calls if tc.name == _FINISH_TOOL_NAME), None)
+        if finish_call is None:
+            return None
+        if self._output_schema is not None:
+            try:
+                parsed = self._output_schema(**finish_call.arguments)
+            except ValidationError:
+                return None
+            return parsed.model_dump_json(), parsed
+        result = finish_call.arguments.get("result")
+        if result is None:
+            return None
+        return str(result), None
+
+    async def _evaluate_candidate(
+        self,
+        candidate: str,
+        task_input: AgentInput,
+        messages: list[Message],
+        revision_count: int,
+        response: Any,
+    ) -> _EvalDecision:
+        """Run a candidate output through the output-evaluation gate.
+
+        Shared by the bare-text terminal (default mode) and the ``finish``
+        terminal (explicit mode). Emits the same truncation / revision /
+        exhaustion events as the inline logic it replaces, and performs no
+        message mutation — the caller appends the assistant message and any
+        feedback, so the two call sites can shape the conversation differently.
+        Assumes an ``output_evaluator`` is configured; callers gate on that.
+        """
+        assert self._output_evaluator is not None
+        max_revisions = self._output_evaluator.max_revisions
+
+        if self._is_truncated(response):
+            if revision_count < max_revisions:
+                self._emit_truncation_events(revision_count, max_revisions)
+                return _EvalDecision(revise=True, feedback=self._TRUNCATION_FEEDBACK)
+            self._emit_evaluation_exhausted(
+                evaluator_name="truncation",
+                verdict="revise",
+                revision_count=revision_count,
+                max_revisions=max_revisions,
+                feedback=self._TRUNCATION_FEEDBACK,
+            )
+            return _EvalDecision(revise=False, reason_override="evaluation_failed")
+
+        eval_result = await self._evaluate_output(candidate or "", task_input, messages, revision_count)
+        if eval_result.verdict == EvaluationVerdict.REVISE and revision_count < max_revisions:
+            self._emit_evaluation_revision(eval_result.feedback or "", revision_count, max_revisions)
+            return _EvalDecision(revise=True, feedback=eval_result.feedback or "")
+        if eval_result.verdict == EvaluationVerdict.EVALUATOR_ERROR:
+            return _EvalDecision(revise=False, reason_override="evaluation_skipped")
+        if eval_result.verdict != EvaluationVerdict.ACCEPT:
+            self._emit_evaluation_exhausted(
+                evaluator_name=eval_result.evaluator_name,
+                verdict=eval_result.verdict.value,
+                revision_count=revision_count,
+                max_revisions=max_revisions,
+                feedback=eval_result.feedback,
+            )
+            return _EvalDecision(revise=False, reason_override="evaluation_failed")
+        return _EvalDecision(revise=False)
 
     async def _execute(self, input: AgentInput, *, thread_key: str | None = None) -> AgentResult:
         tool_schemas = self._tool_registry.list_schemas()
@@ -322,60 +539,39 @@ class ReActAgent(Agent):
                                 assistant_content = "[Working memory updated]"
 
                     if not response.tool_calls:
+                        # Explicit-finish mode: a bare-text turn delivers
+                        # nothing. Append the text plus a capability-aware nudge
+                        # and continue — the model must call ``finish`` (or
+                        # ``ask_human``) to end the run. The ``max_iterations``
+                        # limiter at the top of this loop is the backstop, so a
+                        # model that never picks a terminal ends "iteration_limit"
+                        # rather than looping forever.
+                        if self._require_explicit_finish:
+                            messages.append(Message(role="assistant", content=assistant_content))
+                            messages.append(Message(role="user", content=self._explicit_finish_nudge()))
+                            self._emit_step(
+                                step_number,
+                                thought=response.reasoning_text,
+                                observation=response.content or None,
+                            )
+                            continue
+
+                        decision = _EvalDecision(revise=False)
                         if self._output_evaluator is not None and self._output_schema is None:
-                            max_revisions = self._output_evaluator.max_revisions
-
-                            if self._is_truncated(response):
-                                if revision_count < max_revisions:
-                                    messages.append(Message(role="assistant", content=assistant_content))
-                                    messages.append(Message(role="user", content=self._TRUNCATION_FEEDBACK))
-                                    self._emit_truncation_events(revision_count, max_revisions)
-                                    revision_count += 1
-                                    continue
-                                termination_reason = "evaluation_failed"
-                                self._emit_evaluation_exhausted(
-                                    evaluator_name="truncation",
-                                    verdict="revise",
-                                    revision_count=revision_count,
-                                    max_revisions=max_revisions,
-                                    feedback=self._TRUNCATION_FEEDBACK,
-                                )
-                                output = assistant_content
-                                messages.append(Message(role="assistant", content=assistant_content))
-                                self._emit_step(
-                                    step_number,
-                                    thought=response.reasoning_text,
-                                    observation=response.content or None,
-                                )
-                                break
-
-                            eval_result = await self._evaluate_output(
+                            decision = await self._evaluate_candidate(
                                 assistant_content or "",
                                 task_input,
                                 messages,
                                 revision_count,
+                                response,
                             )
-                            if eval_result.verdict == EvaluationVerdict.REVISE and revision_count < max_revisions:
-                                messages.append(Message(role="assistant", content=assistant_content))
-                                messages.append(Message(role="user", content=eval_result.feedback or ""))
-                                self._emit_evaluation_revision(
-                                    eval_result.feedback or "",
-                                    revision_count,
-                                    max_revisions,
-                                )
-                                revision_count += 1
-                                continue
-                            if eval_result.verdict == EvaluationVerdict.EVALUATOR_ERROR:
-                                termination_reason = "evaluation_skipped"
-                            elif eval_result.verdict != EvaluationVerdict.ACCEPT:
-                                termination_reason = "evaluation_failed"
-                                self._emit_evaluation_exhausted(
-                                    evaluator_name=eval_result.evaluator_name,
-                                    verdict=eval_result.verdict.value,
-                                    revision_count=revision_count,
-                                    max_revisions=max_revisions,
-                                    feedback=eval_result.feedback,
-                                )
+                        if decision.revise:
+                            messages.append(Message(role="assistant", content=assistant_content))
+                            messages.append(Message(role="user", content=decision.feedback or ""))
+                            revision_count += 1
+                            continue
+                        if decision.reason_override is not None:
+                            termination_reason = decision.reason_override
 
                         output = assistant_content
                         messages.append(Message(role="assistant", content=assistant_content))
@@ -453,6 +649,38 @@ class ReActAgent(Agent):
                         revision_count=revision_count,
                         usages=usages,
                     )
+
+                    # Explicit finish: the model called ``finish`` in this
+                    # batch. Its result is the run's output, gated by the
+                    # output evaluator exactly as a bare-text answer is in
+                    # default mode. ``finish`` takes precedence over a
+                    # co-batched return_direct tool (checked first). On REVISE
+                    # the loop continues — the finish tool_result is already in
+                    # ``messages``, so appending the feedback prompts the model
+                    # to finish again. Otherwise the run ends "finished" (or the
+                    # evaluator's forced reason). The output_schema synthesis
+                    # call below is skipped because termination_reason is no
+                    # longer "complete".
+                    finish_outcome = self._finish_outcome(response.tool_calls)
+                    if finish_outcome is not None:
+                        finish_output, finish_parsed = finish_outcome
+                        decision = _EvalDecision(revise=False)
+                        if self._output_evaluator is not None:
+                            decision = await self._evaluate_candidate(
+                                finish_output,
+                                task_input,
+                                messages,
+                                revision_count,
+                                response,
+                            )
+                        if decision.revise:
+                            messages.append(Message(role="user", content=decision.feedback or ""))
+                            revision_count += 1
+                            continue
+                        output = finish_output
+                        parsed = finish_parsed
+                        termination_reason = decision.reason_override or "finished"
+                        break
 
                     # A return_direct tool fired in this batch: end the run on
                     # its result, skipping the closing LLM turn. The whole batch
@@ -969,6 +1197,31 @@ class ReActAgent(Agent):
                 resumed_from_step=f"step-{step_number}",
             )
         )
+
+        # If the checkpointed batch already contained a successful ``finish``
+        # call, the run had reached its terminal an instant before the crash.
+        # Conclude "finished" directly from history rather than re-entering the
+        # loop and re-dispatching ``finish`` (which the durability contract's
+        # one-step replay would otherwise do). The evaluator gate is not re-run
+        # here: it ran (or was about to) at original finish time and its verdict
+        # is not checkpointed, so on resume the checkpointed finish is taken as
+        # terminal — consistent with the documented one-step replay window.
+        last_batch = next(
+            (m for m in reversed(messages) if m.role == "assistant" and m.tool_calls),
+            None,
+        )
+        if last_batch is not None:
+            finish_outcome = self._finish_outcome(last_batch.tool_calls or [])
+            if finish_outcome is not None:
+                finish_output, finish_parsed = finish_outcome
+                return AgentResult(
+                    output=finish_output,
+                    parsed=finish_parsed,
+                    total_steps=step_number,
+                    termination_reason="finished",
+                    messages=messages,
+                    usage=self._aggregate_usage(usages),
+                )
 
         return await self._run_loop(
             task_input=input,
