@@ -143,6 +143,20 @@ class ReActAgent(Agent):
             ending the run; leave ``False`` for conversational agents whose
             bare-text turns are caught by a host loop. Raises ``ValueError`` if
             a tool named ``finish`` is already registered.
+        suspend_on_budget: Opt-in resumable exhaustion (default ``False``).
+            When ``True`` *and* the run executes under step-level durability
+            (a checkpoint sink is attached, e.g. via ``DurableRun(...,
+            step_checkpoints=True)``), hitting ``max_iterations`` /
+            ``max_tool_calls`` parks the run as a ``"budget_exhausted"``
+            suspension — checkpointing the full conversation and surfacing the
+            last assistant turn — instead of ending it. A host resumes it
+            through
+            :meth:`~nanitics.composition.durability.resume.ResumeService.continue_run`
+            with the agent rebuilt on a larger budget, and the run picks up the
+            same ReAct loop where it left off. Without a sink (no durability)
+            this is inert: exhaustion ends the run normally with
+            ``termination_reason="iteration_limit"`` / ``"tool_call_limit"``.
+            Leave ``False`` to keep exhaustion terminal.
     """
 
     def __init__(
@@ -168,6 +182,7 @@ class ReActAgent(Agent):
         output_schema: type[BaseModel] | None = None,
         initial_messages: list[Message] | None = None,
         require_explicit_finish: bool = False,
+        suspend_on_budget: bool = False,
         run_id: str | None = None,
         thread_store: ThreadStore | None = None,
         thread_locks: ThreadLocks | None = None,
@@ -218,6 +233,7 @@ class ReActAgent(Agent):
         self._output_schema = output_schema
         self._initial_messages = list(initial_messages) if initial_messages else None
         self._require_explicit_finish = require_explicit_finish
+        self._suspend_on_budget = suspend_on_budget
         if require_explicit_finish:
             if self._tool_registry.has(_FINISH_TOOL_NAME):
                 raise ValueError(
@@ -506,6 +522,13 @@ class ReActAgent(Agent):
                         self._limiter.max_iterations,
                         step_number,
                     )
+                    self._maybe_suspend_on_budget(
+                        messages=messages,
+                        step_number=step_number,
+                        revision_count=revision_count,
+                        usages=usages,
+                        reason="iteration_limit",
+                    )
                     termination_reason = "iteration_limit"
                     break
 
@@ -623,6 +646,13 @@ class ReActAgent(Agent):
                                 thought=response.reasoning_text,
                                 action=action,
                                 observation=observation,
+                            )
+                            self._maybe_suspend_on_budget(
+                                messages=messages,
+                                step_number=step_number,
+                                revision_count=revision_count,
+                                usages=usages,
+                                reason="tool_call_limit",
                             )
                             termination_reason = "tool_call_limit"
                             break
@@ -941,6 +971,72 @@ class ReActAgent(Agent):
                     raise
 
         return return_direct_hit
+
+    def _maybe_suspend_on_budget(
+        self,
+        *,
+        messages: list[Message],
+        step_number: int,
+        revision_count: int,
+        usages: list[Usage],
+        reason: str,
+    ) -> None:
+        """Park the run as a resumable ``budget_exhausted`` suspension, or no-op.
+
+        Called at an ``iteration_limit`` / ``tool_call_limit`` break. Suspends
+        only when ``suspend_on_budget`` is on *and* a checkpoint sink is attached
+        — i.e. the run executes under step-level durability, so the suspension
+        can actually be persisted and continued. Otherwise it returns and the
+        caller ends the run normally with the budget ``termination_reason``.
+
+        The suspension carries a completed-step snapshot (the same shape a
+        per-tool-batch cursor uses, so resume re-enters via
+        :meth:`_execute_crash_resume`) and the run's last assistant turn, so a
+        host can show the partial work. The orchestrator that contains this
+        agent persists it under ``agent_checkpoint`` and re-enters the agent on
+        :meth:`~nanitics.composition.durability.resume.ResumeService.continue_run`.
+        """
+        if not self._suspend_on_budget or self._checkpoint_sink is None:
+            return
+
+        from uuid import uuid4
+
+        from nanitics.composition.durability.models import SuspensionInfo
+        from nanitics.composition.durability.suspension import SuspendExecution
+
+        checkpoint_data = self._completed_step_state(
+            messages=messages,
+            step_number=step_number,
+            revision_count=revision_count,
+            usages=usages,
+        )
+        if reason == "iteration_limit":
+            # ``IterationLimiter.step`` increments past the ceiling *before*
+            # raising, so ``current_iteration`` is ``max_iterations + 1`` — a
+            # step that never ran an LLM call. Persist the completed count so a
+            # continue with a larger ceiling has real headroom, and a continue
+            # with the *same* ceiling cleanly re-parks (rather than tripping the
+            # ``restore`` bound). Tool-call counts are left as-is: those calls
+            # actually executed, so the continue budget must exceed them.
+            checkpoint_data["limiter_count"] = self._limiter.max_iterations
+        last_assistant_text = next(
+            (
+                m.content
+                for m in reversed(messages)
+                if m.role == "assistant" and isinstance(m.content, str) and m.content
+            ),
+            None,
+        )
+        suspension_info = SuspensionInfo(
+            suspension_id=str(uuid4()),
+            suspension_type="budget_exhausted",
+            request_id="",
+            request_type=reason,
+            prompt="",
+            agent_name=self._name,
+            last_assistant_text=last_assistant_text,
+        )
+        raise SuspendExecution(suspension_info=suspension_info, checkpoint_data=checkpoint_data)
 
     def _completed_step_state(
         self,

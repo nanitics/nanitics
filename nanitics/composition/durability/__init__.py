@@ -7,6 +7,7 @@ from nanitics.composition.durability.models import (
 )
 from nanitics.composition.durability.resume import (
     DurableRun,
+    ExhaustedRun,
     ResumeContext,
     ResumeResult,
     ResumeService,
@@ -36,6 +37,7 @@ __all__ = [
     "CheckpointStore",
     "CheckpointVersionError",
     "DurableRun",
+    "ExhaustedRun",
     "InMemoryCheckpointStore",
     "PostgresCheckpointStore",
     "ResumeContext",
