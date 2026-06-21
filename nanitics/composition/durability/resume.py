@@ -68,6 +68,39 @@ class SuspendedRun:
 
 
 @dataclass(frozen=True)
+class ExhaustedRun:
+    """Serializable handle returned when a run parks on a budget limiter.
+
+    Produced when a ReAct agent configured with ``suspend_on_budget=True``
+    hits ``max_iterations`` / ``max_tool_calls`` under step-level durability:
+    instead of ending, the run checkpoints the full conversation and parks
+    itself resumable. Unlike :class:`SuspendedRun` there is no pending human
+    request — the host decides whether to grant more budget and continue.
+
+    Continue it by rebuilding the agent on a larger budget (a higher
+    ``max_iterations`` / ``max_tool_calls``) and calling
+    :meth:`ResumeService.continue_run` (or :meth:`DurableRun.continue_exhausted`).
+    The continue budget must be at least the count already consumed; granting
+    "original + N" always holds.
+
+    Attributes:
+        run_id: Identifies the parked run.
+        suspension_info: The ``"budget_exhausted"`` suspension that produced
+            this payload (``request_type`` carries which limit was hit).
+        last_assistant_text: The run's final assistant turn at the point of
+            exhaustion — the partial work, surfaced without scraping the trace.
+            ``None`` if the run produced no assistant text.
+        checkpoint_id: Identifier of the checkpoint persisted at the park
+            point — useful for audit/debug.
+    """
+
+    run_id: str
+    suspension_info: SuspensionInfo
+    last_assistant_text: str | None
+    checkpoint_id: str
+
+
+@dataclass(frozen=True)
 class ResumeResult:
     """Returned when a run reaches completion without (further) suspending.
 
@@ -85,6 +118,26 @@ class ResumeResult:
     run_id: str
     output: Any
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+def _require_budget_checkpoint(checkpoint: RunCheckpoint | None, run_id: str) -> None:
+    """Guard the continue path: the latest checkpoint must be a budget park.
+
+    Shared by :meth:`DurableRun.continue_exhausted` and
+    :meth:`ResumeService.continue_run` so both reject the same non-budget
+    checkpoints with the same guidance.
+    """
+    if checkpoint is None:
+        raise ValueError(f"No checkpoint to continue for run_id={run_id!r}")
+    info = checkpoint.suspension_info
+    if info is None or info.suspension_type != "budget_exhausted":
+        kind = "a crash cursor" if info is None else f"a {info.suspension_type!r} suspension"
+        raise ValueError(
+            f"Checkpoint for run_id={run_id!r} is {kind}, not a budget-exhaustion "
+            f"park (checkpoint_reason={checkpoint.checkpoint_reason!r}); continue_run "
+            "applies only to a run parked via suspend_on_budget. Route a HITL "
+            "suspension through resume(), a crash cursor through resume_interrupted()."
+        )
 
 
 class DurableRun:
@@ -172,42 +225,85 @@ class DurableRun:
         """The run identifier used for checkpoint and HITL-store keys."""
         return self._run_id
 
-    async def start(self, input: Any) -> ResumeResult | SuspendedRun:
+    async def start(self, input: Any) -> ResumeResult | SuspendedRun | ExhaustedRun:
         """Execute the runnable from the top; return completion or suspension.
 
-        Never raises :class:`SuspendExecution`: a suspension is converted
-        to a :class:`SuspendedRun` payload describing the pending HITL
-        request and the persisted checkpoint.
+        Never raises :class:`SuspendExecution`: a HITL suspension becomes a
+        :class:`SuspendedRun`, a budget-exhaustion suspension (from an agent
+        with ``suspend_on_budget=True``) becomes an :class:`ExhaustedRun`, and
+        a clean finish becomes a :class:`ResumeResult`.
         """
         try:
             result = await self._workflow.execute(input)
         except SuspendExecution as exc:
-            return await self._build_suspended_run(exc)
+            return await self._wrap_suspension(exc)
         return ResumeResult(
             run_id=self._run_id,
             output=result.output,
             metadata=dict(result.metadata),
         )
 
-    async def _resume(self, checkpoint: RunCheckpoint) -> ResumeResult | SuspendedRun:
+    async def _resume(self, checkpoint: RunCheckpoint) -> ResumeResult | SuspendedRun | ExhaustedRun:
         """Re-drive the runnable from ``checkpoint``.
 
-        Used by :class:`ResumeService.resume`. Pulls the original input
-        from the checkpoint state (preserved by the orchestrator on the
-        suspend path) and wraps the outcome identically to :meth:`start`.
+        Used by :meth:`ResumeService.resume` and :meth:`ResumeService.continue_run`.
+        Pulls the original input from the checkpoint state (preserved by the
+        orchestrator on the suspend path) and wraps the outcome identically to
+        :meth:`start` — including a fresh budget-exhaustion park if a continued
+        run runs out of budget again.
         """
         original_input = checkpoint.state.get("original_input")
         try:
             result = await self._workflow.execute(original_input, resume_from=checkpoint)
         except SuspendExecution as exc:
-            return await self._build_suspended_run(exc)
+            return await self._wrap_suspension(exc)
         return ResumeResult(
             run_id=self._run_id,
             output=result.output,
             metadata=dict(result.metadata),
         )
 
-    async def resume_from_checkpoint(self) -> ResumeResult | SuspendedRun:
+    async def continue_exhausted(self) -> ResumeResult | SuspendedRun | ExhaustedRun:
+        """Continue a run parked on a budget limiter, from its latest checkpoint.
+
+        The counterpart to :meth:`resume_from_checkpoint` for a
+        ``"budget_exhausted"`` park: loads the most recent checkpoint for this
+        run and re-drives the runnable, which re-enters the same ReAct loop
+        where it left off. The fresh budget rides on *this* ``DurableRun``'s
+        agent — rebuild it with a larger ``max_iterations`` / ``max_tool_calls``
+        before calling, or the run simply parks again on the first step.
+
+        Raises:
+            ValueError: If no checkpoint exists for this run, or the latest
+                checkpoint is not a budget-exhaustion suspension — a HITL
+                suspension routes through :meth:`ResumeService.resume`, a crash
+                cursor through :meth:`resume_from_checkpoint`.
+        """
+        checkpoint = await self._checkpoint_store.load(self._run_id)
+        _require_budget_checkpoint(checkpoint, self._run_id)
+        assert checkpoint is not None  # narrowed by the guard above
+        return await self._resume(checkpoint)
+
+    async def _wrap_suspension(self, exc: SuspendExecution) -> SuspendedRun | ExhaustedRun:
+        """Convert a propagating ``SuspendExecution`` into its value payload."""
+        if exc.suspension_info.suspension_type == "budget_exhausted":
+            return await self._build_exhausted_run(exc)
+        return await self._build_suspended_run(exc)
+
+    async def _build_exhausted_run(self, exc: SuspendExecution) -> ExhaustedRun:
+        checkpoint = await self._checkpoint_store.load(self._run_id)
+        if checkpoint is None:
+            raise RuntimeError(
+                f"Run parked on budget exhaustion for run_id={self._run_id!r} but no checkpoint was persisted"
+            )
+        return ExhaustedRun(
+            run_id=self._run_id,
+            suspension_info=exc.suspension_info,
+            last_assistant_text=exc.suspension_info.last_assistant_text,
+            checkpoint_id=checkpoint.checkpoint_id,
+        )
+
+    async def resume_from_checkpoint(self) -> ResumeResult | SuspendedRun | ExhaustedRun:
         """Resume an interrupted run from its latest cursor checkpoint.
 
         For crash / redeploy recovery under step-level durability: loads the
@@ -286,7 +382,7 @@ class ResumeService:
         self,
         run_id: str,
         response: HumanInputResponse,
-    ) -> ResumeResult | SuspendedRun:
+    ) -> ResumeResult | SuspendedRun | ExhaustedRun:
         """Persist the response and drive the factory-built run forward.
 
         Loads the checkpoint for ``run_id``, validates that
@@ -339,7 +435,7 @@ class ResumeService:
     async def resume_interrupted(
         self,
         run_id: str,
-    ) -> ResumeResult | SuspendedRun:
+    ) -> ResumeResult | SuspendedRun | ExhaustedRun:
         """Resume a crashed / redeployed run from its latest cursor checkpoint.
 
         The step-level-durability counterpart to :meth:`resume`: loads the
@@ -374,9 +470,51 @@ class ResumeService:
             raise TypeError(f"ResumeService factory must return a DurableRun; got {type(durable_run).__name__}")
         return await durable_run._resume(checkpoint)
 
+    async def continue_run(
+        self,
+        run_id: str,
+    ) -> ResumeResult | SuspendedRun | ExhaustedRun:
+        """Grant a parked-on-budget run more budget and drive it forward.
+
+        The continuation counterpart to :meth:`resume_interrupted`, for a run an
+        agent parked via ``suspend_on_budget=True`` on hitting
+        ``max_iterations`` / ``max_tool_calls``. Loads the budget-exhaustion
+        checkpoint for ``run_id`` and re-drives a factory-built
+        :class:`DurableRun`, which re-enters the same ReAct loop from where it
+        ran out of budget.
+
+        The fresh budget is supplied by the factory: rebuild the agent with a
+        larger ``max_iterations`` / ``max_tool_calls`` than the parked run had.
+        The new ceiling must be at least the count already consumed (grant
+        "original + N" and it always holds); a smaller ceiling raises
+        ``ValueError`` from the limiter. If the rebuilt agent still keeps
+        ``suspend_on_budget=True`` and runs out again, this returns a fresh
+        :class:`ExhaustedRun`, so a host can offer "Continue" repeatedly.
+
+        Raises:
+            ValueError: If no checkpoint exists for ``run_id``, or the latest
+                checkpoint is not a budget-exhaustion park.
+            TypeError: If the factory does not return a :class:`DurableRun`.
+        """
+        checkpoint = await self._checkpoint_store.load(run_id)
+        _require_budget_checkpoint(checkpoint, run_id)
+        assert checkpoint is not None  # narrowed by the guard above
+
+        ctx = ResumeContext(
+            run_id=run_id,
+            checkpoint=checkpoint,
+            hitl_store=self._hitl_store,
+            checkpoint_store=self._checkpoint_store,
+        )
+        durable_run = self._factory(ctx)
+        if not isinstance(durable_run, DurableRun):
+            raise TypeError(f"ResumeService factory must return a DurableRun; got {type(durable_run).__name__}")
+        return await durable_run._resume(checkpoint)
+
 
 __all__ = [
     "DurableRun",
+    "ExhaustedRun",
     "ResumeContext",
     "ResumeResult",
     "ResumeService",

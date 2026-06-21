@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from abc import ABC, abstractmethod
 from contextvars import ContextVar
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -205,11 +205,15 @@ class Workflow(ABC):
     ) -> RunCheckpoint:
         state = self._normalize_for_serialization(state)
         suspension_info = suspension.suspension_info
+        checkpoint_reason: Literal["hitl_suspend", "budget_exhausted"] = (
+            "budget_exhausted" if suspension_info.suspension_type == "budget_exhausted" else "hitl_suspend"
+        )
         checkpoint = RunCheckpoint(
             run_id=self._run_id,
             checkpoint_type="orchestration",
             state=state,
             suspension_info=suspension_info,
+            checkpoint_reason=checkpoint_reason,
         )
         if self._checkpoint_store:
             await self._checkpoint_store.save(checkpoint)
@@ -303,7 +307,7 @@ class Workflow(ABC):
                     span_id=self._emitter.span_id,
                     parent_span_id=self._emitter.parent_span_id,
                     suspension_id=exc.suspension_info.suspension_id,
-                    suspension_type="hitl",
+                    suspension_type=exc.suspension_info.suspension_type,
                     checkpoint_id=checkpoint.checkpoint_id,
                     step_name=step_name,
                     agent_name=exc.suspension_info.agent_name,

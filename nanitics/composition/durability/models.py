@@ -42,23 +42,43 @@ class SuspensionInfo(BaseModel):
     Carried by ``SuspendExecution`` and stored in checkpoints to provide
     enough context for an external system to display the pending request.
 
+    Two suspension kinds share this shape:
+
+    - ``"hitl"`` — a human must answer before the run continues. The
+      ``request_id`` / ``request_type`` / ``prompt`` fields describe the
+      pending request.
+    - ``"budget_exhausted"`` — a ReAct run hit ``max_iterations`` /
+      ``max_tool_calls`` with ``suspend_on_budget=True``, so it parked itself
+      resumable instead of ending. There is no human request; the HITL fields
+      are empty and ``last_assistant_text`` carries the run's final assistant
+      turn so a host can show the partial work. Resume it through
+      :meth:`~nanitics.composition.durability.resume.ResumeService.continue_run`
+      with the agent rebuilt on a larger budget, not the HITL ``resume`` path.
+
     Attributes:
         suspension_id: Unique identifier for this suspension.
-        suspension_type: The kind of suspension (currently always ``"hitl"``).
-        request_id: The HITL request that caused the suspension.
-        request_type: The type of human input requested.
-        prompt: The prompt shown to the human.
+        suspension_type: The kind of suspension — ``"hitl"`` or
+            ``"budget_exhausted"``.
+        request_id: The HITL request that caused the suspension (empty for a
+            budget suspension).
+        request_type: The type of human input requested (empty for a budget
+            suspension).
+        prompt: The prompt shown to the human (empty for a budget suspension).
         agent_name: Which agent triggered the suspension.
+        last_assistant_text: For a budget suspension, the run's final assistant
+            turn at the point of exhaustion, so a host can surface the partial
+            work without scraping the trace. ``None`` for a HITL suspension.
     """
 
     model_config = ConfigDict(frozen=True)
 
     suspension_id: str
-    suspension_type: Literal["hitl"] = "hitl"
+    suspension_type: Literal["hitl", "budget_exhausted"] = "hitl"
     request_id: str
     request_type: str
     prompt: str
     agent_name: str | None = None
+    last_assistant_text: str | None = None
 
 
 class RunCheckpoint(BaseModel):
@@ -85,15 +105,18 @@ class RunCheckpoint(BaseModel):
             mutually exclusive: a suspended step is either an agent or a
             nested workflow.
         suspension_info: Details about the suspension that produced this
-            checkpoint. Set only for HITL suspension checkpoints
-            (``checkpoint_reason == "hitl_suspend"``); ``None`` for step /
+            checkpoint. Set for suspension checkpoints — HITL
+            (``checkpoint_reason == "hitl_suspend"``) and budget-exhaustion
+            (``checkpoint_reason == "budget_exhausted"``); ``None`` for step /
             crash-safe cursor checkpoints, which are not suspensions.
         checkpoint_reason: Why this checkpoint was written. ``"hitl_suspend"``
             (the default) for a checkpoint produced by a human-in-the-loop
-            suspension; ``"step"`` for a thin cursor snapshot written after a
-            completed step; ``"crash_safe"`` for a defensively written cursor
-            snapshot. A step/crash checkpoint is not a suspension and carries
-            no ``suspension_info``.
+            suspension; ``"budget_exhausted"`` for a ReAct run that parked
+            itself on hitting ``max_iterations`` / ``max_tool_calls`` with
+            ``suspend_on_budget=True``; ``"step"`` for a thin cursor snapshot
+            written after a completed step; ``"crash_safe"`` for a defensively
+            written cursor snapshot. A step/crash checkpoint is not a suspension
+            and carries no ``suspension_info``.
         created_at: When the checkpoint was created (UTC).
     """
 
@@ -105,7 +128,7 @@ class RunCheckpoint(BaseModel):
     schema_version: int = CHECKPOINT_SCHEMA_VERSION
     state: dict[str, Any]
     suspension_info: SuspensionInfo | None = None
-    checkpoint_reason: Literal["hitl_suspend", "step", "crash_safe"] = "hitl_suspend"
+    checkpoint_reason: Literal["hitl_suspend", "budget_exhausted", "step", "crash_safe"] = "hitl_suspend"
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 

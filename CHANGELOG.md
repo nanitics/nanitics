@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-06-21
+
+Resumable budget exhaustion for `ReActAgent`, driven by Studio's "Continue"
+request: a deployed agent that runs out of `max_iterations` / `max_tool_calls`
+mid-task returned a complete-looking run with empty output, and no resume entry
+point fit (HITL `resume` needs a human answer; `resume_interrupted` re-finalizes
+an already-complete run without re-entering the loop). Opt-in and non-breaking;
+agents that do not opt in are unchanged — exhaustion stays terminal.
+
+### Added
+
+- **`suspend_on_budget` mode on `ReActAgent`** (default `False`). When `True`
+  and the run executes under step-level durability (a checkpoint sink is
+  attached, e.g. via `DurableRun(..., step_checkpoints=True)`), hitting
+  `max_iterations` / `max_tool_calls` parks the run as a `"budget_exhausted"`
+  suspension instead of ending it: the full conversation is checkpointed at a
+  re-enterable point and the run's last assistant turn is surfaced as partial
+  work. Without a sink the flag is inert — exhaustion ends the run normally with
+  `termination_reason="iteration_limit"` / `"tool_call_limit"`.
+- **`ResumeService.continue_run(run_id)`** and **`DurableRun.continue_exhausted()`**
+  — re-drive a parked-on-budget run from its checkpoint, re-entering the same
+  ReAct loop where it ran out of budget. The fresh budget rides on the rebuilt
+  agent: supply a larger `max_iterations` / `max_tool_calls` in the resume
+  factory. The continue budget must be at least the count already consumed
+  (grant "original + N"); a smaller ceiling raises `ValueError`. If the rebuilt
+  agent keeps `suspend_on_budget=True` and runs out again, it re-parks, so a host
+  can offer "Continue" repeatedly.
+- **`ExhaustedRun`** (re-exported from `nanitics.composition` and
+  `nanitics.composition.durability`) — the value returned by `DurableRun.start`
+  / the resume entry points when a run parks on a budget limiter. Carries
+  `suspension_info` (with `request_type` naming which limit was hit),
+  `last_assistant_text` (the partial work, without scraping the trace), and the
+  `checkpoint_id`.
+- **`SuspensionInfo.suspension_type` gains `"budget_exhausted"`** alongside
+  `"hitl"`, plus a `last_assistant_text` field; **`RunCheckpoint.checkpoint_reason`
+  gains `"budget_exhausted"`**. The `execution.suspended` event's
+  `suspension_type` now reflects the actual kind rather than always `"hitl"`.
+
 ## [0.13.0] - 2026-06-15
 
 Explicit run completion for `ReActAgent`, driven by Studio's most-reported

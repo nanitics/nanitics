@@ -461,7 +461,7 @@ class Agent(ABC):
                         span_id=self._emitter.span_id,
                         parent_span_id=self._emitter.parent_span_id,
                         suspension_id=exc.suspension_info.suspension_id,
-                        suspension_type="hitl",
+                        suspension_type=exc.suspension_info.suspension_type,
                         checkpoint_id="",
                         agent_name=self._name,
                     )
