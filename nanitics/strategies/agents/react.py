@@ -535,10 +535,26 @@ class ReActAgent(Agent):
                 step_number += 1
 
                 with self._emitter.span(f"step-{step_number}"):
-                    response = await self._call_llm(
-                        messages,
-                        tools=tool_schemas if tool_schemas else None,
-                    )
+                    try:
+                        # Race the whole LLM call — generate *and* its internal
+                        # retry backoff — against the token, so a cancel during
+                        # a transient-error backoff sleep stops immediately
+                        # rather than waiting out the delay.
+                        response = await run_cancellable(
+                            self._call_llm(
+                                messages,
+                                tools=tool_schemas if tool_schemas else None,
+                            ),
+                            self._cancellation_token,
+                            step_number=step_number,
+                        )
+                    except RunCancelled as exc:
+                        self._emit_safety_cancellation(exc.step_number or step_number)
+                        return self._cancelled_result(
+                            messages=messages,
+                            step_number=step_number,
+                            usages=usages,
+                        )
                     usages.append(response.usage)
 
                     assistant_content = response.content

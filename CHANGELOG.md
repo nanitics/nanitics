@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.14.1] - 2026-06-30
+## [0.15.0] - 2026-06-30
+
+Resilience hardening for trace persistence and the LLM-call retry path, driven
+by Studio's SDK change requests.
+
+### Added
+
+- **`LLMStreamResetEvent`** (re-exported from `nanitics.infrastructure` and
+  `nanitics.infrastructure.observability`). Emitted before a streaming LLM call
+  re-streams on a retried attempt — a transient-error retry or a schema
+  correction — carrying the same `span_id` as the tokens it supersedes. A
+  streaming consumer discards the partial `LLMTokenEvent`s of the abandoned
+  attempt on this signal, so a mid-stream failure no longer renders the retried
+  output on top of the one it replaces. Inert when `streaming=False`.
 
 ### Fixed
 
@@ -21,6 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   un-storable and dropped with a single warning, so it costs that batch rather
   than the run's entire trace. Transient store outages are unaffected: batches
   below the threshold are still re-buffered and retried with no loss.
+- **A cancellation during an in-flight LLM call is now honored immediately.**
+  `ReActAgent` wraps the LLM call — generate *and* the transient-error retry
+  backoff that lives inside it — in the cooperative cancellation race, so a
+  cancel fired while a call is waiting out a backoff (or streaming) ends the run
+  with `termination_reason="cancelled"` at once, instead of only at the next
+  step boundary after the call returns.
 
 ## [0.14.0] - 2026-06-21
 

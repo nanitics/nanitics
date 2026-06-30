@@ -177,6 +177,22 @@ class LLMTokenEvent(BaseEvent):
     agent_name: str
 
 
+class LLMStreamResetEvent(BaseEvent):
+    """Emitted before a retried or corrected streaming attempt re-streams.
+
+    A streaming LLM call that fails mid-stream (a transient transport error)
+    or returns an invalid response (a schema correction) has already emitted
+    :class:`LLMTokenEvent`s for the abandoned partial output. Before the next
+    attempt re-streams the full response, this event signals consumers to
+    discard the partial tokens accumulated for this span, so the retried
+    stream does not render on top of the one it replaces. Carries the same
+    ``span_id`` as the tokens it supersedes.
+    """
+
+    event_type: Literal["llm.stream.reset"] = "llm.stream.reset"
+    agent_name: str
+
+
 class LLMResponseEvent(BaseEvent):
     """Emitted after receiving a response from the LLM."""
 
@@ -1400,6 +1416,7 @@ TraceEvent = Annotated[
     | Annotated[AgentErrorEvent, Tag("agent.error")]
     | Annotated[LLMRequestEvent, Tag("llm.request")]
     | Annotated[LLMTokenEvent, Tag("llm.token")]
+    | Annotated[LLMStreamResetEvent, Tag("llm.stream.reset")]
     | Annotated[LLMResponseEvent, Tag("llm.response")]
     | Annotated[ToolInvokeEvent, Tag("tool.invoke")]
     | Annotated[ToolResultEvent, Tag("tool.result")]
