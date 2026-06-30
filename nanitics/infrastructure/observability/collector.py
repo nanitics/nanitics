@@ -26,6 +26,14 @@ from nanitics.infrastructure.observability.storage import (
 
 DEFAULT_FLUSH_INTERVAL: float = 0.5
 
+# A batch that fails this many consecutive flushes is treated as permanently
+# un-storable — e.g. third-party tool output carrying a byte the store rejects
+# (a Postgres ``text``/``jsonb`` column refuses a NUL) — and dropped, rather than
+# re-buffered to be re-attempted forever. Without the cap, one poison batch
+# re-queued at the head fails every later flush, disabling the whole run's trace
+# and flooding the log. See :meth:`TraceCollector.flush`.
+MAX_FLUSH_ATTEMPTS: int = 3
+
 
 class TraceCollector:
     """Collects SDK trace events, buffers them, and flushes to a persistent store.
@@ -122,7 +130,17 @@ class TraceCollector:
             )
 
     async def flush(self) -> None:
-        """Persist all buffered events to the store."""
+        """Persist all buffered events to the store.
+
+        A failed write returns the batch to the buffer and retries it on the
+        next flush, so a transient store outage loses nothing. But after
+        :data:`MAX_FLUSH_ATTEMPTS` consecutive failures the batch is treated as
+        permanently un-storable and dropped with a single warning, rather than
+        re-buffered to fail forever — one un-storable event (e.g. fetched
+        content carrying a byte the store rejects) costs that batch, not the
+        run's whole trace. Events appended to the buffer during the dropped
+        attempt are not part of that batch and flush on the next cycle.
+        """
         async with self._lock:
             if not self._buffer:
                 return
@@ -134,7 +152,19 @@ class TraceCollector:
             self._consecutive_failures = 0
         except Exception as exc:
             self._consecutive_failures += 1
-            # Put events back so they aren't lost.
+            if self._consecutive_failures >= MAX_FLUSH_ATTEMPTS:
+                # The head batch has failed every attempt in the window — drop it
+                # so it cannot block every later event from persisting. The
+                # snapshot above already removed it from the buffer, so anything
+                # that arrived since survives.
+                self._consecutive_failures = 0
+                warnings.warn(
+                    f"EventCollector dropping {len(batch)} un-storable events after "
+                    f"{MAX_FLUSH_ATTEMPTS} consecutive flush failures: {exc}",
+                    stacklevel=2,
+                )
+                return
+            # Transient failure — put events back so they aren't lost.
             async with self._lock:
                 self._buffer = batch + self._buffer
                 if len(self._buffer) > self._max_buffer_size:

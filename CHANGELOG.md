@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-06-30
+
+### Fixed
+
+- **`TraceCollector` no longer loses a run's whole trace to one un-storable
+  event.** A batch that failed to persist was re-buffered at the head and
+  re-attempted on every subsequent flush; a single un-storable event (e.g.
+  fetched tool output carrying a NUL byte, which a Postgres `text`/`jsonb`
+  column rejects) therefore failed every flush forever — persisting zero events
+  for the run and flooding the log with warnings. A batch that fails
+  `MAX_FLUSH_ATTEMPTS` (3) consecutive flushes is now treated as permanently
+  un-storable and dropped with a single warning, so it costs that batch rather
+  than the run's entire trace. Transient store outages are unaffected: batches
+  below the threshold are still re-buffered and retried with no loss.
+
 ## [0.14.0] - 2026-06-21
 
 Resumable budget exhaustion for `ReActAgent`, driven by Studio's "Continue"
