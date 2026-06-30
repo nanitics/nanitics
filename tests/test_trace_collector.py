@@ -8,7 +8,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from nanitics.infrastructure.observability.collector import TraceCollector
+from nanitics.infrastructure.observability.collector import (
+    MAX_FLUSH_ATTEMPTS,
+    TraceCollector,
+)
 from nanitics.infrastructure.observability.events import (
     AgentStartEvent,
     AgentStepEvent,
@@ -197,6 +200,55 @@ class TestFlushOnError:
         assert len(collector._buffer) <= 5
         with pytest.warns(UserWarning, match="failed"):
             await collector.close()
+
+
+class TestPoisonBatchDrop:
+    """A permanently-failing batch is dropped after a bounded number of attempts."""
+
+    async def test_batch_dropped_after_max_consecutive_failures(self) -> None:
+        store = _make_mock_store()
+        store.save_events_batch.side_effect = RuntimeError("nul byte rejected")
+        collector = TraceCollector(store=store, parent_id="run-1", flush_interval=10)
+
+        collector.handle(_make_event())
+
+        # Failures below the threshold re-buffer and retry — nothing is lost yet.
+        for _ in range(MAX_FLUSH_ATTEMPTS - 1):
+            with pytest.warns(UserWarning, match="flush failed"):
+                await collector.flush()
+        assert len(collector._buffer) == 1
+
+        # The threshold-th consecutive failure drops the un-storable batch and
+        # resets the counter so later events are no longer blocked behind it.
+        with pytest.warns(UserWarning, match="dropping 1 un-storable events"):
+            await collector.flush()
+        assert collector._buffer == []
+        assert collector._consecutive_failures == 0
+
+        # Buffer is empty, so close() flushes nothing and emits no warning.
+        await collector.close()
+
+    async def test_tracing_resumes_after_poison_batch_dropped(self) -> None:
+        store = _make_mock_store()
+        store.save_events_batch.side_effect = RuntimeError("nul byte rejected")
+        collector = TraceCollector(store=store, parent_id="run-1", flush_interval=10)
+
+        collector.handle(_make_event())
+        for _ in range(MAX_FLUSH_ATTEMPTS - 1):
+            with pytest.warns(UserWarning, match="flush failed"):
+                await collector.flush()
+        with pytest.warns(UserWarning, match="dropping"):
+            await collector.flush()
+        assert collector._buffer == []
+
+        # After the poison batch is gone, a healthy store persists new events.
+        store.save_events_batch.side_effect = None
+        store.save_events_batch.reset_mock()
+        collector.handle(_make_event(event_type="llm.request"))
+        await collector.flush()
+        store.save_events_batch.assert_called_once()
+        assert collector._buffer == []
+        await collector.close()
 
 
 class TestPeriodicFlush:

@@ -43,6 +43,7 @@ from nanitics.infrastructure.observability.events import (
     ExecutionSuspendedEvent,
     LLMRequestEvent,
     LLMResponseEvent,
+    LLMStreamResetEvent,
     LLMTokenEvent,
     SafetyCancellationEvent,
     SafetyIterationLimitEvent,
@@ -720,7 +721,24 @@ class Agent(ABC):
                 )
             )
 
+        generate_attempts = 0
+
         async def _generate() -> LLMResponse:
+            nonlocal generate_attempts
+            if generate_attempts > 0 and self._streaming:
+                # A prior attempt streamed partial tokens before failing (a
+                # transient transport error) or returning an invalid response
+                # (a schema correction). Tell consumers to discard them before
+                # this attempt re-streams, so the streams do not overlay.
+                self._emitter.emit(
+                    LLMStreamResetEvent(
+                        trace_id=self._emitter.trace_id,
+                        span_id=self._emitter.span_id,
+                        parent_span_id=self._emitter.parent_span_id,
+                        agent_name=self._name,
+                    )
+                )
+            generate_attempts += 1
             return await self._llm_client.generate(
                 system_prompt=self._system_prompt,
                 messages=managed_messages,
